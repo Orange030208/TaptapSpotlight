@@ -89,8 +89,12 @@ end
 
 local function FinishRoom(game)
     game.state = "clear"
-    game.stateTimer = Config.Room.clearDuration
-    SetMessage(game, game.room.boss and "THE WARDEN FALLS" or "ROOM CLEARED", Config.Room.clearDuration)
+    local hasDrops = #game.drops > 0
+    game.stateTimer = hasDrops and Config.Room.dropPickupDuration or Config.Room.clearDuration
+    SetMessage(game,
+        game.room.boss and "THE WARDEN FALLS" or (hasDrops and "ROOM CLEAR - COLLECT DROPS" or "ROOM CLEARED"),
+        game.stateTimer
+    )
     AddParticles(game, game.player.x, game.player.y, { 130, 255, 185 }, 18)
 end
 
@@ -304,7 +308,7 @@ function Game.Update(game, dt, moveX, moveY)
         Entities.UpdatePlayer(game.player, dt, moveX, moveY)
         UpdateDrops(game, dt)
         game.stateTimer = game.stateTimer - dt
-        if game.stateTimer <= 0 then
+        if #game.drops == 0 or game.stateTimer <= 0 then
             if game.roomIndex >= #RoomData then
                 game.state = "victory"
                 SetMessage(game, "RUN COMPLETE", 999)

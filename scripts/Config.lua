@@ -10,6 +10,7 @@ local Config = {
         maxY = 0.88,
         introDuration = 1.0,
         clearDuration = 1.1,
+        dropPickupDuration = 5.0,
         doorwayWidth = 0.1,
     },
 
