@@ -1,0 +1,43 @@
+{
+  "$schema": "../schemas/project.schema.json",
+  "project_id": "p_78vc",
+  "author": {
+    "id": "1211708568"
+  },
+  "entry": "main.lua",
+  "version": "1.0.0",
+  "taptap_publish": {
+    "title": "霓光格挡",
+    "description": "<game description>",
+    "category": "action",
+    "screen_orientation": "landscape",
+    "collection_type": "sce",
+    "trial_note": "<developer's note>",
+    "transparent": false,
+    "app_platforms": "1,2",
+    "developer_id": 428106
+  },
+  "assets": {
+    "icon": "./game_material/ICON_2026-07-17T16-25-51_01.png",
+    "screenshots": [
+      "./game_material/SCREENSHOT_2026-07-17T16-25-51_01.png",
+      "./game_material/SCREENSHOT_2026-07-17T16-25-51_02.jpg",
+      "./game_material/SCREENSHOT_2026-07-17T16-25-51_03.png"
+    ],
+    "promotional_image": "./game_material/PROMO_2026-07-17T16-25-51_01.jpg",
+    "icon_url": "https://tapcode-sce.spark.xd.com/assets/game_material/霓光格挡/ICON_2026-07-17T16-25-51_01.png",
+    "screenshot_urls": [
+      "https://tapcode-sce.spark.xd.com/assets/game_material/霓光格挡/SCREENSHOT_2026-07-17T16-25-51_01.png",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/霓光格挡/SCREENSHOT_2026-07-17T16-25-51_02.jpg",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/霓光格挡/SCREENSHOT_2026-07-17T16-25-51_03.png"
+    ],
+    "promotional_image_url": "https://tapcode-sce.spark.xd.com/assets/game_material/霓光格挡/PROMO_2026-07-17T16-25-51_01.jpg",
+    "cover_horizontal": "./game_material/COVER_HORIZONTAL_2026-07-17T16-26-58_01.png",
+    "cover_horizontal_url": "https://tapcode-sce.spark.xd.com/assets/game_material/霓光格挡/COVER_HORIZONTAL_2026-07-17T16-26-58_01.png",
+    "cover_vertical": "./game_material/COVER_VERTICAL_2026-07-17T16-27-30_01.png",
+    "cover_vertical_url": "https://tapcode-sce.spark.xd.com/assets/game_material/霓光格挡/COVER_VERTICAL_2026-07-17T16-27-30_01.png"
+  },
+  "metadata": {
+    "updated_at": "2026-07-17T16:27:32.466Z"
+  }
+}
