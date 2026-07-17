@@ -635,7 +635,7 @@ local function DrawChestPauseDim(ctx, width, height, game)
 end
 
 local function DrawMessage(ctx, width, height, game)
-    if game.message == nil or game.message == "" or game.state == "menu" or game.state == "dead" or game.state == "victory" then
+    if game.message == nil or game.message == "" or game.state == "menu" or game.state == "dead" or game.state == "victory" or game.state == "chest_select" then
         return
     end
 

@@ -101,6 +101,8 @@ return {
         impactEnd = 92,
         impactDuration = 0.32,
         impactStroke = 4.0,
+        textColor = { 255, 224, 166 },
+        textSize = 28,
     },
     floatingText = {
         duration = 0.48,

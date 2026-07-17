@@ -31,4 +31,11 @@ assert(Feedback.GetHudPulse(feedback) == 0)
 Feedback.ProcessEvents(feedback, { { name = "enemy_defeat" }, { name = "unknown" } })
 assert(#feedback.impacts == 0, "feedback must ignore events without usable positions")
 
+Feedback.ProcessEvents(feedback, {
+    { name = "boss_defeat", data = { x = 0.5, y = 0.5 } },
+})
+assert(#feedback.impacts == 1)
+assert(#feedback.floatingTexts == 1)
+assert(feedback.floatingTexts[1].text == "处决")
+
 print("PASS test_feedback")

@@ -84,17 +84,7 @@ local function CreateChestCard(index)
         height = 3,
         borderRadius = 2,
         backgroundColor = { 236, 202, 105, 255 },
-    }
-    local choiceLabel = UI.Label {
-        text = "遗物 " .. string.format("%02d", optionIndex),
-        fontSize = 11,
-        fontWeight = "bold",
-        fontColor = { 205, 207, 209, 220 },
-    }
-    local categoryLabel = UI.Label {
-        text = "战斗强化",
-        fontSize = 10,
-        fontColor = { 176, 179, 183, 195 },
+        pointerEvents = "none",
     }
     local icon = UI.Label {
         text = "✦",
@@ -124,6 +114,7 @@ local function CreateChestCard(index)
         },
         shadowBlur = 12,
         shadowColor = { 0, 0, 0, 150 },
+        pointerEvents = "none",
         children = { icon },
     }
     local title = UI.Label {
@@ -181,19 +172,13 @@ local function CreateChestCard(index)
         end,
         children = {
             accent,
-            UI.Panel {
-                width = "100%",
-                flexDirection = "row",
-                justifyContent = "space-between",
-                alignItems = "center",
-                children = { choiceLabel, categoryLabel },
-            },
             iconPanel,
             title,
             UI.Divider {
                 width = "100%",
                 color = { 255, 255, 255, 42 },
                 spacing = 0,
+                pointerEvents = "none",
             },
             description,
         },
@@ -255,48 +240,48 @@ local function CreateHud()
             UI.SafeAreaView {
                 width = "100%",
                 height = "100%",
-                padding = { 20, 18, 16, 18 },
-                alignItems = "center",
-                gap = 14,
                 children = {
-                    UI.Panel {
-                        width = "100%",
-                        maxWidth = 900,
-                        alignItems = "center",
-                        gap = 4,
-                        children = {
-                            UI.Label {
-                                text = "遗物抉择",
-                                fontSize = 27,
-                                fontWeight = "bold",
-                                textStroke = { width = 1, color = { 18, 18, 20, 240 } },
-                                fontColor = { 246, 235, 199, 255 },
-                            },
-                            UI.Label {
-                                text = "一项强化，将成为这场战斗的偏向",
-                                fontSize = 12,
-                                fontColor = { 208, 209, 209, 215 },
-                            },
-                        },
+                    UI.Label {
+                        text = "遗物抉择",
+                        position = "absolute",
+                        top = 22,
+                        left = 0,
+                        right = 0,
+                        fontSize = 27,
+                        fontWeight = "bold",
+                        textAlign = "center",
+                        textStroke = { width = 1, color = { 18, 18, 20, 240 } },
+                        fontColor = { 246, 235, 199, 255 },
+                        pointerEvents = "none",
                     },
                     UI.ScrollView {
                         width = "100%",
-                        flexGrow = 1,
-                        flexBasis = 0,
+                        height = "100%",
                         scrollX = false,
                         scrollY = true,
                         showScrollbar = false,
                         children = {
                             UI.Panel {
                                 width = "100%",
-                                flexDirection = "row",
-                                flexWrap = "wrap",
+                                minHeight = "100%",
                                 justifyContent = "center",
-                                alignItems = "flex-start",
-                                columnGap = 26,
-                                rowGap = 20,
-                                padding = { 10, 8, 20, 8 },
-                                children = { CreateChestCard(1), CreateChestCard(2), CreateChestCard(3) },
+                                alignItems = "center",
+                                padding = { 64, 18, 64, 18 },
+                                pointerEvents = "box-none",
+                                children = {
+                                    UI.Panel {
+                                        width = "100%",
+                                        maxWidth = 900,
+                                        flexDirection = "row",
+                                        flexWrap = "wrap",
+                                        justifyContent = "center",
+                                        alignItems = "flex-start",
+                                        columnGap = 26,
+                                        rowGap = 20,
+                                        pointerEvents = "box-none",
+                                        children = { CreateChestCard(1), CreateChestCard(2), CreateChestCard(3) },
+                                    },
+                                },
                             },
                         },
                     },

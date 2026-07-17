@@ -421,7 +421,7 @@ local function ResolveProjectileContacts(game)
                 EmitEvent(game, "player_hurt", {
                     x = game.player.x,
                     y = game.player.y,
-                    amount = projectile.damage or Config.Projectile.playerDamage,
+                    amount = Config.Projectile.playerDamage,
                     sourceKind = projectile.sourceKind,
                 })
             end
