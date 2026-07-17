@@ -1,4 +1,4 @@
 return {
-    chance = 0.10,
+    chance = 0.20,
     pickupRadius = 0.06,
 }

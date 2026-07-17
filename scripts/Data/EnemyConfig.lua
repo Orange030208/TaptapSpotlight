@@ -1,6 +1,6 @@
 return {
     melee = {
-        hp = 1,
+        hp = 2,
         radius = 0.04,
         telegraphDuration = 0.72,
         dashDuration = 0.34,
@@ -12,7 +12,7 @@ return {
         touchDamage = 1,
     },
     ranged = {
-        hp = 1,
+        hp = 2,
         radius = 0.04,
         telegraphDuration = 0.86,
         recoveryDuration = 0.95,

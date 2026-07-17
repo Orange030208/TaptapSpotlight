@@ -7,11 +7,12 @@ return {
             id = "threshold", name = "门槛之间", mapX = 0, mapY = 0,
             connections = { north = "crossfire", east = "pressure" },
             spawns = {
-                { x = 0.28, y = 0.31 }, { x = 0.72, y = 0.31 }, { x = 0.5, y = 0.27 },
+                { x = 0.22, y = 0.31 }, { x = 0.78, y = 0.31 }, { x = 0.5, y = 0.27 },
+                { x = 0.34, y = 0.55 }, { x = 0.66, y = 0.55 },
             },
             groups = {
-                { "melee", "ranged" },
-                { "melee", "melee" },
+                { "melee", "ranged", "melee" },
+                { "melee", "melee", "ranged" },
             },
         },
         crossfire = {
@@ -20,10 +21,11 @@ return {
             spawns = {
                 { x = 0.22, y = 0.29 }, { x = 0.78, y = 0.29 },
                 { x = 0.32, y = 0.48 }, { x = 0.68, y = 0.48 },
+                { x = 0.5, y = 0.66 },
             },
             groups = {
-                { "melee", "ranged", "ranged" },
-                { "melee", "melee", "ranged" },
+                { "melee", "ranged", "ranged", "melee", "ranged" },
+                { "melee", "melee", "ranged", "ranged", "melee" },
             },
         },
         pressure = {
@@ -32,10 +34,11 @@ return {
             spawns = {
                 { x = 0.19, y = 0.38 }, { x = 0.81, y = 0.38 },
                 { x = 0.38, y = 0.25 }, { x = 0.62, y = 0.25 },
+                { x = 0.5, y = 0.66 },
             },
             groups = {
-                { "melee", "melee", "ranged" },
-                { "melee", "ranged", "ranged" },
+                { "melee", "melee", "ranged", "melee" },
+                { "melee", "ranged", "ranged", "melee" },
             },
         },
         ambush = {
@@ -44,10 +47,11 @@ return {
             spawns = {
                 { x = 0.18, y = 0.31 }, { x = 0.82, y = 0.31 },
                 { x = 0.27, y = 0.56 }, { x = 0.73, y = 0.56 },
+                { x = 0.5, y = 0.72 },
             },
             groups = {
-                { "melee", "melee", "ranged", "ranged" },
-                { "melee", "melee", "melee", "ranged" },
+                { "melee", "melee", "ranged", "ranged", "melee" },
+                { "melee", "melee", "melee", "ranged", "ranged" },
             },
         },
         crypt = {
@@ -55,21 +59,22 @@ return {
             connections = { east = "crossfire" },
             spawns = {
                 { x = 0.25, y = 0.30 }, { x = 0.75, y = 0.30 }, { x = 0.5, y = 0.54 },
+                { x = 0.5, y = 0.72 },
             },
             groups = {
-                { "melee", "melee", "ranged" },
-                { "ranged", "ranged", "ranged" },
+                { "melee", "melee", "ranged", "melee" },
+                { "ranged", "ranged", "ranged", "melee" },
             },
         },
         treasury = {
             id = "treasury", name = "藏宝间", mapX = 2, mapY = -1,
             connections = { west = "ambush" },
             spawns = {
-                { x = 0.3, y = 0.32 }, { x = 0.7, y = 0.32 },
+                { x = 0.3, y = 0.32 }, { x = 0.7, y = 0.32 }, { x = 0.5, y = 0.62 },
             },
             groups = {
-                { "melee", "ranged" },
-                { "melee", "melee" },
+                { "melee", "ranged", "melee" },
+                { "melee", "melee", "ranged" },
             },
         },
         warden = {

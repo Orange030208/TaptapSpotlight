@@ -81,6 +81,7 @@ function Entities.NewEnemy(kind, spawn, id)
         y = spawn.y,
         radius = spec.radius,
         hp = spec.hp,
+        maxHp = spec.hp,
         state = "idle",
         stateTimer = 0.55 + math.random() * 0.45,
         vx = 0,
@@ -95,13 +96,14 @@ function Entities.NewEnemy(kind, spawn, id)
     }
 end
 
-function Entities.NewProjectile(x, y, vx, vy, owner, damage)
+function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind)
     return {
         x = x,
         y = y,
         vx = vx,
         vy = vy,
         owner = owner,
+        sourceKind = sourceKind,
         damage = damage or 1,
         radius = Config.Projectile.radius,
         lifetime = Config.Projectile.lifetime,
@@ -118,14 +120,16 @@ function Entities.NewChest(x, y)
         y = y,
         radius = 0.026,
         bobTime = math.random() * math.pi * 2,
+        openImmediately = true,
         dead = false,
     }
 end
 
-function Entities.UpdatePlayer(player, dt, moveX, moveY)
+function Entities.UpdatePlayer(player, dt, moveX, moveY, speedMultiplier)
     local directionX, directionY = Normalize(moveX, moveY)
-    player.x = Clamp(player.x + directionX * Config.Player.speed * dt, Config.Room.minX, Config.Room.maxX)
-    player.y = Clamp(player.y + directionY * Config.Player.speed * dt, Config.Room.minY, Config.Room.maxY)
+    local speed = Config.Player.speed * (speedMultiplier or 1)
+    player.x = Clamp(player.x + directionX * speed * dt, Config.Room.minX, Config.Room.maxX)
+    player.y = Clamp(player.y + directionY * speed * dt, Config.Room.minY, Config.Room.maxY)
 
     if math.abs(directionX) > 0.05 then
         player.facing = directionX < 0 and "left" or "right"
@@ -233,10 +237,10 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     if enemy.state == "telegraph" and enemy.stateTimer <= 0 then
         if enemy.kind == "ranged" or (enemy.kind == "boss" and enemy.attackMode == "volley") then
             local dx, dy = Normalize(player.x - enemy.x, player.y - enemy.y)
-            emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, dx * spec.projectileSpeed, dy * spec.projectileSpeed, "enemy", 1))
+            emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, dx * spec.projectileSpeed, dy * spec.projectileSpeed, "enemy", 1, enemy.kind))
             if enemy.kind == "boss" then
-                emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx - dy * 0.35) * spec.projectileSpeed, (dy + dx * 0.35) * spec.projectileSpeed, "enemy", 1))
-                emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx + dy * 0.35) * spec.projectileSpeed, (dy - dx * 0.35) * spec.projectileSpeed, "enemy", 1))
+                emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx - dy * 0.35) * spec.projectileSpeed, (dy + dx * 0.35) * spec.projectileSpeed, "enemy", 1, enemy.kind))
+                emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx + dy * 0.35) * spec.projectileSpeed, (dy - dx * 0.35) * spec.projectileSpeed, "enemy", 1, enemy.kind))
             end
             enemy.state = "recovery"
             enemy.stateTimer = spec.recoveryDuration
@@ -302,7 +306,7 @@ function Entities.UpdateProjectile(projectile, dt)
     end
 end
 
-function Entities.TryParryEnemy(player, enemy)
+function Entities.TryParryEnemy(player, enemy, damage)
     if not Entities.IsParrying(player) or enemy.dead or enemy.state ~= "dash" then
         return false
     end
@@ -312,8 +316,9 @@ function Entities.TryParryEnemy(player, enemy)
         return false
     end
 
-    local damage = enemy.kind == "boss" and 1 or enemy.hp
-    enemy.hp = enemy.hp - damage
+    damage = damage or Config.Gauge.normalDamage
+    local appliedDamage = math.min(enemy.hp, damage)
+    enemy.hp = enemy.hp - appliedDamage
     enemy.state = "recovery"
     enemy.stateTimer = Config.Enemy[enemy.kind].recoveryDuration + 0.3
     local knockback = Config.Player.meleeKnockback + player.abilities.repulse * 0.12
@@ -322,10 +327,10 @@ function Entities.TryParryEnemy(player, enemy)
     if enemy.hp <= 0 then
         enemy.dead = true
     end
-    return true
+    return true, appliedDamage
 end
 
-function Entities.TryParryProjectile(player, projectile)
+function Entities.TryParryProjectile(player, projectile, damageMultiplier)
     if not Entities.IsParrying(player) or projectile.dead or projectile.owner ~= "enemy" then
         return false
     end
@@ -342,7 +347,7 @@ function Entities.TryParryProjectile(player, projectile)
     projectile.vy = normalizedY * speed
     projectile.owner = "player"
     projectile.reflected = true
-    projectile.damage = projectile.damage + player.abilities.heavy_return
+    projectile.damage = (projectile.damage + player.abilities.heavy_return) * (damageMultiplier or 1)
     projectile.pierceRemaining = player.abilities.piercing_echo
     projectile.hitEnemies = {}
     projectile.lifetime = Config.Projectile.lifetime
@@ -382,7 +387,7 @@ function Entities.ApplyUpgrade(player, definition)
 
     player.abilities[definition.id] = current + 1
     if definition.id == "wide_guard" then
-        local halfAngle = math.rad(60 + current * 12)
+        local halfAngle = math.rad(60 + (current + 1) * 12)
         player.parryHalfAngleCos = math.cos(halfAngle)
     end
     return true

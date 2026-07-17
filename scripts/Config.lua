@@ -8,6 +8,7 @@ return {
     Player = require "Data.PlayerConfig",
     Enemy = require "Data.EnemyConfig",
     Projectile = require "Data.ProjectileConfig",
+    Gauge = require "Data.GaugeConfig",
     Chests = require "Data.ChestConfig",
     Upgrades = require "Data.UpgradeConfig",
 }

@@ -395,16 +395,20 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     Color(ctx, { 255, 247, 225 }, 255)
     nvgFill(ctx)
 
-    if enemy.kind == "boss" then
-        nvgBeginPath(ctx)
-        nvgRoundedRect(ctx, x - size * 0.66, y - size * 1.36, size * 1.32, 5 * scale, 2 * scale)
-        Color(ctx, { 36, 22, 56 }, 220)
-        nvgFill(ctx)
-        nvgBeginPath(ctx)
-        nvgRoundedRect(ctx, x - size * 0.62, y - size * 1.32, size * 1.24 * math.max(0, enemy.hp / Config.Enemy.boss.hp), 2.5 * scale, 1 * scale)
-        Color(ctx, { 255, 120, 74 }, 255)
-        nvgFill(ctx)
-    end
+    local healthWidth = enemy.kind == "boss" and size * 1.32 or size * 1.06
+    local healthHeight = enemy.kind == "boss" and 5 * scale or 3.5 * scale
+    local healthY = y - size * (enemy.kind == "boss" and 1.36 or 1.18)
+    local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp or enemy.hp))
+
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x - healthWidth * 0.5, healthY, healthWidth, healthHeight, healthHeight * 0.5)
+    Color(ctx, { 28, 21, 43 }, 225)
+    nvgFill(ctx)
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x - healthWidth * 0.5 + scale, healthY + scale,
+        math.max(0, (healthWidth - scale * 2) * healthRatio), math.max(1, healthHeight - scale * 2), healthHeight * 0.4)
+    Color(ctx, enemy.kind == "boss" and { 255, 120, 74 } or color, 255)
+    nvgFill(ctx)
 end
 
 local function DrawProjectile(ctx, width, height, projectile)
@@ -473,6 +477,60 @@ local function DrawParryCone(ctx, width, height, player)
     nvgStrokeWidth(ctx, 2)
     StrokeColor(ctx, { 190, 250, 255 }, 220)
     nvgStroke(ctx)
+end
+
+local function DrawGauge(ctx, x, y, width, height, gauge, definition)
+    local ratio = Clamp(gauge.value / gauge.threshold, 0, 1)
+    local pulse = gauge.pulse or 0
+    local fillWidth = math.max(0, (width - 4) * ratio)
+    local label = definition.label .. "  " .. string.format("%d/%d", math.floor(gauge.value + 0.001), gauge.threshold)
+
+    nvgFontFace(ctx, "sans")
+    nvgFontSize(ctx, 10)
+    nvgTextAlign(ctx, NVG_ALIGN_LEFT + NVG_ALIGN_BOTTOM)
+    nvgFillColor(ctx, nvgRGBA(235, 240, 255, 230))
+    nvgText(ctx, x, y - 4, label, nil)
+
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x, y, width, height, height * 0.5)
+    Color(ctx, { 18, 16, 31 }, 225)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, pulse > 0 and 2.4 or 1.2)
+    StrokeColor(ctx, definition.color, pulse > 0 and 255 or 155)
+    nvgStroke(ctx)
+
+    if fillWidth > 0 then
+        local fill = nvgLinearGradient(ctx, x, y, x + width, y,
+            nvgRGBA(definition.color[1], definition.color[2], definition.color[3], 245),
+            nvgRGBA(255, 247, 220, pulse > 0 and 255 or 190))
+        nvgBeginPath(ctx)
+        nvgRoundedRect(ctx, x + 2, y + 2, fillWidth, math.max(1, height - 4), math.max(1, (height - 4) * 0.5))
+        nvgFillPaint(ctx, fill)
+        nvgFill(ctx)
+    end
+end
+
+local function DrawGauges(ctx, width, height, game)
+    if game.state == "menu" or game.state == "dead" or game.state == "victory" then
+        return
+    end
+
+    local barHeight = Clamp(height * 0.017, 8, 12)
+    local gap = Clamp(width * 0.022, 12, 24)
+    local horizontal = width >= 620
+    local barWidth = horizontal and math.min(320, width * 0.31) or math.min(340, width * 0.78)
+    local startX = horizontal and (width - barWidth * 2 - gap) * 0.5 or (width - barWidth) * 0.5
+    local startY = horizontal and height * 0.895 or height * 0.835
+
+    for index, kind in ipairs(Config.Gauge.order) do
+        local gauge = game.gauges[kind]
+        local definition = Config.Gauge.kinds[kind]
+        if gauge ~= nil and definition ~= nil then
+            local x = horizontal and (startX + (index - 1) * (barWidth + gap)) or startX
+            local y = horizontal and startY or (startY + (index - 1) * (barHeight + 30))
+            DrawGauge(ctx, x, y, barWidth, barHeight, gauge, definition)
+        end
+    end
 end
 
 local function DrawParticles(ctx, width, height, particles)
@@ -687,6 +745,7 @@ function Renderer.Draw(ctx, game, width, height)
     nvgRestore(ctx)
 
     DrawChestPauseDim(ctx, width, height, game)
+    DrawGauges(ctx, width, height, game)
     DrawMinimap(ctx, width, height, game)
     DrawMessage(ctx, width, height, game)
     DrawOverlay(ctx, width, height, game)

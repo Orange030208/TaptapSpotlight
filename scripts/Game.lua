@@ -4,6 +4,11 @@ local Entities = require "Entities"
 
 local Game = {}
 
+local function EmitEvent(game, name, data)
+    game.events = game.events or {}
+    table.insert(game.events, { name = name, data = data })
+end
+
 local OPPOSITE_DIRECTION = {
     north = "south",
     south = "north",
@@ -52,6 +57,80 @@ local function SetMessage(game, text, duration)
     game.messageTimer = duration or 1.2
 end
 
+local function CreateGauges()
+    local gauges = {}
+    for _, kind in ipairs(Config.Gauge.order) do
+        local definition = Config.Gauge.kinds[kind]
+        gauges[kind] = {
+            value = 0,
+            threshold = definition.threshold,
+            pulse = 0,
+        }
+    end
+    return gauges
+end
+
+local function GetActiveBuffMultiplier(game, field)
+    local multiplier = 1
+    for _, active in pairs(game.activeBuffs) do
+        if active.remaining > 0 then
+            multiplier = multiplier * (active.definition[field] or 1)
+        end
+    end
+    return multiplier
+end
+
+local function UpdateTemporaryBuffs(game, dt)
+    for id, active in pairs(game.activeBuffs) do
+        local definition = active.definition
+        if definition.healPerSecond ~= nil and game.player.hp > 0 then
+            Entities.Heal(game.player, definition.healPerSecond * dt)
+        end
+
+        active.remaining = active.remaining - dt
+        if active.remaining <= 0 then
+            game.activeBuffs[id] = nil
+            SetMessage(game, definition.name .. " 已结束", 0.65)
+            EmitEvent(game, "buff_end", { id = id })
+        end
+    end
+
+    for _, gauge in pairs(game.gauges) do
+        gauge.pulse = math.max(0, gauge.pulse - dt)
+    end
+end
+
+local function GrantRandomBuff(game, x, y)
+    local definition = Config.Gauge.buffs[math.random(1, #Config.Gauge.buffs)]
+    game.activeBuffs[definition.id] = {
+        definition = definition,
+        remaining = definition.duration,
+    }
+    AddParticles(game, x, y, definition.color, 18)
+    EmitEvent(game, "buff_gain", { id = definition.id, duration = definition.duration })
+    return definition
+end
+
+local function AddGaugeProgress(game, kind, amount, x, y)
+    local definition = Config.Gauge.kinds[kind]
+    local gauge = definition ~= nil and game.gauges[kind] or nil
+    if gauge == nil then
+        return false
+    end
+
+    gauge.value = gauge.value + amount
+    local rewarded = false
+    while gauge.value >= gauge.threshold do
+        gauge.value = gauge.value - gauge.threshold
+        gauge.pulse = 0.6
+        local buff = GrantRandomBuff(game, x, y)
+        SetMessage(game, definition.label .. "充满 - 获得 " .. buff.name, 1.4)
+        EmitEvent(game, "gauge_full", { kind = kind, buffId = buff.id })
+        rewarded = true
+    end
+    return rewarded
+end
+
 local function GetAvailableUpgrades(player)
     local available = {}
     for _, definition in ipairs(Config.Upgrades.definitions) do
@@ -86,6 +165,7 @@ local function HandleEnemyDeaths(game)
     for index = #game.enemies, 1, -1 do
         local enemy = game.enemies[index]
         if enemy.dead then
+            EmitEvent(game, enemy.kind == "boss" and "boss_defeat" or "enemy_defeat")
             SpawnChestForEnemy(game, enemy)
             AddParticles(game, enemy.x, enemy.y,
                 enemy.kind == "boss" and { 255, 120, 70 } or { 255, 215, 90 },
@@ -174,6 +254,7 @@ local function FinishRoom(game)
         game.room.boss and 999 or 1.8
     )
     AddParticles(game, game.player.x, game.player.y, { 130, 255, 185 }, 18)
+    EmitEvent(game, game.room.boss and "victory" or "room_clear")
 end
 
 local function StartRun(game)
@@ -183,6 +264,8 @@ local function StartRun(game)
     game.chests = {}
     game.chestOptions = nil
     game.particles = {}
+    game.gauges = CreateGauges()
+    game.activeBuffs = {}
     game.currentRoomId = nil
     game.roomStates = {}
     game.discoveredRooms = {}
@@ -195,6 +278,7 @@ local function StartRun(game)
     game.runTime = 0
     game.message = ""
     game.messageTimer = 0
+    game.events = {}
     EnterRoom(game, RoomData.startRoomId, nil)
 end
 
@@ -223,6 +307,7 @@ local function OpenChest(game, chest)
     game.chestOptions = options
     SetMessage(game, "选择一项强化", 999)
     AddParticles(game, chest.x, chest.y, { 255, 215, 100 }, 18)
+    EmitEvent(game, "chest_open")
     return true
 end
 
@@ -230,7 +315,7 @@ local function UpdateChests(game, dt)
     for index = #game.chests, 1, -1 do
         local chest = game.chests[index]
         chest.bobTime = chest.bobTime + dt * 4
-        if Entities.PlayerCanPickupChest(game.player, chest) then
+        if chest.openImmediately or Entities.PlayerCanPickupChest(game.player, chest) then
             table.remove(game.chests, index)
             OpenChest(game, chest)
             return true
@@ -285,6 +370,7 @@ local function TryBeginRoomTransition(game)
     game.state = "room_transition"
     game.projectiles = {}
     SetMessage(game, "", 0)
+    EmitEvent(game, "room_transition")
     return true
 end
 
@@ -320,6 +406,7 @@ local function ResolveProjectileContacts(game)
             if Entities.DamagePlayer(game.player, Config.Projectile.playerDamage) then
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                 SetMessage(game, "受到伤害", 0.5)
+                EmitEvent(game, "player_hurt")
             end
         end
 
@@ -329,6 +416,7 @@ local function ResolveProjectileContacts(game)
                     enemy.hp = enemy.hp - projectile.damage
                     Entities.RegisterProjectileHit(projectile, enemy)
                     AddParticles(game, enemy.x, enemy.y, { 255, 230, 115 }, 9)
+                    EmitEvent(game, "projectile_hit")
                     if enemy.hp <= 0 then
                         enemy.dead = true
                     end
@@ -356,8 +444,27 @@ local function TryPerfectRepair(game)
     game.perfectRepairConsumed = true
     if Entities.HealPlayer(game.player, 1) then
         SetMessage(game, "完美招架 - 生命恢复", 0.8)
+        return true
     end
-    return true
+    return false
+end
+
+local function GetParryDamage(game, perfect)
+    local damage = Config.Gauge.normalDamage
+    if perfect then
+        damage = damage * Config.Gauge.perfectDamageMultiplier
+    end
+    return damage * GetActiveBuffMultiplier(game, "parryDamageMultiplier")
+end
+
+local function GetGaugeGain(game, perfect)
+    local gain = perfect and Config.Gauge.perfectGain or Config.Gauge.normalGain
+    return gain * GetActiveBuffMultiplier(game, "gaugeGainMultiplier")
+end
+
+local function FormatParryMessage(perfect, damage)
+    local prefix = perfect and "完美招架" or "招架成功"
+    return prefix .. " - " .. string.format("%.2f", damage) .. " 伤害"
 end
 
 local function ResolveParries(game)
@@ -365,19 +472,31 @@ local function ResolveParries(game)
         return
     end
 
+    local perfect = Entities.IsPerfectParry(game.player)
+    local damage = GetParryDamage(game, perfect)
+    local gain = GetGaugeGain(game, perfect)
+
     for _, enemy in ipairs(game.enemies) do
-        if Entities.TryParryEnemy(game.player, enemy) then
+        local parried, appliedDamage = Entities.TryParryEnemy(game.player, enemy, damage)
+        if parried then
+            EmitEvent(game, perfect and "perfect_parry" or "parry_success")
             AddParticles(game, enemy.x, enemy.y, { 115, 240, 255 }, 15)
-            if not TryPerfectRepair(game) then
-                SetMessage(game, enemy.kind == "boss" and "Boss 招架成功" or "招架成功", 0.65)
+            local repaired = TryPerfectRepair(game)
+            local rewarded = AddGaugeProgress(game, enemy.kind, gain, enemy.x, enemy.y)
+            if not rewarded and not repaired then
+                SetMessage(game, FormatParryMessage(perfect, appliedDamage), 0.65)
             end
         end
     end
 
     for _, projectile in ipairs(game.projectiles) do
-        if Entities.TryParryProjectile(game.player, projectile) then
+        if Entities.TryParryProjectile(game.player, projectile, GetActiveBuffMultiplier(game, "parryDamageMultiplier")) then
+            EmitEvent(game, perfect and "perfect_parry" or "parry_success")
+            EmitEvent(game, "projectile_reflect")
             AddParticles(game, projectile.x, projectile.y, { 115, 240, 255 }, 11)
-            if not TryPerfectRepair(game) then
+            local repaired = TryPerfectRepair(game)
+            local rewarded = AddGaugeProgress(game, projectile.sourceKind, gain, projectile.x, projectile.y)
+            if not rewarded and not repaired then
                 SetMessage(game, "反射成功", 0.65)
             end
         end
@@ -387,6 +506,7 @@ end
 local function UpdateEnemies(game, dt)
     local function EmitProjectile(projectile)
         table.insert(game.projectiles, projectile)
+        EmitEvent(game, "projectile_fire")
     end
 
     for _, enemy in ipairs(game.enemies) do
@@ -395,6 +515,7 @@ local function UpdateEnemies(game, dt)
             if Entities.DamagePlayer(game.player, Config.Enemy[enemy.kind].touchDamage) then
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                 SetMessage(game, "受到伤害", 0.5)
+                EmitEvent(game, "player_hurt")
             end
         end
     end
@@ -402,7 +523,7 @@ local function UpdateEnemies(game, dt)
 end
 
 local function UpdateBattle(game, dt, moveX, moveY)
-    Entities.UpdatePlayer(game.player, dt, moveX, moveY)
+    Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
     UpdateEnemies(game, dt)
     MoveProjectiles(game, dt)
     ResolveParries(game)
@@ -416,6 +537,7 @@ local function UpdateBattle(game, dt, moveX, moveY)
         game.state = "dead"
         game.stateTimer = 0
         SetMessage(game, "本局失败", 999)
+        EmitEvent(game, "game_over")
         return
     end
 
@@ -448,16 +570,20 @@ function Game.New()
         chestOptions = nil,
         stateBeforeChest = nil,
         particles = {},
+        gauges = CreateGauges(),
+        activeBuffs = {},
         message = "按回车开始",
         messageTimer = 999,
         nextEntityId = 1,
         perfectRepairConsumed = false,
+        events = {},
         debug = Config.Debug,
     }
 end
 
 function Game.StartOrRestart(game)
     StartRun(game)
+    EmitEvent(game, "run_start")
 end
 
 function Game.TryParry(game)
@@ -469,6 +595,7 @@ function Game.TryParry(game)
     if started then
         game.perfectRepairConsumed = false
         AddParticles(game, game.player.x, game.player.y, { 110, 215, 255 }, 5)
+        EmitEvent(game, "parry_start")
     end
     return started
 end
@@ -488,7 +615,14 @@ function Game.SelectUpgrade(game, index)
     game.chestOptions = nil
     game.state = game.stateBeforeChest or "battle"
     game.stateBeforeChest = nil
+    EmitEvent(game, "upgrade_select")
     return true
+end
+
+function Game.ConsumeEvents(game)
+    local events = game.events or {}
+    game.events = {}
+    return events
 end
 
 function Game.ToggleDebug(game)
@@ -502,6 +636,10 @@ function Game.Update(game, dt, moveX, moveY)
         game.messageTimer = math.max(0, game.messageTimer - dt)
     end
     UpdateParticles(game, dt)
+
+    if game.state == "room_transition" or game.state == "intro" or game.state == "battle" or game.state == "clear" then
+        UpdateTemporaryBuffs(game, dt)
+    end
 
     if game.doorCooldown > 0 then
         game.doorCooldown = math.max(0, game.doorCooldown - dt)
@@ -518,11 +656,12 @@ function Game.Update(game, dt, moveX, moveY)
 
     game.runTime = game.runTime + dt
     if game.state == "intro" then
-        Entities.UpdatePlayer(game.player, dt, moveX, moveY)
+        Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
         game.stateTimer = game.stateTimer - dt
         if game.stateTimer <= 0 then
             game.state = "battle"
             SetMessage(game, "敌人开始行动", 1.0)
+            EmitEvent(game, "battle_start")
         end
         return
     end
@@ -533,7 +672,7 @@ function Game.Update(game, dt, moveX, moveY)
     end
 
     if game.state == "clear" then
-        Entities.UpdatePlayer(game.player, dt, moveX, moveY)
+        Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
         if UpdateChests(game, dt) then
             return
         end
@@ -557,12 +696,21 @@ function Game.GetHud(game)
         end
     end
 
+    local buffLines = {}
+    for _, definition in ipairs(Config.Gauge.buffs) do
+        local active = game.activeBuffs[definition.id]
+        if active ~= nil and active.remaining > 0 then
+            table.insert(buffLines, definition.name .. " " .. string.format("%.1f 秒", active.remaining))
+        end
+    end
+
     return {
         health = "生命 " .. hearts,
         room = game.room ~= nil and (game.room.name .. "  已清理 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount)) or "尚未开始",
         parry = "招架 " .. cooldownText,
         message = game.messageTimer > 0 and game.message or "",
         upgrades = #upgradeLines > 0 and table.concat(upgradeLines, "\n") or "暂无强化",
+        buffs = #buffLines > 0 and table.concat(buffLines, "\n") or "暂无临时增益",
     }
 end
 
