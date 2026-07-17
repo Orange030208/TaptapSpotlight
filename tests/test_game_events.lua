@@ -4,6 +4,10 @@ local Config = require "Config"
 local Entities = require "Entities"
 local Game = require "Game"
 
+for _, definition in ipairs(Config.Upgrades.definitions) do
+    assert(type(definition.icon) == "string" and definition.icon ~= "", "every upgrade needs an icon")
+end
+
 local function HasEvent(events, name)
     for _, event in ipairs(events) do
         if event.name == name then

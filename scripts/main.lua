@@ -15,6 +15,7 @@ local devicePixelRatio = 1.0
 local logicalWidth = 0
 local logicalHeight = 0
 local hudTimer = 0
+local chestPanelWasVisible = false
 
 ---@type Widget|nil
 local healthLabel = nil
@@ -30,9 +31,10 @@ local abilityLabel = nil
 local chestPanel = nil
 local chestTitleLabels = {}
 local chestDescriptionLabels = {}
+local chestIconLabels = {}
 local chestCards = {}
 local chestAccentPanels = {}
-local chestButtons = {}
+local chestIconPanels = {}
 
 local function RefreshCanvasMetrics()
     physicalWidth = graphics:GetWidth()
@@ -48,99 +50,159 @@ local function ChooseChestOption(index)
     end
 end
 
+local function SetChestCardHover(card, hovered)
+    local accentColor = card.state.accentColor or { 236, 202, 105 }
+    local borderColor = card.state.borderColor or { accentColor[1], accentColor[2], accentColor[3], 210 }
+    if hovered then
+        card:SetStyle({
+            scale = 1.035,
+            translateY = -8,
+            borderColor = { math.min(255, accentColor[1] + 22), math.min(255, accentColor[2] + 22), math.min(255, accentColor[3] + 22), 255 },
+            shadowBlur = 30,
+            shadowOffsetY = 14,
+            shadowColor = { accentColor[1], accentColor[2], accentColor[3], 125 },
+        })
+        return
+    end
+
+    card:SetStyle({
+        scale = 1.0,
+        translateY = 0,
+        borderColor = borderColor,
+        shadowBlur = 18,
+        shadowOffsetY = 7,
+        shadowColor = { 0, 0, 0, 175 },
+    })
+end
+
 local function CreateChestCard(index)
     local optionIndex = index
     local accent = UI.Panel {
         width = "100%",
-        height = 4,
+        height = 3,
         borderRadius = 2,
         backgroundColor = { 236, 202, 105, 255 },
     }
     local choiceLabel = UI.Label {
-        text = "抉择 " .. string.format("%02d", optionIndex),
-        fontSize = 10,
+        text = "遗物 " .. string.format("%02d", optionIndex),
+        fontSize = 11,
         fontWeight = "bold",
-        textTransform = "uppercase",
-        fontColor = { 187, 194, 222, 230 },
+        fontColor = { 205, 207, 209, 220 },
+    }
+    local categoryLabel = UI.Label {
+        text = "战斗强化",
+        fontSize = 10,
+        fontColor = { 176, 179, 183, 195 },
+    }
+    local icon = UI.Label {
+        text = "✦",
+        width = "100%",
+        fontSize = 46,
+        fontWeight = "bold",
+        textAlign = "center",
+        verticalAlign = "middle",
+        fontColor = { 236, 202, 105, 255 },
+        textShadow = { offsetX = 0, offsetY = 2, blur = 5, color = { 0, 0, 0, 170 } },
+    }
+    local iconPanel = UI.Panel {
+        width = 88,
+        height = 88,
+        alignSelf = "center",
+        justifyContent = "center",
+        alignItems = "center",
+        borderRadius = 6,
+        borderWidth = 1,
+        borderColor = { 236, 202, 105, 175 },
+        backgroundGradient = {
+            type = "radial",
+            innerRadius = 0,
+            outerRadius = 72,
+            from = { 74, 69, 69, 255 },
+            to = { 28, 30, 35, 255 },
+        },
+        shadowBlur = 12,
+        shadowColor = { 0, 0, 0, 150 },
+        children = { icon },
     }
     local title = UI.Label {
         text = "强化名称",
         width = "100%",
-        fontSize = 20,
+        fontSize = 21,
         fontWeight = "bold",
         textAlign = "center",
         maxLines = 2,
         whiteSpace = "normal",
         wordBreak = "break-word",
-        fontColor = { 245, 235, 180, 255 },
+        fontColor = { 245, 242, 232, 255 },
+        textShadow = { offsetX = 0, offsetY = 2, blur = 2, color = { 0, 0, 0, 190 } },
     }
     local description = UI.Label {
         text = "强化说明",
         width = "100%",
-        flexGrow = 1,
-        flexShrink = 1,
         fontSize = 13,
         textAlign = "center",
         whiteSpace = "normal",
         wordBreak = "break-word",
         maxLines = 4,
         lineHeight = 1.35,
-        fontColor = { 225, 230, 255, 220 },
-    }
-    local button = UI.Button {
-        text = "选择 [" .. tostring(optionIndex) .. "]",
-        width = "100%",
-        height = 42,
-        fontSize = 14,
-        textColor = { 15, 14, 24, 255 },
-        backgroundColor = { 236, 202, 105, 255 },
-        hoverBackgroundColor = { 255, 226, 134, 255 },
-        pressedBackgroundColor = { 205, 165, 77, 255 },
-        transition = "backgroundColor 0.15s easeOut, scale 0.15s easeOut",
-        onClick = function()
-            ChooseChestOption(optionIndex)
-        end,
+        fontColor = { 216, 218, 221, 225 },
     }
     local card = UI.Panel {
-        flexGrow = 1,
-        flexBasis = 220,
-        flexShrink = 1,
-        minWidth = 184,
-        maxWidth = 280,
-        minHeight = 244,
-        padding = 16,
-        gap = 12,
-        borderRadius = 8,
-        borderWidth = 2,
-        borderColor = { 236, 202, 105, 185 },
+        width = 226,
+        minWidth = 196,
+        aspectRatio = 2 / 3,
+        minHeight = 294,
+        padding = { 12, 14, 14, 14 },
+        gap = 11,
+        borderRadius = 7,
+        borderWidth = { 2, 2, 4, 2 },
+        borderColor = { 236, 202, 105, 210 },
+        overflow = "hidden",
         backgroundGradient = {
             type = "linear",
             direction = "to-bottom",
-            from = { 45, 38, 72, 252 },
-            to = { 24, 21, 43, 252 },
+            from = { 56, 50, 53, 254 },
+            to = { 20, 23, 29, 254 },
         },
-        boxShadow = { { x = 0, y = 7, blur = 18, spread = 0, color = { 0, 0, 0, 115 } } },
-        transition = "scale 0.15s easeOut, borderColor 0.15s easeOut",
+        shadowBlur = 18,
+        shadowOffsetY = 7,
+        shadowColor = { 0, 0, 0, 175 },
+        transition = "scale 0.18s easeOut, translateY 0.18s easeOut, borderColor 0.18s easeOut, shadowBlur 0.18s easeOut, shadowOffsetY 0.18s easeOut, shadowColor 0.18s easeOut",
         onPointerEnter = function(event, widget)
-            widget:SetStyle({ scale = 1.015 })
+            SetChestCardHover(widget, true)
         end,
         onPointerLeave = function(event, widget)
-            widget:SetStyle({ scale = 1.0 })
+            SetChestCardHover(widget, false)
+        end,
+        onClick = function()
+            ChooseChestOption(optionIndex)
         end,
         children = {
             accent,
-            choiceLabel,
+            UI.Panel {
+                width = "100%",
+                flexDirection = "row",
+                justifyContent = "space-between",
+                alignItems = "center",
+                children = { choiceLabel, categoryLabel },
+            },
+            iconPanel,
             title,
+            UI.Divider {
+                width = "100%",
+                color = { 255, 255, 255, 42 },
+                spacing = 0,
+            },
             description,
-            button,
         },
     }
 
     chestTitleLabels[index] = title
     chestDescriptionLabels[index] = description
+    chestIconLabels[index] = icon
     chestCards[index] = card
     chestAccentPanels[index] = accent
-    chestButtons[index] = button
+    chestIconPanels[index] = iconPanel
     return card
 end
 
@@ -188,40 +250,32 @@ local function CreateHud()
         backdropBlur = 8,
         pointerEvents = "auto",
         children = {
-            UI.Panel {
-                width = "94%",
-                height = "84%",
-                maxWidth = 940,
-                padding = 22,
-                gap = 14,
-                backgroundGradient = {
-                    type = "linear",
-                    direction = "to-bottom",
-                    from = { 37, 31, 65, 253 },
-                    to = { 18, 16, 35, 253 },
-                },
-                borderRadius = 8,
-                borderWidth = 2,
-                borderColor = { 246, 211, 112, 220 },
-                boxShadow = { { x = 0, y = 12, blur = 32, spread = 0, color = { 0, 0, 0, 150 } } },
+            UI.SafeAreaView {
+                width = "100%",
+                height = "100%",
+                padding = { 20, 18, 16, 18 },
                 alignItems = "center",
+                gap = 14,
                 children = {
-                    UI.Label {
-                        text = "遗物抉择",
-                        fontSize = 30,
-                        fontWeight = "bold",
-                        textStroke = { width = 1, color = { 50, 37, 9, 230 } },
-                        fontColor = { 255, 226, 125, 255 },
-                    },
-                    UI.Label {
-                        text = "选择一项强化，房间时间已暂停",
-                        fontSize = 13,
-                        fontColor = { 220, 226, 255, 220 },
-                    },
-                    UI.Divider {
+                    UI.Panel {
                         width = "100%",
-                        color = { 246, 211, 112, 95 },
-                        spacing = 0,
+                        maxWidth = 900,
+                        alignItems = "center",
+                        gap = 4,
+                        children = {
+                            UI.Label {
+                                text = "遗物抉择",
+                                fontSize = 27,
+                                fontWeight = "bold",
+                                textStroke = { width = 1, color = { 18, 18, 20, 240 } },
+                                fontColor = { 246, 235, 199, 255 },
+                            },
+                            UI.Label {
+                                text = "一项强化，将成为这场战斗的偏向",
+                                fontSize = 12,
+                                fontColor = { 208, 209, 209, 215 },
+                            },
+                        },
                     },
                     UI.ScrollView {
                         width = "100%",
@@ -236,17 +290,13 @@ local function CreateHud()
                                 flexDirection = "row",
                                 flexWrap = "wrap",
                                 justifyContent = "center",
-                                alignItems = "stretch",
-                                gap = 14,
-                                padding = { 4, 2, 12, 2 },
+                                alignItems = "flex-start",
+                                columnGap = 26,
+                                rowGap = 20,
+                                padding = { 10, 8, 20, 8 },
                                 children = { CreateChestCard(1), CreateChestCard(2), CreateChestCard(3) },
                             },
                         },
-                    },
-                    UI.Label {
-                        text = "按 1 / 2 / 3 选择",
-                        fontSize = 12,
-                        fontColor = { 171, 181, 217, 225 },
                     },
                 },
             },
@@ -306,26 +356,43 @@ local function RefreshChestPanel()
     local isChoosing = game.state == "chest_select"
     chestPanel:SetVisible(isChoosing)
     if not isChoosing then
+        chestPanelWasVisible = false
         return
     end
 
     for index = 1, 3 do
         local option = game.chestOptions and game.chestOptions[index] or nil
-        chestCards[index]:SetVisible(option ~= nil)
+        local card = chestCards[index]
+        card:SetVisible(option ~= nil)
         if option ~= nil then
-            chestTitleLabels[index]:SetText(option.name)
-            chestDescriptionLabels[index]:SetText(option.description)
             local color = option.color or { 236, 202, 105 }
-            chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
-            chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
-            chestCards[index]:SetStyle({ borderColor = { color[1], color[2], color[3], 225 } })
-            chestButtons[index]:SetStyle({
-                backgroundColor = { color[1], color[2], color[3], 255 },
-                hoverBackgroundColor = { math.min(255, color[1] + 26), math.min(255, color[2] + 26), math.min(255, color[3] + 26), 255 },
-                pressedBackgroundColor = { math.max(0, color[1] - 32), math.max(0, color[2] - 32), math.max(0, color[3] - 32), 255 },
-            })
+            if not chestPanelWasVisible or card.state.optionId ~= option.id then
+                local borderColor = { color[1], color[2], color[3], 220 }
+                card:SetState({
+                    optionId = option.id,
+                    accentColor = color,
+                    borderColor = borderColor,
+                })
+                chestTitleLabels[index]:SetText(option.name)
+                chestDescriptionLabels[index]:SetText(option.description)
+                chestIconLabels[index]:SetText(option.icon or "✦")
+                chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                chestIconLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
+                chestIconPanels[index]:SetStyle({
+                    borderColor = { color[1], color[2], color[3], 190 },
+                    shadowColor = { color[1], color[2], color[3], 78 },
+                })
+                card:SetStyle({
+                    borderColor = borderColor,
+                    shadowBlur = 18,
+                    shadowOffsetY = 7,
+                    shadowColor = { 0, 0, 0, 175 },
+                })
+            end
         end
     end
+    chestPanelWasVisible = true
 end
 
 local function UpdateHud()
