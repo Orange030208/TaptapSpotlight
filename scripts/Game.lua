@@ -84,7 +84,7 @@ local function UpdateTemporaryBuffs(game, dt)
     for id, active in pairs(game.activeBuffs) do
         local definition = active.definition
         if definition.healPerSecond ~= nil and game.player.hp > 0 then
-            Entities.Heal(game.player, definition.healPerSecond * dt)
+            Entities.HealPlayer(game.player, definition.healPerSecond * dt)
         end
 
         active.remaining = active.remaining - dt

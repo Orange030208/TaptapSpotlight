@@ -91,6 +91,33 @@ events = Game.ConsumeEvents(reflect)
 assert(HasEvent(events, "parry_success"))
 assert(HasEvent(events, "projectile_reflect"))
 
+local hit = Game.New()
+Game.StartOrRestart(hit)
+Game.ConsumeEvents(hit)
+hit.state = "battle"
+hit.enemies = { Entities.NewEnemy("melee", { x = 0.5, y = 0.5 }, 3501) }
+hit.enemies[1].stateTimer = 99
+hit.projectiles = { Entities.NewProjectile(0.5, 0.5, 0, 0, "player", 0.1) }
+Game.Update(hit, 0, 0, 0)
+assert(HasEvent(Game.ConsumeEvents(hit), "projectile_hit"))
+
+local gauge = Game.New()
+Game.StartOrRestart(gauge)
+Game.ConsumeEvents(gauge)
+gauge.state = "battle"
+gauge.gauges.melee.value = gauge.gauges.melee.threshold - Config.Gauge.perfectGain
+gauge.enemies = { Entities.NewEnemy("melee", { x = gauge.player.x + 0.12, y = gauge.player.y }, 3601) }
+gauge.enemies[1].state = "dash"
+gauge.enemies[1].stateTimer = 0.5
+assert(Game.TryParry(gauge))
+Game.ConsumeEvents(gauge)
+Game.Update(gauge, 0, 0, 0)
+events = Game.ConsumeEvents(gauge)
+assert(HasEvent(events, "gauge_full"))
+assert(HasEvent(events, "buff_gain"))
+Game.Update(gauge, 8.0, 0, 0)
+assert(HasEvent(Game.ConsumeEvents(gauge), "buff_end"))
+
 local chest = Game.New()
 Game.StartOrRestart(chest)
 Game.ConsumeEvents(chest)
@@ -100,6 +127,20 @@ chest.enemies = {}
 chest.chests = { Entities.NewChest(chest.player.x, chest.player.y) }
 Game.Update(chest, 0, 0, 0)
 assert(HasEvent(Game.ConsumeEvents(chest), "chest_open"))
+
+local regeneration = Game.New()
+Game.StartOrRestart(regeneration)
+regeneration.state = "clear"
+regeneration.roomCleared = true
+regeneration.enemies = {}
+regeneration.chests = {}
+regeneration.player.hp = 1
+local vitalityEcho = Config.Gauge.buffs[1]
+regeneration.activeBuffs = {
+    [vitalityEcho.id] = { definition = vitalityEcho, remaining = vitalityEcho.duration },
+}
+Game.Update(regeneration, 1.0, 0, 0)
+assert(regeneration.player.hp > 1, "生命回响应在持续时间内恢复生命")
 
 local transition = Game.New()
 Game.StartOrRestart(transition)

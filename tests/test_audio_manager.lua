@@ -12,6 +12,8 @@ cache = {
     GetResource = function(_, resourceType, path)
         assert(resourceType == "Sound")
         requestedPaths[path] = true
+        local file = assert(io.open("assets/" .. path, "rb"), "missing test sound: " .. path)
+        file:close()
         return { frequency = 44100, path = path }
     end,
 }
@@ -72,11 +74,15 @@ end
 local AudioManager = require "AudioManager"
 
 assert(AudioManager.Initialize())
-assert(requestedPaths["audio/SFX/parry_start.ogg"])
-assert(requestedPaths["audio/SFX/victory.ogg"])
-assert(requestedPaths["audio/SFX/gauge_full.ogg"])
-assert(requestedPaths["audio/SFX/buff_gain.ogg"])
-assert(requestedPaths["audio/SFX/buff_end.ogg"])
+local expectedCues = {
+    "run_start", "battle_start", "parry_start", "parry_success", "perfect_parry",
+    "projectile_fire", "projectile_reflect", "projectile_hit", "player_hurt",
+    "enemy_defeat", "boss_defeat", "chest_open", "upgrade_select", "gauge_full",
+    "buff_gain", "buff_end", "room_clear", "room_transition", "game_over", "victory",
+}
+for _, name in ipairs(expectedCues) do
+    assert(requestedPaths["audio/SFX/" .. name .. ".ogg"], "missing cue mapping: " .. name)
+end
 
 assert(AudioManager.Play("parry_start"))
 assert(#createdSources == 1)
