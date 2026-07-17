@@ -45,24 +45,27 @@ local function AddFloatingText(state, profile, data, text)
     })
 end
 
-local function ApplyProfile(state, profile, data, text)
-    if not AddImpact(state, profile, data) then
-        return
+local function ApplyScreenProfile(state, profile)
+    local hitStop = profile.hitStop or 0
+    if hitStop > 0 then
+        state.hitStopTimer = math.max(state.hitStopTimer, hitStop)
     end
 
-    state.hitStopTimer = math.max(state.hitStopTimer, profile.hitStop or 0)
-    if state.shake == nil or (profile.shake or 0) >= state.shake.strength then
+    local shake = profile.shake or 0
+    if shake > 0 and profile.shakeDuration ~= nil and (state.shake == nil or shake >= state.shake.strength) then
         state.shake = {
             timer = profile.shakeDuration or 0,
             maxTimer = profile.shakeDuration or 0,
-            strength = profile.shake or 0,
+            strength = shake,
         }
     end
-    if state.flash == nil or (profile.flashAlpha or 0) >= state.flash.alpha then
+
+    local flashAlpha = profile.flashAlpha or 0
+    if flashAlpha > 0 and profile.flashDuration ~= nil and (state.flash == nil or flashAlpha >= state.flash.alpha) then
         state.flash = {
             timer = profile.flashDuration or 0,
             maxTimer = profile.flashDuration or 0,
-            alpha = profile.flashAlpha or 0,
+            alpha = flashAlpha,
             color = CopyColor(profile.flashColor),
         }
     end
@@ -70,6 +73,14 @@ local function ApplyProfile(state, profile, data, text)
         state.hudPulseTimer = math.max(state.hudPulseTimer, profile.hudPulseDuration)
         state.hudPulseDuration = math.max(state.hudPulseDuration, profile.hudPulseDuration)
     end
+end
+
+local function ApplyWorldProfile(state, profile, data, text)
+    if not AddImpact(state, profile, data) then
+        return
+    end
+
+    ApplyScreenProfile(state, profile)
     AddFloatingText(state, profile, data, text)
 end
 
@@ -98,20 +109,14 @@ function Feedback.ProcessEvents(state, events)
         local name = event.name
         local data = event.data
         if name == "parry_success" then
-            ApplyProfile(state, Config.normalParry, data, FormatDamage(data))
+            ApplyWorldProfile(state, Config.normalParry, data, nil)
         elseif name == "perfect_parry" then
             local damage = FormatDamage(data)
-            ApplyProfile(state, Config.perfectParry, data, damage ~= nil and ("完美 " .. damage) or "完美")
-        elseif name == "projectile_reflect" then
-            ApplyProfile(state, Config.projectileReflect, data, "反射")
-        elseif name == "projectile_hit" then
-            ApplyProfile(state, Config.projectileHit, data, FormatDamage(data))
+            ApplyWorldProfile(state, Config.perfectParry, data, damage ~= nil and ("完美 " .. damage) or "完美")
         elseif name == "player_hurt" then
-            ApplyProfile(state, Config.playerHurt, data, "受击")
-        elseif name == "enemy_defeat" then
-            ApplyProfile(state, Config.enemyDefeat, data, nil)
+            ApplyScreenProfile(state, Config.playerHurt)
         elseif name == "boss_defeat" then
-            ApplyProfile(state, Config.bossDefeat, data, "处决")
+            ApplyWorldProfile(state, Config.bossDefeat, data, "处决")
         end
     end
 end

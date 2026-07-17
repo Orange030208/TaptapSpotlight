@@ -38,9 +38,9 @@ local chestCards = {}
 local chestAccentPanels = {}
 local chestIconPanels = {}
 
-local CHEST_CARD_IDLE_ROTATIONS = { -1.4, 0.45, 1.35 }
-local CHEST_CARD_HOVER_ROTATIONS = { -4.5, 0, 4.5 }
-local CHEST_CARD_IDLE_DURATIONS = { 2.8, 3.15, 2.95 }
+local CHEST_CARD_IDLE_ROTATIONS = { 0, 0, 0 }
+local CHEST_CARD_IDLE_DURATIONS = { 3.4, 3.8, 3.6 }
+local CHEST_CARD_MAX_POINTER_TILT = 2.2
 
 local function RefreshCanvasMetrics()
     physicalWidth = graphics:GetWidth()
@@ -64,7 +64,7 @@ local function StartChestCardIdle(card)
     card:Animate({
         keyframes = {
             [0] = { scale = 1.0, translateY = 0, rotate = idleRotation },
-            [0.5] = { scale = 1.018, translateY = -6, rotate = -idleRotation * 0.38 },
+            [0.5] = { scale = 1.006, translateY = -2, rotate = idleRotation },
             [1] = { scale = 1.0, translateY = 0, rotate = idleRotation },
         },
         duration = idleDuration,
@@ -77,7 +77,7 @@ local function StartChestCardIdle(card)
         iconPanel:Animate({
             keyframes = {
                 [0] = { scale = 1.0, translateY = 0, rotate = 0 },
-                [0.5] = { scale = 1.045, translateY = -3, rotate = -idleRotation * 0.72 },
+                [0.5] = { scale = 1.012, translateY = -1, rotate = 0 },
                 [1] = { scale = 1.0, translateY = 0, rotate = 0 },
             },
             duration = idleDuration * 0.9,
@@ -88,16 +88,44 @@ local function StartChestCardIdle(card)
     end
 end
 
-local function SetChestCardHover(card, hovered)
+local function GetChestCardPointerTilt(card, event)
+    if event == nil then
+        return 0
+    end
+
+    local layout = card:GetAbsoluteLayout()
+    if layout.w <= 0 then
+        return 0
+    end
+
+    local normalizedX = (event.x - layout.x) / layout.w * 2 - 1
+    normalizedX = math.max(-1, math.min(1, normalizedX))
+    return normalizedX * CHEST_CARD_MAX_POINTER_TILT
+end
+
+local function UpdateChestCardHoverTilt(card, event)
+    if not card.state.hovered then
+        return
+    end
+
+    local hoverRotation = GetChestCardPointerTilt(card, event)
+    card:SetState({ hoverRotation = hoverRotation })
+    card:SetStyle({ rotate = hoverRotation })
+    if card.state.iconPanel ~= nil then
+        card.state.iconPanel:SetStyle({ rotate = -hoverRotation * 0.28 })
+    end
+end
+
+local function SetChestCardHover(card, hovered, event)
     local accentColor = card.state.accentColor or { 236, 202, 105 }
     local borderColor = card.state.borderColor or { accentColor[1], accentColor[2], accentColor[3], 210 }
     local iconBorderColor = card.state.iconBorderColor or { accentColor[1], accentColor[2], accentColor[3], 190 }
     local idleRotation = card.state.idleRotation or 0
-    local hoverRotation = card.state.hoverRotation or 0
     local iconPanel = card.state.iconPanel
 
     if hovered then
-        card:SetState({ hovered = true })
+        local hoverRotation = GetChestCardPointerTilt(card, event)
+        card:SetState({ hovered = true, hoverRotation = hoverRotation })
         card:StopAnimation()
         if iconPanel ~= nil then
             iconPanel:StopAnimation()
@@ -111,7 +139,7 @@ local function SetChestCardHover(card, hovered)
         card:Animate({
             keyframes = {
                 [0] = { scale = 1.0, translateY = 0, rotate = idleRotation },
-                [1] = { scale = 1.09, translateY = -22, rotate = hoverRotation },
+                [1] = { scale = 1.045, translateY = -13, rotate = hoverRotation },
             },
             duration = 0.18,
             easing = "easeOutBack",
@@ -126,7 +154,7 @@ local function SetChestCardHover(card, hovered)
             iconPanel:Animate({
                 keyframes = {
                     [0] = { scale = 1.0, translateY = 0, rotate = 0 },
-                    [1] = { scale = 1.15, translateY = -5, rotate = -hoverRotation * 0.4 },
+                    [1] = { scale = 1.08, translateY = -3, rotate = -hoverRotation * 0.28 },
                 },
                 duration = 0.18,
                 easing = "easeOutBack",
@@ -137,6 +165,7 @@ local function SetChestCardHover(card, hovered)
     end
 
     card:SetState({ hovered = false })
+    local hoverRotation = card.state.hoverRotation or 0
     card:StopAnimation()
     if iconPanel ~= nil then
         iconPanel:StopAnimation()
@@ -149,7 +178,7 @@ local function SetChestCardHover(card, hovered)
     })
     card:Animate({
         keyframes = {
-            [0] = { scale = 1.09, translateY = -22, rotate = hoverRotation },
+            [0] = { scale = 1.045, translateY = -13, rotate = hoverRotation },
             [1] = { scale = 1.0, translateY = 0, rotate = idleRotation },
         },
         duration = 0.22,
@@ -167,7 +196,7 @@ local function SetChestCardHover(card, hovered)
         })
         iconPanel:Animate({
             keyframes = {
-                [0] = { scale = 1.15, translateY = -5, rotate = -hoverRotation * 0.4 },
+                [0] = { scale = 1.08, translateY = -3, rotate = -hoverRotation * 0.28 },
                 [1] = { scale = 1.0, translateY = 0, rotate = 0 },
             },
             duration = 0.22,
@@ -214,6 +243,7 @@ local function CreateChestCard(index)
         },
         shadowBlur = 12,
         shadowColor = { 0, 0, 0, 150 },
+        transition = "rotate 0.10s easeOut",
         pointerEvents = "none",
         children = { icon },
     }
@@ -261,10 +291,13 @@ local function CreateChestCard(index)
         shadowOffsetY = 7,
         shadowColor = { 0, 0, 0, 175 },
         rotate = CHEST_CARD_IDLE_ROTATIONS[optionIndex],
-        transformOrigin = "center",
-        transition = "borderColor 0.18s easeOut, shadowBlur 0.18s easeOut, shadowOffsetY 0.18s easeOut, shadowColor 0.18s easeOut",
+        transformOrigin = "bottom",
+        transition = "rotate 0.10s easeOut, borderColor 0.18s easeOut, shadowBlur 0.18s easeOut, shadowOffsetY 0.18s easeOut, shadowColor 0.18s easeOut",
         onPointerEnter = function(event, widget)
-            SetChestCardHover(widget, true)
+            SetChestCardHover(widget, true, event)
+        end,
+        onPointerMove = function(event, widget)
+            UpdateChestCardHoverTilt(widget, event)
         end,
         onPointerLeave = function(event, widget)
             SetChestCardHover(widget, false)
@@ -294,7 +327,7 @@ local function CreateChestCard(index)
     chestIconPanels[index] = iconPanel
     card:SetState({
         idleRotation = CHEST_CARD_IDLE_ROTATIONS[optionIndex],
-        hoverRotation = CHEST_CARD_HOVER_ROTATIONS[optionIndex],
+        hoverRotation = 0,
         idleDuration = CHEST_CARD_IDLE_DURATIONS[optionIndex],
         iconPanel = iconPanel,
         hovered = false,
@@ -385,7 +418,7 @@ local function CreateHud()
                                         flexWrap = "wrap",
                                         justifyContent = "center",
                                         alignItems = "flex-start",
-                                        columnGap = 26,
+                                        columnGap = 36,
                                         rowGap = 20,
                                         pointerEvents = "box-none",
                                         children = { CreateChestCard(1), CreateChestCard(2), CreateChestCard(3) },
