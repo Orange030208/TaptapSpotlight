@@ -1,6 +1,38 @@
 local Config = require "Config"
 
 local Renderer = {}
+local playerImageHandle = 0
+local playerImageWidth = 1
+local playerImageHeight = 1
+
+function Renderer.LoadAssets(ctx)
+    playerImageHandle = nvgCreateImage(ctx, "Characters/player.png", 0)
+    if playerImageHandle == nil or playerImageHandle <= 0 then
+        playerImageHandle = 0
+        print("WARNING: Failed to load player sprite: Characters/player.png; using vector fallback")
+        return false
+    end
+
+    playerImageWidth, playerImageHeight = nvgImageSize(ctx, playerImageHandle)
+    if playerImageWidth <= 0 or playerImageHeight <= 0 then
+        nvgDeleteImage(ctx, playerImageHandle)
+        playerImageHandle = 0
+        playerImageWidth, playerImageHeight = 1, 1
+        print("WARNING: Player sprite has invalid dimensions; using vector fallback")
+        return false
+    end
+
+    print("Loaded player sprite: " .. tostring(playerImageWidth) .. "x" .. tostring(playerImageHeight))
+    return true
+end
+
+function Renderer.UnloadAssets(ctx)
+    if playerImageHandle ~= nil and playerImageHandle > 0 then
+        nvgDeleteImage(ctx, playerImageHandle)
+    end
+    playerImageHandle = 0
+    playerImageWidth, playerImageHeight = 1, 1
+end
 
 local function Lerp(a, b, t)
     return a + (b - a) * t
@@ -122,7 +154,7 @@ local function DrawShadow(ctx, x, y, scale, width, alpha)
     nvgFill(ctx)
 end
 
-local function DrawPlayer(ctx, width, height, player, time)
+local function DrawFallbackPlayer(ctx, width, height, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
     local bodyW = 19 * scale
     local bodyH = 29 * scale
@@ -152,6 +184,53 @@ local function DrawPlayer(ctx, width, height, player, time)
     Color(ctx, { 255, 235, 132 }, 255)
     nvgFill(ctx)
     nvgRestore(ctx)
+end
+
+local function DrawSpritePlayer(ctx, width, height, player, time)
+    local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
+    local displayHeight = 58 * scale
+    local displayWidth = displayHeight * playerImageWidth / playerImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight
+    local flip = player.facing == "left" and -1 or 1
+    local bob = math.sin(time * 10) * 1.2 * scale
+    local imageAlpha = 1.0
+    if player.invulnerabilityTimer > 0 then
+        imageAlpha = 0.42 + 0.38 * math.abs(math.sin(time * 24))
+    end
+
+    DrawShadow(ctx, x, y, scale, 23, 135)
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y + bob)
+    nvgScale(ctx, flip, 1)
+
+    if player.parryTimer > 0 then
+        nvgSave(ctx)
+        nvgScale(ctx, 1.08, 1.08)
+        nvgTranslate(ctx, 0, displayHeight * 0.07)
+        nvgBeginPath(ctx)
+        nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+        nvgFillPaint(ctx, nvgImagePatternTinted(
+            ctx, drawX, drawY, displayWidth, displayHeight, 0, playerImageHandle,
+            nvgRGBA(110, 235, 255, 125)
+        ))
+        nvgFill(ctx)
+        nvgRestore(ctx)
+    end
+
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, playerImageHandle, imageAlpha))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
+local function DrawPlayer(ctx, width, height, player, time)
+    if playerImageHandle ~= nil and playerImageHandle > 0 then
+        DrawSpritePlayer(ctx, width, height, player, time)
+    else
+        DrawFallbackPlayer(ctx, width, height, player, time)
+    end
 end
 
 local function EnemyColor(kind)

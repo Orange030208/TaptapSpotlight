@@ -258,6 +258,7 @@ function Start()
     if nvgCreateFont(nvgContext, "sans", "Fonts/MiSans-Regular.ttf") == -1 then
         print("WARNING: Could not load NanoVG font")
     end
+    Renderer.LoadAssets(nvgContext)
 
     game = Game.New()
     UpdateHud()
@@ -272,6 +273,7 @@ end
 function Stop()
     UI.Shutdown()
     if nvgContext ~= nil then
+        Renderer.UnloadAssets(nvgContext)
         nvgDelete(nvgContext)
         nvgContext = nil
     end
