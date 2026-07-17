@@ -35,4 +35,4 @@ git remote -v
 git status --short --branch
 ```
 
-在提交游戏功能时，先使用 Maker 工作流提交并构建；需要同步个人 GitHub 仓库时，再执行 `git push github main`。两个远端均应保持在同一条 `main` 分支历史上。
+在提交游戏功能时，先使用 Maker 工作流提交并构建；需要在个人 GitHub 中保留同一游戏版本时，再执行 `git push github main`。README 等仅用于代码托管的文档更新不需要单独触发 Maker 构建。
