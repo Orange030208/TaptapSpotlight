@@ -163,7 +163,7 @@ local function EnemyColor(kind)
     return { 255, 145, 74 }
 end
 
-local function DrawEnemyTelegraph(ctx, width, height, enemy)
+local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
     if enemy.state ~= "telegraph" then
         return
     end
@@ -175,15 +175,46 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy)
     nvgStrokeWidth(ctx, 2 * scale)
     StrokeColor(ctx, { 255, 230, 120 }, pulse)
     nvgStroke(ctx)
+
+    if player ~= nil then
+        local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x, y)
+        nvgLineTo(ctx, playerX, playerY)
+        nvgStrokeWidth(ctx, 1.5 * scale)
+        StrokeColor(ctx, { 255, 220, 115 }, math.floor(pulse * 0.55))
+        nvgStroke(ctx)
+    end
 end
 
-local function DrawEnemy(ctx, width, height, enemy, time)
+local function DrawEnemyMotionTrail(ctx, width, height, enemy)
+    if enemy.state ~= "idle" then
+        return
+    end
+    local speed = math.sqrt(enemy.vx * enemy.vx + enemy.vy * enemy.vy)
+    if speed <= 0.01 then
+        return
+    end
+    local tailX = enemy.x - enemy.vx * 0.25
+    local tailY = enemy.y - enemy.vy * 0.25
+    local x, y = Renderer.WorldToScreen(width, height, enemy.x, enemy.y)
+    local previousX, previousY = Renderer.WorldToScreen(width, height, tailX, tailY)
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, previousX, previousY)
+    nvgLineTo(ctx, x, y)
+    nvgStrokeWidth(ctx, 2)
+    StrokeColor(ctx, EnemyColor(enemy.kind), 85)
+    nvgStroke(ctx)
+end
+
+local function DrawEnemy(ctx, width, height, enemy, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, enemy.x, enemy.y)
     local color = EnemyColor(enemy.kind)
     local size = (enemy.kind == "boss" and 34 or 22) * scale
     local pulse = math.sin(time * 7 + enemy.id) * 1.4 * scale
 
-    DrawEnemyTelegraph(ctx, width, height, enemy)
+    DrawEnemyMotionTrail(ctx, width, height, enemy)
+    DrawEnemyTelegraph(ctx, width, height, enemy, player)
     DrawShadow(ctx, x, y, scale, size * 0.68, 130)
 
     nvgBeginPath(ctx)
@@ -230,22 +261,33 @@ local function DrawProjectile(ctx, width, height, projectile)
     nvgStroke(ctx)
 end
 
-local function DrawDrop(ctx, width, height, drop)
-    local x, y, scale = Renderer.WorldToScreen(width, height, drop.x, drop.y)
-    y = y + math.sin(drop.bobTime) * 4 * scale
-    local size = 8 * scale
-    DrawShadow(ctx, x, y, scale, 8, 100)
+local function DrawChest(ctx, width, height, chest)
+    local x, y, scale = Renderer.WorldToScreen(width, height, chest.x, chest.y)
+    y = y + math.sin(chest.bobTime) * 4 * scale
+    local size = 14 * scale
+    DrawShadow(ctx, x, y, scale, 14, 120)
+
     nvgBeginPath(ctx)
-    nvgMoveTo(ctx, x, y - size)
-    nvgLineTo(ctx, x + size, y)
-    nvgLineTo(ctx, x, y + size)
-    nvgLineTo(ctx, x - size, y)
-    nvgClosePath(ctx)
-    Color(ctx, { 120, 230, 255 }, 255)
+    nvgCircle(ctx, x, y - size * 0.3, size * 1.5)
+    nvgFillColor(ctx, nvgRGBA(255, 212, 95, 45))
     nvgFill(ctx)
-    nvgStrokeWidth(ctx, 1.5 * scale)
-    StrokeColor(ctx, { 230, 255, 255 }, 255)
+
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x - size, y - size * 0.78, size * 2, size * 1.2, 3 * scale)
+    Color(ctx, { 230, 166, 58 }, 255)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 1.8 * scale)
+    StrokeColor(ctx, { 255, 238, 150 }, 255)
     nvgStroke(ctx)
+
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x - size, y - size * 1.1, size * 2, size * 0.48, 3 * scale)
+    Color(ctx, { 255, 205, 85 }, 255)
+    nvgFill(ctx)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, x - 2 * scale, y - size * 1.08, 4 * scale, size * 1.45)
+    Color(ctx, { 95, 57, 35 }, 255)
+    nvgFill(ctx)
 end
 
 local function DrawParryCone(ctx, width, height, player)
@@ -294,7 +336,7 @@ local function DrawDebug(ctx, width, height, game)
     nvgFontSize(ctx, 13)
     nvgTextAlign(ctx, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
     nvgFillColor(ctx, nvgRGBA(225, 235, 255, 230))
-    nvgText(ctx, 14, 14, string.format("state=%s enemies=%d projectiles=%d drops=%d", game.state, #game.enemies, #game.projectiles, #game.drops), nil)
+    nvgText(ctx, 14, 14, string.format("状态=%s 敌人=%d 投射物=%d 宝箱=%d", game.state, #game.enemies, #game.projectiles, #game.chests), nil)
 end
 
 local function DrawOverlay(ctx, width, height, game)
@@ -307,8 +349,8 @@ local function DrawOverlay(ctx, width, height, game)
     nvgFillColor(ctx, nvgRGBA(8, 8, 20, 155))
     nvgFill(ctx)
 
-    local title = game.state == "menu" and "PARRY ROOM" or (game.state == "victory" and "RUN COMPLETE" or "RUN LOST")
-    local subtitle = game.state == "menu" and "WASD to move  •  SPACE to parry" or "Press R to return to room one"
+    local title = game.state == "menu" and "弹反之室" or (game.state == "victory" and "成功逃离" or "本局失败")
+    local subtitle = game.state == "menu" and "WASD 移动  •  空格招架  •  回车开始" or "按 R 回到第一间房"
     nvgFontFace(ctx, "sans")
     nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFontSize(ctx, math.min(52, width * 0.065))
@@ -317,6 +359,16 @@ local function DrawOverlay(ctx, width, height, game)
     nvgFontSize(ctx, math.min(20, width * 0.027))
     nvgFillColor(ctx, nvgRGBA(165, 220, 255, 245))
     nvgText(ctx, width * 0.5, height * 0.53, subtitle, nil)
+end
+
+local function DrawChestPauseDim(ctx, width, height, game)
+    if game.state ~= "chest_select" then
+        return
+    end
+    nvgBeginPath(ctx)
+    nvgRect(ctx, 0, 0, width, height)
+    nvgFillColor(ctx, nvgRGBA(6, 6, 16, 100))
+    nvgFill(ctx)
 end
 
 local function DrawMessage(ctx, width, height, game)
@@ -339,19 +391,19 @@ function Renderer.Draw(ctx, game, width, height)
     end
 
     local drawables = {}
-    for _, drop in ipairs(game.drops) do table.insert(drawables, { kind = "drop", value = drop, y = drop.y }) end
+    for _, chest in ipairs(game.chests) do table.insert(drawables, { kind = "chest", value = chest, y = chest.y }) end
     for _, projectile in ipairs(game.projectiles) do table.insert(drawables, { kind = "projectile", value = projectile, y = projectile.y }) end
     for _, enemy in ipairs(game.enemies) do table.insert(drawables, { kind = "enemy", value = enemy, y = enemy.y }) end
     if game.player ~= nil then table.insert(drawables, { kind = "player", value = game.player, y = game.player.y }) end
     table.sort(drawables, function(a, b) return a.y < b.y end)
 
     for _, drawable in ipairs(drawables) do
-        if drawable.kind == "drop" then
-            DrawDrop(ctx, width, height, drawable.value)
+        if drawable.kind == "chest" then
+            DrawChest(ctx, width, height, drawable.value)
         elseif drawable.kind == "projectile" then
             DrawProjectile(ctx, width, height, drawable.value)
         elseif drawable.kind == "enemy" then
-            DrawEnemy(ctx, width, height, drawable.value, game.time)
+            DrawEnemy(ctx, width, height, drawable.value, game.player, game.time)
         else
             DrawPlayer(ctx, width, height, drawable.value, game.time)
         end
@@ -361,6 +413,7 @@ function Renderer.Draw(ctx, game, width, height)
         DrawParryCone(ctx, width, height, game.player)
     end
     DrawParticles(ctx, width, height, game.particles)
+    DrawChestPauseDim(ctx, width, height, game)
     DrawMessage(ctx, width, height, game)
     DrawDebug(ctx, width, height, game)
     DrawOverlay(ctx, width, height, game)

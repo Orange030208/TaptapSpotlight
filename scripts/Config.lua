@@ -1,6 +1,6 @@
 -- Shared tuning for the Game Jam prototype. All coordinates use room space: 0..1.
 local Config = {
-    Title = "Parry Room",
+    Title = "弹反之室",
     Debug = false,
 
     Room = {
@@ -20,6 +20,7 @@ local Config = {
         speed = 0.54,
         invulnerabilityDuration = 0.62,
         parryWindow = 0.22,
+        perfectParryWindow = 0.10,
         parryCooldown = 0.45,
         parryRange = 0.19,
         parryHalfAngleCos = math.cos(math.rad(60)), -- 120 degree cone
@@ -34,6 +35,9 @@ local Config = {
             dashDuration = 0.34,
             recoveryDuration = 0.7,
             dashSpeed = 0.9,
+            moveSpeed = 0.19,
+            preferredDistance = 0.16,
+            strafeStrength = 0.35,
             touchDamage = 1,
         },
         ranged = {
@@ -43,6 +47,11 @@ local Config = {
             recoveryDuration = 0.95,
             touchDamage = 1,
             projectileSpeed = 0.48,
+            moveSpeed = 0.15,
+            preferredDistance = 0.37,
+            minimumDistance = 0.25,
+            maximumDistance = 0.48,
+            strafeStrength = 0.8,
         },
         boss = {
             hp = 8,
@@ -53,6 +62,11 @@ local Config = {
             dashSpeed = 0.82,
             projectileSpeed = 0.55,
             touchDamage = 1,
+            moveSpeed = 0.11,
+            preferredDistance = 0.31,
+            minimumDistance = 0.25,
+            maximumDistance = 0.42,
+            strafeStrength = 0.55,
         },
     },
 
@@ -63,14 +77,19 @@ local Config = {
         playerDamage = 1,
     },
 
-    Drops = {
-        chance = 0.45,
+    Chests = {
+        chance = 0.10,
         pickupRadius = 0.06,
+    },
+
+    Upgrades = {
         definitions = {
-            { id = "wide_guard", name = "Wide Guard", description = "Parry cone widens.", maxStacks = 2 },
-            { id = "quick_hands", name = "Quick Hands", description = "Parry cooldown is shorter.", maxStacks = 3 },
-            { id = "heavy_return", name = "Heavy Return", description = "Reflected shots deal extra damage.", maxStacks = 3 },
-            { id = "repulse", name = "Repulse", description = "Parried melee enemies fly farther.", maxStacks = 3 },
+            { id = "wide_guard", name = "广域招架", description = "招架扇形扩大 12°", maxStacks = 2, color = { 115, 232, 255 } },
+            { id = "quick_hands", name = "疾速招架", description = "招架冷却缩短 0.06 秒", maxStacks = 3, color = { 165, 140, 255 } },
+            { id = "heavy_return", name = "沉重反击", description = "反射投射物伤害 +1", maxStacks = 3, color = { 255, 164, 105 } },
+            { id = "repulse", name = "震荡反冲", description = "近战反制击退距离增加", maxStacks = 3, color = { 255, 115, 150 } },
+            { id = "piercing_echo", name = "穿透回响", description = "反射投射物额外穿透 1 个敌人", maxStacks = 2, color = { 255, 220, 110 } },
+            { id = "perfect_repair", name = "完美修复", description = "完美招架成功时回复 1 点生命", maxStacks = 1, color = { 115, 255, 175 } },
         },
     },
 }

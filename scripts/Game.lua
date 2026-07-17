@@ -13,8 +13,7 @@ local function AddParticles(game, x, y, color, count)
         local angle = math.random() * math.pi * 2
         local speed = 0.05 + math.random() * 0.18
         table.insert(game.particles, {
-            x = x,
-            y = y,
+            x = x, y = y,
             vx = math.cos(angle) * speed,
             vy = math.sin(angle) * speed,
             life = 0.3 + math.random() * 0.35,
@@ -29,29 +28,33 @@ local function SetMessage(game, text, duration)
     game.messageTimer = duration or 1.2
 end
 
-local function GetDropDefinition(player)
+local function GetAvailableUpgrades(player)
     local available = {}
-    for _, definition in ipairs(Config.Drops.definitions) do
-        local stacks = player.abilities[definition.id] or 0
-        if stacks < definition.maxStacks then
+    for _, definition in ipairs(Config.Upgrades.definitions) do
+        if (player.abilities[definition.id] or 0) < definition.maxStacks then
             table.insert(available, definition)
         end
     end
-
-    if #available == 0 then
-        return nil
-    end
-    return available[math.random(1, #available)]
+    return available
 end
 
-local function SpawnDropForEnemy(game, enemy)
-    if enemy.kind == "boss" or math.random() > Config.Drops.chance then
+local function CreateChestOptions(player)
+    local available = GetAvailableUpgrades(player)
+    local options = {}
+    local count = math.min(3, #available)
+    for _ = 1, count do
+        local index = math.random(1, #available)
+        table.insert(options, table.remove(available, index))
+    end
+    return options
+end
+
+local function SpawnChestForEnemy(game, enemy)
+    if enemy.kind == "boss" or math.random() > Config.Chests.chance then
         return
     end
-
-    local definition = GetDropDefinition(game.player)
-    if definition ~= nil then
-        table.insert(game.drops, Entities.NewDrop(enemy.x, enemy.y, definition))
+    if #GetAvailableUpgrades(game.player) > 0 then
+        table.insert(game.chests, Entities.NewChest(enemy.x, enemy.y))
     end
 end
 
@@ -59,8 +62,11 @@ local function HandleEnemyDeaths(game)
     for index = #game.enemies, 1, -1 do
         local enemy = game.enemies[index]
         if enemy.dead then
-            SpawnDropForEnemy(game, enemy)
-            AddParticles(game, enemy.x, enemy.y, enemy.kind == "boss" and { 255, 120, 70 } or { 255, 215, 90 }, enemy.kind == "boss" and 24 or 10)
+            SpawnChestForEnemy(game, enemy)
+            AddParticles(game, enemy.x, enemy.y,
+                enemy.kind == "boss" and { 255, 120, 70 } or { 255, 215, 90 },
+                enemy.kind == "boss" and 24 or 10
+            )
             table.remove(game.enemies, index)
         end
     end
@@ -71,10 +77,11 @@ local function LoadRoom(game, roomIndex)
     game.room = RoomData[roomIndex]
     game.enemies = {}
     game.projectiles = {}
-    game.drops = {}
+    game.chests = {}
+    game.chestOptions = nil
     game.state = "intro"
     game.stateTimer = Config.Room.introDuration
-    game.message = game.room.boss and "THE WARDEN IS WATCHING" or "THREATS IDENTIFIED"
+    game.message = game.room.boss and "监牢守卫正在注视" or "识别到敌对目标"
     game.messageTimer = Config.Room.introDuration
 
     local group = game.room.groups[math.random(1, #game.room.groups)]
@@ -84,15 +91,15 @@ local function LoadRoom(game, roomIndex)
         game.nextEntityId = game.nextEntityId + 1
     end
 
-    print("Loaded room " .. tostring(roomIndex) .. ": " .. game.room.name)
+    print("加载房间 " .. tostring(roomIndex) .. ": " .. game.room.name)
 end
 
 local function FinishRoom(game)
     game.state = "clear"
-    local hasDrops = #game.drops > 0
-    game.stateTimer = hasDrops and Config.Room.dropPickupDuration or Config.Room.clearDuration
+    local hasChests = #game.chests > 0
+    game.stateTimer = hasChests and Config.Room.dropPickupDuration or Config.Room.clearDuration
     SetMessage(game,
-        game.room.boss and "THE WARDEN FALLS" or (hasDrops and "ROOM CLEAR - COLLECT DROPS" or "ROOM CLEARED"),
+        game.room.boss and "监牢守卫已倒下" or (hasChests and "房间已清理 - 拾取宝箱" or "房间已清理"),
         game.stateTimer
     )
     AddParticles(game, game.player.x, game.player.y, { 130, 255, 185 }, 18)
@@ -102,7 +109,8 @@ local function StartRun(game)
     game.player = Entities.NewPlayer()
     game.enemies = {}
     game.projectiles = {}
-    game.drops = {}
+    game.chests = {}
+    game.chestOptions = nil
     game.particles = {}
     game.roomIndex = 0
     game.nextEntityId = 1
@@ -125,20 +133,32 @@ local function UpdateParticles(game, dt)
     end
 end
 
-local function UpdateDrops(game, dt)
-    for index = #game.drops, 1, -1 do
-        local drop = game.drops[index]
-        drop.bobTime = drop.bobTime + dt * 4
-        if Entities.PlayerCanPickup(game.player, drop) then
-            if Entities.ApplyDrop(game.player, drop.definition) then
-                SetMessage(game, drop.definition.name .. " acquired", 1.4)
-                AddParticles(game, drop.x, drop.y, { 150, 230, 255 }, 14)
-            else
-                SetMessage(game, "Ability already maxed", 0.8)
-            end
-            table.remove(game.drops, index)
+local function OpenChest(game, chest)
+    local options = CreateChestOptions(game.player)
+    if #options == 0 then
+        SetMessage(game, "所有强化均已达到上限", 1.0)
+        return false
+    end
+
+    game.stateBeforeChest = game.state
+    game.state = "chest_select"
+    game.chestOptions = options
+    SetMessage(game, "选择一项强化", 999)
+    AddParticles(game, chest.x, chest.y, { 255, 215, 100 }, 18)
+    return true
+end
+
+local function UpdateChests(game, dt)
+    for index = #game.chests, 1, -1 do
+        local chest = game.chests[index]
+        chest.bobTime = chest.bobTime + dt * 4
+        if Entities.PlayerCanPickupChest(game.player, chest) then
+            table.remove(game.chests, index)
+            OpenChest(game, chest)
+            return true
         end
     end
+    return false
 end
 
 local function MoveProjectiles(game, dt)
@@ -153,7 +173,7 @@ local function ResolveProjectileContacts(game)
             projectile.dead = true
             if Entities.DamagePlayer(game.player, Config.Projectile.playerDamage) then
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                SetMessage(game, "Hit", 0.5)
+                SetMessage(game, "受到伤害", 0.5)
             end
         end
 
@@ -161,7 +181,7 @@ local function ResolveProjectileContacts(game)
             for _, enemy in ipairs(game.enemies) do
                 if Entities.ProjectileHitsEnemy(projectile, enemy) then
                     enemy.hp = enemy.hp - projectile.damage
-                    projectile.dead = true
+                    Entities.RegisterProjectileHit(projectile, enemy)
                     AddParticles(game, enemy.x, enemy.y, { 255, 230, 115 }, 9)
                     if enemy.hp <= 0 then
                         enemy.dead = true
@@ -179,6 +199,21 @@ local function ResolveProjectileContacts(game)
     end
 end
 
+local function TryPerfectRepair(game)
+    if game.perfectRepairConsumed or game.player.abilities.perfect_repair <= 0 then
+        return false
+    end
+    if not Entities.IsPerfectParry(game.player) then
+        return false
+    end
+
+    game.perfectRepairConsumed = true
+    if Entities.HealPlayer(game.player, 1) then
+        SetMessage(game, "完美招架 - 生命恢复", 0.8)
+    end
+    return true
+end
+
 local function ResolveParries(game)
     if not Entities.IsParrying(game.player) then
         return
@@ -187,14 +222,18 @@ local function ResolveParries(game)
     for _, enemy in ipairs(game.enemies) do
         if Entities.TryParryEnemy(game.player, enemy) then
             AddParticles(game, enemy.x, enemy.y, { 115, 240, 255 }, 15)
-            SetMessage(game, enemy.kind == "boss" and "BOSS PARRIED" or "PARRY", 0.65)
+            if not TryPerfectRepair(game) then
+                SetMessage(game, enemy.kind == "boss" and "Boss 招架成功" or "招架成功", 0.65)
+            end
         end
     end
 
     for _, projectile in ipairs(game.projectiles) do
         if Entities.TryParryProjectile(game.player, projectile) then
             AddParticles(game, projectile.x, projectile.y, { 115, 240, 255 }, 11)
-            SetMessage(game, "REFLECT", 0.65)
+            if not TryPerfectRepair(game) then
+                SetMessage(game, "反射成功", 0.65)
+            end
         end
     end
 end
@@ -209,10 +248,11 @@ local function UpdateEnemies(game, dt)
         if Entities.EnemyTouchesPlayer(enemy, game.player) then
             if Entities.DamagePlayer(game.player, Config.Enemy[enemy.kind].touchDamage) then
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                SetMessage(game, "Hit", 0.5)
+                SetMessage(game, "受到伤害", 0.5)
             end
         end
     end
+    Entities.ResolveEnemySeparation(game.enemies)
 end
 
 local function UpdateBattle(game, dt, moveX, moveY)
@@ -222,12 +262,14 @@ local function UpdateBattle(game, dt, moveX, moveY)
     ResolveParries(game)
     ResolveProjectileContacts(game)
     HandleEnemyDeaths(game)
-    UpdateDrops(game, dt)
+    if UpdateChests(game, dt) then
+        return
+    end
 
     if game.player.hp <= 0 then
         game.state = "dead"
         game.stateTimer = 0
-        SetMessage(game, "RUN LOST", 999)
+        SetMessage(game, "本局失败", 999)
         return
     end
 
@@ -247,11 +289,14 @@ function Game.New()
         player = Entities.NewPlayer(),
         enemies = {},
         projectiles = {},
-        drops = {},
+        chests = {},
+        chestOptions = nil,
+        stateBeforeChest = nil,
         particles = {},
-        message = "PRESS ENTER",
+        message = "按回车开始",
         messageTimer = 999,
         nextEntityId = 1,
+        perfectRepairConsumed = false,
         debug = Config.Debug,
     }
 end
@@ -267,14 +312,33 @@ function Game.TryParry(game)
 
     local started = Entities.BeginParry(game.player)
     if started then
+        game.perfectRepairConsumed = false
         AddParticles(game, game.player.x, game.player.y, { 110, 215, 255 }, 5)
     end
     return started
 end
 
+function Game.SelectUpgrade(game, index)
+    if game.state ~= "chest_select" or game.chestOptions == nil then
+        return false
+    end
+
+    local definition = game.chestOptions[index]
+    if definition == nil or not Entities.ApplyUpgrade(game.player, definition) then
+        return false
+    end
+
+    AddParticles(game, game.player.x, game.player.y, definition.color, 18)
+    SetMessage(game, "获得强化：" .. definition.name, 1.4)
+    game.chestOptions = nil
+    game.state = game.stateBeforeChest or "battle"
+    game.stateBeforeChest = nil
+    return true
+end
+
 function Game.ToggleDebug(game)
     game.debug = not game.debug
-    SetMessage(game, game.debug and "DEBUG ON" or "DEBUG OFF", 0.8)
+    SetMessage(game, game.debug and "调试开启" or "调试关闭", 0.8)
 end
 
 function Game.Update(game, dt, moveX, moveY)
@@ -284,7 +348,7 @@ function Game.Update(game, dt, moveX, moveY)
     end
     UpdateParticles(game, dt)
 
-    if game.state == "menu" or game.state == "dead" or game.state == "victory" then
+    if game.state == "menu" or game.state == "dead" or game.state == "victory" or game.state == "chest_select" then
         return
     end
 
@@ -294,7 +358,7 @@ function Game.Update(game, dt, moveX, moveY)
         game.stateTimer = game.stateTimer - dt
         if game.stateTimer <= 0 then
             game.state = "battle"
-            SetMessage(game, "PARRY TO SURVIVE", 1.0)
+            SetMessage(game, "敌人开始行动", 1.0)
         end
         return
     end
@@ -306,12 +370,14 @@ function Game.Update(game, dt, moveX, moveY)
 
     if game.state == "clear" then
         Entities.UpdatePlayer(game.player, dt, moveX, moveY)
-        UpdateDrops(game, dt)
+        if UpdateChests(game, dt) then
+            return
+        end
         game.stateTimer = game.stateTimer - dt
-        if #game.drops == 0 or game.stateTimer <= 0 then
+        if #game.chests == 0 or game.stateTimer <= 0 then
             if game.roomIndex >= #RoomData then
                 game.state = "victory"
-                SetMessage(game, "RUN COMPLETE", 999)
+                SetMessage(game, "成功逃离", 999)
             else
                 LoadRoom(game, game.roomIndex + 1)
             end
@@ -320,21 +386,27 @@ function Game.Update(game, dt, moveX, moveY)
 end
 
 function Game.GetHud(game)
-    local maxHp = Config.Player.maxHp
     local hearts = ""
-    for index = 1, maxHp do
+    for index = 1, Config.Player.maxHp do
         hearts = hearts .. (index <= game.player.hp and "●" or "○")
     end
 
     local cooldown = game.player.parryCooldown
-    local cooldownText = cooldown <= 0 and "READY" or string.format("%.2fs", cooldown)
+    local cooldownText = cooldown <= 0 and "就绪" or string.format("%.2f 秒", cooldown)
+    local upgradeLines = {}
+    for _, definition in ipairs(Config.Upgrades.definitions) do
+        local stacks = game.player.abilities[definition.id] or 0
+        if stacks > 0 then
+            table.insert(upgradeLines, definition.name .. " ×" .. tostring(stacks))
+        end
+    end
+
     return {
-        health = hearts,
-        room = game.roomIndex > 0 and ("ROOM " .. tostring(game.roomIndex) .. "/" .. tostring(#RoomData)) or "RUN NOT STARTED",
-        parry = "PARRY " .. cooldownText,
+        health = "生命 " .. hearts,
+        room = game.roomIndex > 0 and ("房间 " .. tostring(game.roomIndex) .. "/" .. tostring(#RoomData)) or "尚未开始",
+        parry = "招架 " .. cooldownText,
         message = game.messageTimer > 0 and game.message or "",
-        abilityCount = game.player.abilities.wide_guard + game.player.abilities.quick_hands
-            + game.player.abilities.heavy_return + game.player.abilities.repulse,
+        upgrades = #upgradeLines > 0 and table.concat(upgradeLines, "\n") or "暂无强化",
     }
 end
 

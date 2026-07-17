@@ -40,6 +40,17 @@ local function IsInRange(player, target, range)
     return DistanceSquared(player, target) <= range * range
 end
 
+local function MoveEnemy(enemy, moveX, moveY, speed, dt)
+    local directionX, directionY = Normalize(moveX, moveY)
+    enemy.vx = directionX * speed
+    enemy.vy = directionY * speed
+    enemy.x = Clamp(enemy.x + enemy.vx * dt, Config.Room.minX, Config.Room.maxX)
+    enemy.y = Clamp(enemy.y + enemy.vy * dt, Config.Room.minY, Config.Room.maxY)
+    if math.abs(directionX) > 0.02 then
+        enemy.facing = directionX < 0 and "left" or "right"
+    end
+end
+
 function Entities.NewPlayer()
     return {
         x = 0.5,
@@ -48,6 +59,7 @@ function Entities.NewPlayer()
         radius = Config.Player.radius,
         facing = "right",
         parryTimer = 0,
+        parryElapsed = 0,
         parryCooldown = 0,
         invulnerabilityTimer = 0,
         parryHalfAngleCos = Config.Player.parryHalfAngleCos,
@@ -56,6 +68,8 @@ function Entities.NewPlayer()
             quick_hands = 0,
             heavy_return = 0,
             repulse = 0,
+            piercing_echo = 0,
+            perfect_repair = 0,
         },
     }
 end
@@ -70,14 +84,16 @@ function Entities.NewEnemy(kind, spawn, id)
         radius = spec.radius,
         hp = spec.hp,
         state = "idle",
-        stateTimer = 0.45 + math.random() * 0.35,
+        stateTimer = 0.55 + math.random() * 0.45,
         vx = 0,
         vy = 0,
+        facing = "right",
         dashX = 0,
         dashY = 0,
         attackMode = "dash",
+        strafeDirection = math.random() < 0.5 and -1 or 1,
+        strafeTimer = 0.55 + math.random() * 0.75,
         dead = false,
-        activationDelay = 0,
     }
 end
 
@@ -92,16 +108,17 @@ function Entities.NewProjectile(x, y, vx, vy, owner, damage)
         radius = Config.Projectile.radius,
         lifetime = Config.Projectile.lifetime,
         reflected = false,
+        pierceRemaining = 0,
+        hitEnemies = {},
         dead = false,
     }
 end
 
-function Entities.NewDrop(x, y, definition)
+function Entities.NewChest(x, y)
     return {
         x = x,
         y = y,
-        definition = definition,
-        radius = 0.02,
+        radius = 0.026,
         bobTime = math.random() * math.pi * 2,
         dead = false,
     }
@@ -116,6 +133,9 @@ function Entities.UpdatePlayer(player, dt, moveX, moveY)
         player.facing = directionX < 0 and "left" or "right"
     end
 
+    if player.parryTimer > 0 then
+        player.parryElapsed = player.parryElapsed + dt
+    end
     player.parryTimer = math.max(0, player.parryTimer - dt)
     player.parryCooldown = math.max(0, player.parryCooldown - dt)
     player.invulnerabilityTimer = math.max(0, player.invulnerabilityTimer - dt)
@@ -127,6 +147,7 @@ function Entities.BeginParry(player)
     end
 
     player.parryTimer = Config.Player.parryWindow
+    player.parryElapsed = 0
     player.parryCooldown = Config.Player.parryCooldown - player.abilities.quick_hands * 0.06
     player.parryCooldown = math.max(0.2, player.parryCooldown)
     return true
@@ -134,6 +155,10 @@ end
 
 function Entities.IsParrying(player)
     return player.parryTimer > 0
+end
+
+function Entities.IsPerfectParry(player)
+    return player.parryTimer > 0 and player.parryElapsed <= Config.Player.perfectParryWindow
 end
 
 function Entities.DamagePlayer(player, amount)
@@ -146,6 +171,47 @@ function Entities.DamagePlayer(player, amount)
     return true
 end
 
+function Entities.HealPlayer(player, amount)
+    local previousHp = player.hp
+    player.hp = math.min(Config.Player.maxHp, player.hp + amount)
+    return player.hp > previousHp
+end
+
+function Entities.UpdateTacticalMovement(enemy, player, dt)
+    local spec = Config.Enemy[enemy.kind]
+    local toPlayerX, toPlayerY = Normalize(player.x - enemy.x, player.y - enemy.y)
+    local distance = Length(player.x - enemy.x, player.y - enemy.y)
+    enemy.strafeTimer = enemy.strafeTimer - dt
+    if enemy.strafeTimer <= 0 then
+        enemy.strafeDirection = -enemy.strafeDirection
+        enemy.strafeTimer = 0.55 + math.random() * 0.75
+    end
+
+    local sideX = -toPlayerY * enemy.strafeDirection
+    local sideY = toPlayerX * enemy.strafeDirection
+    local radial = 0
+    if enemy.kind == "melee" then
+        if distance > spec.preferredDistance then
+            radial = 1
+        elseif distance < spec.preferredDistance * 0.72 then
+            radial = -0.4
+        end
+    else
+        if distance < spec.minimumDistance then
+            radial = -1
+        elseif distance > spec.maximumDistance then
+            radial = 1
+        end
+    end
+
+    MoveEnemy(enemy,
+        toPlayerX * radial + sideX * spec.strafeStrength,
+        toPlayerY * radial + sideY * spec.strafeStrength,
+        spec.moveSpeed,
+        dt
+    )
+end
+
 function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     if enemy.dead then
         return
@@ -154,11 +220,14 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     local spec = Config.Enemy[enemy.kind]
     enemy.stateTimer = enemy.stateTimer - dt
 
-    if enemy.state == "idle" and enemy.stateTimer <= 0 then
-        enemy.state = "telegraph"
-        enemy.stateTimer = spec.telegraphDuration
-        if enemy.kind == "boss" then
-            enemy.attackMode = enemy.attackMode == "dash" and "volley" or "dash"
+    if enemy.state == "idle" then
+        Entities.UpdateTacticalMovement(enemy, player, dt)
+        if enemy.stateTimer <= 0 then
+            enemy.state = "telegraph"
+            enemy.stateTimer = spec.telegraphDuration
+            if enemy.kind == "boss" then
+                enemy.attackMode = enemy.attackMode == "dash" and "volley" or "dash"
+            end
         end
         return
     end
@@ -166,11 +235,7 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     if enemy.state == "telegraph" and enemy.stateTimer <= 0 then
         if enemy.kind == "ranged" or (enemy.kind == "boss" and enemy.attackMode == "volley") then
             local dx, dy = Normalize(player.x - enemy.x, player.y - enemy.y)
-            emitProjectile(Entities.NewProjectile(
-                enemy.x, enemy.y,
-                dx * spec.projectileSpeed, dy * spec.projectileSpeed,
-                "enemy", 1
-            ))
+            emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, dx * spec.projectileSpeed, dy * spec.projectileSpeed, "enemy", 1))
             if enemy.kind == "boss" then
                 emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx - dy * 0.35) * spec.projectileSpeed, (dy + dx * 0.35) * spec.projectileSpeed, "enemy", 1))
                 emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx + dy * 0.35) * spec.projectileSpeed, (dy - dx * 0.35) * spec.projectileSpeed, "enemy", 1))
@@ -186,8 +251,7 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     end
 
     if enemy.state == "dash" then
-        enemy.x = Clamp(enemy.x + enemy.dashX * spec.dashSpeed * dt, Config.Room.minX, Config.Room.maxX)
-        enemy.y = Clamp(enemy.y + enemy.dashY * spec.dashSpeed * dt, Config.Room.minY, Config.Room.maxY)
+        MoveEnemy(enemy, enemy.dashX, enemy.dashY, spec.dashSpeed, dt)
         if enemy.stateTimer <= 0 then
             enemy.state = "recovery"
             enemy.stateTimer = spec.recoveryDuration
@@ -197,7 +261,37 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
 
     if enemy.state == "recovery" and enemy.stateTimer <= 0 then
         enemy.state = "idle"
-        enemy.stateTimer = 0.35 + math.random() * 0.5
+        enemy.stateTimer = 0.45 + math.random() * 0.55
+    end
+end
+
+function Entities.ResolveEnemySeparation(enemies)
+    for firstIndex = 1, #enemies - 1 do
+        local first = enemies[firstIndex]
+        if not first.dead then
+            for secondIndex = firstIndex + 1, #enemies do
+                local second = enemies[secondIndex]
+                if not second.dead then
+                    local dx = second.x - first.x
+                    local dy = second.y - first.y
+                    local distance = Length(dx, dy)
+                    local minimum = first.radius + second.radius + 0.018
+                    if distance < minimum then
+                        if distance <= 0.0001 then
+                            dx = first.id < second.id and 1 or -1
+                            dy = 0
+                            distance = 1
+                        end
+                        local push = (minimum - distance) * 0.5
+                        local nx, ny = dx / distance, dy / distance
+                        first.x = Clamp(first.x - nx * push, Config.Room.minX, Config.Room.maxX)
+                        first.y = Clamp(first.y - ny * push, Config.Room.minY, Config.Room.maxY)
+                        second.x = Clamp(second.x + nx * push, Config.Room.minX, Config.Room.maxX)
+                        second.y = Clamp(second.y + ny * push, Config.Room.minY, Config.Room.maxY)
+                    end
+                end
+            end
+        end
     end
 end
 
@@ -244,33 +338,45 @@ function Entities.TryParryProjectile(player, projectile)
     end
 
     local facingX = player.facing == "left" and -1 or 1
-    local incomingY = projectile.vy
-    local normalizedX, normalizedY = Normalize(facingX, incomingY * 0.55)
+    local normalizedX, normalizedY = Normalize(facingX, projectile.vy * 0.55)
     local speed = Length(projectile.vx, projectile.vy) * Config.Projectile.reflectedSpeedMultiplier
     projectile.vx = normalizedX * speed
     projectile.vy = normalizedY * speed
     projectile.owner = "player"
     projectile.reflected = true
     projectile.damage = projectile.damage + player.abilities.heavy_return
+    projectile.pierceRemaining = player.abilities.piercing_echo
+    projectile.hitEnemies = {}
     projectile.lifetime = Config.Projectile.lifetime
     return true
 end
 
 function Entities.EnemyTouchesPlayer(enemy, player)
-    local isAttacking = enemy.state == "dash"
-    return isAttacking and not enemy.dead and DistanceSquared(enemy, player) <= (enemy.radius + player.radius) ^ 2
+    return enemy.state == "dash" and not enemy.dead
+        and DistanceSquared(enemy, player) <= (enemy.radius + player.radius) ^ 2
 end
 
 function Entities.ProjectileHitsPlayer(projectile, player)
-    return projectile.owner == "enemy" and not projectile.dead and DistanceSquared(projectile, player) <= (projectile.radius + player.radius) ^ 2
+    return projectile.owner == "enemy" and not projectile.dead
+        and DistanceSquared(projectile, player) <= (projectile.radius + player.radius) ^ 2
 end
 
 function Entities.ProjectileHitsEnemy(projectile, enemy)
     return projectile.owner == "player" and not projectile.dead and not enemy.dead
+        and not projectile.hitEnemies[enemy.id]
         and DistanceSquared(projectile, enemy) <= (projectile.radius + enemy.radius) ^ 2
 end
 
-function Entities.ApplyDrop(player, definition)
+function Entities.RegisterProjectileHit(projectile, enemy)
+    projectile.hitEnemies[enemy.id] = true
+    if projectile.pierceRemaining > 0 then
+        projectile.pierceRemaining = projectile.pierceRemaining - 1
+    else
+        projectile.dead = true
+    end
+end
+
+function Entities.ApplyUpgrade(player, definition)
     local current = player.abilities[definition.id] or 0
     if current >= definition.maxStacks then
         return false
@@ -284,8 +390,8 @@ function Entities.ApplyDrop(player, definition)
     return true
 end
 
-function Entities.PlayerCanPickup(player, drop)
-    return not drop.dead and DistanceSquared(player, drop) <= Config.Drops.pickupRadius * Config.Drops.pickupRadius
+function Entities.PlayerCanPickupChest(player, chest)
+    return not chest.dead and DistanceSquared(player, chest) <= Config.Chests.pickupRadius * Config.Chests.pickupRadius
 end
 
 function Entities.GetDistanceSquared(a, b)
