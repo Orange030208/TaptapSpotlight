@@ -1,4 +1,5 @@
 local Config = require "Config"
+local Feedback = require "Feedback"
 
 local Renderer = {}
 local playerImageHandle = 0
@@ -544,6 +545,50 @@ local function DrawParticles(ctx, width, height, particles)
     end
 end
 
+local function DrawFeedbackWorld(ctx, width, height, feedback)
+    if feedback == nil then
+        return
+    end
+
+    for _, impact in ipairs(feedback.impacts) do
+        local progress = 1 - Clamp(impact.life / math.max(0.001, impact.maxLife), 0, 1)
+        local x, y, scale = Renderer.WorldToScreen(width, height, impact.x, impact.y)
+        local radius = Lerp(impact.startRadius, impact.endRadius, math.sqrt(progress)) * scale
+        local alpha = math.floor(225 * (1 - progress) * (1 - progress))
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius)
+        nvgStrokeWidth(ctx, math.max(1, impact.stroke * scale * (1 - progress * 0.35)))
+        StrokeColor(ctx, impact.color, alpha)
+        nvgStroke(ctx)
+    end
+
+    nvgFontFace(ctx, "sans")
+    nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    for _, floatingText in ipairs(feedback.floatingTexts) do
+        local progress = 1 - Clamp(floatingText.life / math.max(0.001, floatingText.maxLife), 0, 1)
+        local x, y, scale = Renderer.WorldToScreen(width, height, floatingText.x, floatingText.y)
+        local alpha = math.floor(255 * (1 - progress) * (1 - progress))
+        nvgFontSize(ctx, floatingText.size * scale * (1 + 0.18 * (1 - progress)))
+        nvgFillColor(ctx, nvgRGBA(8, 8, 18, math.floor(alpha * 0.72)))
+        nvgText(ctx, x + scale, y - floatingText.rise * progress * scale + scale, floatingText.text, nil)
+        Color(ctx, floatingText.color, alpha)
+        nvgText(ctx, x, y - floatingText.rise * progress * scale, floatingText.text, nil)
+    end
+end
+
+local function DrawFeedbackFlash(ctx, width, height, feedback)
+    if feedback == nil or feedback.flash == nil then
+        return
+    end
+
+    local flash = feedback.flash
+    local progress = Clamp(flash.timer / math.max(0.001, flash.maxTimer), 0, 1)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, 0, 0, width, height)
+    Color(ctx, flash.color, math.floor(flash.alpha * progress * progress))
+    nvgFill(ctx)
+end
+
 local function DrawDebug(ctx, width, height, game)
     if not game.debug or game.room == nil then
         return
@@ -708,10 +753,12 @@ local function GetTransitionOffset(game, width, height)
     return incomingX * (1 - incomingProgress), incomingY * (1 - incomingProgress)
 end
 
-function Renderer.Draw(ctx, game, width, height)
+function Renderer.Draw(ctx, game, width, height, feedback)
     DrawBackground(ctx, width, height, game.time)
     local offsetX, offsetY = GetTransitionOffset(game, width, height)
+    local shakeX, shakeY = Feedback.GetScreenShake(feedback)
     nvgSave(ctx)
+    nvgTranslate(ctx, shakeX, shakeY)
     nvgTranslate(ctx, offsetX, offsetY)
     DrawArena(ctx, width, height, game)
     if game.state == "intro" then
@@ -741,9 +788,11 @@ function Renderer.Draw(ctx, game, width, height)
         DrawParryCone(ctx, width, height, game.player)
     end
     DrawParticles(ctx, width, height, game.particles)
+    DrawFeedbackWorld(ctx, width, height, feedback)
     DrawDebug(ctx, width, height, game)
     nvgRestore(ctx)
 
+    DrawFeedbackFlash(ctx, width, height, feedback)
     DrawChestPauseDim(ctx, width, height, game)
     DrawGauges(ctx, width, height, game)
     DrawMinimap(ctx, width, height, game)

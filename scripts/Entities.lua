@@ -135,6 +135,10 @@ function Entities.UpdatePlayer(player, dt, moveX, moveY, speedMultiplier)
         player.facing = directionX < 0 and "left" or "right"
     end
 
+    Entities.UpdatePlayerTimers(player, dt)
+end
+
+function Entities.UpdatePlayerTimers(player, dt)
     if player.parryTimer > 0 then
         player.parryElapsed = player.parryElapsed + dt
     end

@@ -165,7 +165,11 @@ local function HandleEnemyDeaths(game)
     for index = #game.enemies, 1, -1 do
         local enemy = game.enemies[index]
         if enemy.dead then
-            EmitEvent(game, enemy.kind == "boss" and "boss_defeat" or "enemy_defeat")
+            EmitEvent(game, enemy.kind == "boss" and "boss_defeat" or "enemy_defeat", {
+                x = enemy.x,
+                y = enemy.y,
+                kind = enemy.kind,
+            })
             SpawnChestForEnemy(game, enemy)
             AddParticles(game, enemy.x, enemy.y,
                 enemy.kind == "boss" and { 255, 120, 70 } or { 255, 215, 90 },
@@ -399,6 +403,14 @@ local function MoveProjectiles(game, dt)
     end
 end
 
+local function RemoveDeadProjectiles(game)
+    for index = #game.projectiles, 1, -1 do
+        if game.projectiles[index].dead then
+            table.remove(game.projectiles, index)
+        end
+    end
+end
+
 local function ResolveProjectileContacts(game)
     for _, projectile in ipairs(game.projectiles) do
         if Entities.ProjectileHitsPlayer(projectile, game.player) then
@@ -406,17 +418,28 @@ local function ResolveProjectileContacts(game)
             if Entities.DamagePlayer(game.player, Config.Projectile.playerDamage) then
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                 SetMessage(game, "受到伤害", 0.5)
-                EmitEvent(game, "player_hurt")
+                EmitEvent(game, "player_hurt", {
+                    x = game.player.x,
+                    y = game.player.y,
+                    amount = projectile.damage or Config.Projectile.playerDamage,
+                    sourceKind = projectile.sourceKind,
+                })
             end
         end
 
         if projectile.owner == "player" and not projectile.dead then
             for _, enemy in ipairs(game.enemies) do
                 if Entities.ProjectileHitsEnemy(projectile, enemy) then
-                    enemy.hp = enemy.hp - projectile.damage
+                    local appliedDamage = math.min(enemy.hp, projectile.damage)
+                    enemy.hp = enemy.hp - appliedDamage
                     Entities.RegisterProjectileHit(projectile, enemy)
                     AddParticles(game, enemy.x, enemy.y, { 255, 230, 115 }, 9)
-                    EmitEvent(game, "projectile_hit")
+                    EmitEvent(game, "projectile_hit", {
+                        x = enemy.x,
+                        y = enemy.y,
+                        damage = appliedDamage,
+                        sourceKind = projectile.sourceKind,
+                    })
                     if enemy.hp <= 0 then
                         enemy.dead = true
                     end
@@ -426,11 +449,7 @@ local function ResolveProjectileContacts(game)
         end
     end
 
-    for index = #game.projectiles, 1, -1 do
-        if game.projectiles[index].dead then
-            table.remove(game.projectiles, index)
-        end
-    end
+    RemoveDeadProjectiles(game)
 end
 
 local function TryPerfectRepair(game)
@@ -477,12 +496,18 @@ local function ResolveParries(game)
     local gain = GetGaugeGain(game, perfect)
 
     for _, enemy in ipairs(game.enemies) do
+        local hitX, hitY = enemy.x, enemy.y
         local parried, appliedDamage = Entities.TryParryEnemy(game.player, enemy, damage)
         if parried then
-            EmitEvent(game, perfect and "perfect_parry" or "parry_success")
-            AddParticles(game, enemy.x, enemy.y, { 115, 240, 255 }, 15)
+            EmitEvent(game, perfect and "perfect_parry" or "parry_success", {
+                x = hitX,
+                y = hitY,
+                damage = appliedDamage,
+                sourceKind = enemy.kind,
+            })
+            AddParticles(game, hitX, hitY, { 115, 240, 255 }, 15)
             local repaired = TryPerfectRepair(game)
-            local rewarded = AddGaugeProgress(game, enemy.kind, gain, enemy.x, enemy.y)
+            local rewarded = AddGaugeProgress(game, enemy.kind, gain, hitX, hitY)
             if not rewarded and not repaired then
                 SetMessage(game, FormatParryMessage(perfect, appliedDamage), 0.65)
             end
@@ -490,12 +515,19 @@ local function ResolveParries(game)
     end
 
     for _, projectile in ipairs(game.projectiles) do
+        local hitX, hitY = projectile.x, projectile.y
         if Entities.TryParryProjectile(game.player, projectile, GetActiveBuffMultiplier(game, "parryDamageMultiplier")) then
-            EmitEvent(game, perfect and "perfect_parry" or "parry_success")
-            EmitEvent(game, "projectile_reflect")
-            AddParticles(game, projectile.x, projectile.y, { 115, 240, 255 }, 11)
+            local eventData = {
+                x = hitX,
+                y = hitY,
+                damage = projectile.damage,
+                sourceKind = projectile.sourceKind,
+            }
+            EmitEvent(game, perfect and "perfect_parry" or "parry_success", eventData)
+            EmitEvent(game, "projectile_reflect", eventData)
+            AddParticles(game, hitX, hitY, { 115, 240, 255 }, 11)
             local repaired = TryPerfectRepair(game)
-            local rewarded = AddGaugeProgress(game, projectile.sourceKind, gain, projectile.x, projectile.y)
+            local rewarded = AddGaugeProgress(game, projectile.sourceKind, gain, hitX, hitY)
             if not rewarded and not repaired then
                 SetMessage(game, "反射成功", 0.65)
             end
@@ -515,7 +547,12 @@ local function UpdateEnemies(game, dt)
             if Entities.DamagePlayer(game.player, Config.Enemy[enemy.kind].touchDamage) then
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                 SetMessage(game, "受到伤害", 0.5)
-                EmitEvent(game, "player_hurt")
+                EmitEvent(game, "player_hurt", {
+                    x = game.player.x,
+                    y = game.player.y,
+                    amount = Config.Enemy[enemy.kind].touchDamage,
+                    sourceKind = enemy.kind,
+                })
             end
         end
     end
@@ -595,7 +632,7 @@ function Game.TryParry(game)
     if started then
         game.perfectRepairConsumed = false
         AddParticles(game, game.player.x, game.player.y, { 110, 215, 255 }, 5)
-        EmitEvent(game, "parry_start")
+        EmitEvent(game, "parry_start", { x = game.player.x, y = game.player.y })
     end
     return started
 end
@@ -630,7 +667,9 @@ function Game.ToggleDebug(game)
     SetMessage(game, game.debug and "调试开启" or "调试关闭", 0.8)
 end
 
-function Game.Update(game, dt, moveX, moveY)
+function Game.Update(game, dt, moveX, moveY, realDt)
+    dt = math.max(0, dt or 0)
+    realDt = math.max(0, realDt or dt)
     game.time = game.time + dt
     if game.messageTimer > 0 and game.messageTimer < 900 then
         game.messageTimer = math.max(0, game.messageTimer - dt)
@@ -645,12 +684,28 @@ function Game.Update(game, dt, moveX, moveY)
         game.doorCooldown = math.max(0, game.doorCooldown - dt)
     end
 
+    -- A feedback hit stop freezes world simulation, but parry, cooldown, and
+    -- invulnerability timers keep using real time so combat windows do not grow.
+    if dt <= 0 and realDt > 0 then
+        if game.player ~= nil then
+            Entities.UpdatePlayerTimers(game.player, realDt)
+        end
+        return
+    end
+
     if game.state == "room_transition" then
         UpdateRoomTransition(game, dt)
         return
     end
 
-    if game.state == "menu" or game.state == "dead" or game.state == "victory" or game.state == "chest_select" then
+    if game.state == "victory" then
+        -- Victory freezes combat, but reflected piercing projectiles should finish their flight.
+        MoveProjectiles(game, dt)
+        RemoveDeadProjectiles(game)
+        return
+    end
+
+    if game.state == "menu" or game.state == "dead" or game.state == "chest_select" then
         return
     end
 
@@ -673,6 +728,9 @@ function Game.Update(game, dt, moveX, moveY)
 
     if game.state == "clear" then
         Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
+        -- A room can be cleared by a piercing projectile; keep it moving until it expires.
+        MoveProjectiles(game, dt)
+        RemoveDeadProjectiles(game)
         if UpdateChests(game, dt) then
             return
         end

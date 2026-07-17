@@ -3,6 +3,7 @@
 local UI = require("urhox-libs/UI")
 local AudioManager = require "AudioManager"
 local Config = require "Config"
+local Feedback = require "Feedback"
 local Game = require "Game"
 local Renderer = require "Renderer"
 
@@ -16,6 +17,7 @@ local logicalWidth = 0
 local logicalHeight = 0
 local hudTimer = 0
 local chestPanelWasVisible = false
+local feedback = nil
 
 ---@type Widget|nil
 local healthLabel = nil
@@ -401,7 +403,10 @@ local function UpdateHud()
     end
 
     local hud = Game.GetHud(game)
+    local hurtPulse = Feedback.GetHudPulse(feedback)
     healthLabel:SetText(hud.health)
+    healthLabel:SetFontColor({ 255, math.floor(132 + 92 * hurtPulse), math.floor(154 + 76 * hurtPulse), 255 })
+    healthLabel:SetStyle({ scale = 1 + 0.08 * hurtPulse })
     roomLabel:SetText(hud.room)
     parryLabel:SetText(hud.parry)
     buffLabel:SetText("临时增益\n" .. hud.buffs)
@@ -433,6 +438,7 @@ function Start()
     Renderer.LoadAssets(nvgContext)
 
     game = Game.New()
+    feedback = Feedback.New()
     UpdateHud()
 
     SubscribeToEvent("Update", "HandleUpdate")
@@ -466,13 +472,19 @@ function HandleUpdate(eventType, eventData)
     if input:GetKeyDown(KEY_W) then moveY = moveY - 1 end
     if input:GetKeyDown(KEY_S) then moveY = moveY + 1 end
 
-    Game.Update(game, dt, moveX, moveY)
+    Feedback.Update(feedback, dt)
+    local simulationDt = Feedback.GetSimulationDelta(feedback, dt)
+    Game.Update(game, simulationDt, moveX, moveY, dt)
     AudioManager.Update(dt)
-    AudioManager.ProcessEvents(Game.ConsumeEvents(game))
+    local events = Game.ConsumeEvents(game)
+    AudioManager.ProcessEvents(events)
+    Feedback.ProcessEvents(feedback, events)
     hudTimer = hudTimer + dt
-    if hudTimer >= 0.08 then
+    if Feedback.GetHudPulse(feedback) > 0 or hudTimer >= 0.08 then
         UpdateHud()
-        hudTimer = hudTimer - 0.08
+        if hudTimer >= 0.08 then
+            hudTimer = hudTimer - 0.08
+        end
     end
 end
 
@@ -526,6 +538,6 @@ function HandleNanoVGRender(eventType, eventData)
     end
 
     nvgBeginFrame(nvgContext, logicalWidth, logicalHeight, devicePixelRatio)
-    Renderer.Draw(nvgContext, game, logicalWidth, logicalHeight)
+    Renderer.Draw(nvgContext, game, logicalWidth, logicalHeight, feedback)
     nvgEndFrame(nvgContext)
 end

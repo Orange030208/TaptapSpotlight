@@ -17,6 +17,15 @@ local function HasEvent(events, name)
     return false
 end
 
+local function FindEvent(events, name)
+    for _, event in ipairs(events) do
+        if event.name == name then
+            return event
+        end
+    end
+    return nil
+end
+
 local game = Game.New()
 assert(#Game.ConsumeEvents(game) == 0)
 
@@ -29,6 +38,8 @@ game.state = "battle"
 assert(Game.TryParry(game))
 events = Game.ConsumeEvents(game)
 assert(HasEvent(events, "parry_start"))
+local parryStart = FindEvent(events, "parry_start")
+assert(type(parryStart.data) == "table" and type(parryStart.data.x) == "number")
 
 game.state = "chest_select"
 game.stateBeforeChest = "battle"
@@ -62,6 +73,7 @@ Game.Update(hurt, 0, 0, 0)
 events = Game.ConsumeEvents(hurt)
 assert(HasEvent(events, "player_hurt"))
 assert(HasEvent(events, "game_over"))
+assert(FindEvent(events, "player_hurt").data.amount == 1)
 
 local parry = Game.New()
 Game.StartOrRestart(parry)
@@ -78,6 +90,8 @@ events = Game.ConsumeEvents(parry)
 assert(HasEvent(events, "perfect_parry"))
 assert(HasEvent(events, "enemy_defeat"))
 assert(HasEvent(events, "room_clear"))
+assert(FindEvent(events, "perfect_parry").data.damage > 0)
+assert(FindEvent(events, "enemy_defeat").data.kind == "melee")
 
 local reflect = Game.New()
 Game.StartOrRestart(reflect)
@@ -86,7 +100,7 @@ reflect.state = "battle"
 reflect.enemies = { Entities.NewEnemy("melee", { x = 0.2, y = 0.2 }, 3001) }
 reflect.enemies[1].stateTimer = 99
 reflect.player.facing = "right"
-reflect.projectiles = { Entities.NewProjectile(reflect.player.x + 0.04, reflect.player.y, -0.1, 0, "enemy", 1) }
+reflect.projectiles = { Entities.NewProjectile(reflect.player.x + 0.04, reflect.player.y, -0.1, 0, "enemy", 1, "ranged") }
 assert(Game.TryParry(reflect))
 reflect.player.parryElapsed = Config.Player.perfectParryWindow + 0.01
 Game.ConsumeEvents(reflect)
@@ -94,6 +108,7 @@ Game.Update(reflect, 0, 0, 0)
 events = Game.ConsumeEvents(reflect)
 assert(HasEvent(events, "parry_success"))
 assert(HasEvent(events, "projectile_reflect"))
+assert(FindEvent(events, "projectile_reflect").data.sourceKind == "ranged")
 
 local hit = Game.New()
 Game.StartOrRestart(hit)
@@ -103,7 +118,17 @@ hit.enemies = { Entities.NewEnemy("melee", { x = 0.5, y = 0.5 }, 3501) }
 hit.enemies[1].stateTimer = 99
 hit.projectiles = { Entities.NewProjectile(0.5, 0.5, 0, 0, "player", 0.1) }
 Game.Update(hit, 0, 0, 0)
-assert(HasEvent(Game.ConsumeEvents(hit), "projectile_hit"))
+events = Game.ConsumeEvents(hit)
+assert(HasEvent(events, "projectile_hit"))
+assert(FindEvent(events, "projectile_hit").data.damage == 0.1)
+
+local frozen = Game.New()
+Game.StartOrRestart(frozen)
+Game.ConsumeEvents(frozen)
+frozen.state = "battle"
+assert(Game.TryParry(frozen))
+Game.Update(frozen, 0, 0, 0, Config.Player.parryWindow + 0.01)
+assert(not Entities.IsParrying(frozen.player), "hit stop must not extend the parry window")
 
 local gauge = Game.New()
 Game.StartOrRestart(gauge)
@@ -172,5 +197,39 @@ Game.Update(boss, 0, 0, 0)
 events = Game.ConsumeEvents(boss)
 assert(HasEvent(events, "boss_defeat"))
 assert(HasEvent(events, "victory"))
+
+local clearProjectile = Game.New()
+Game.StartOrRestart(clearProjectile)
+Game.ConsumeEvents(clearProjectile)
+clearProjectile.state = "battle"
+clearProjectile.enemies = { Entities.NewEnemy("melee", { x = 0.5, y = 0.5 }, 5001) }
+clearProjectile.enemies[1].hp = 0.1
+clearProjectile.enemies[1].stateTimer = 99
+clearProjectile.projectiles = { Entities.NewProjectile(0.5, 0.5, 0.2, 0, "player", 1) }
+clearProjectile.projectiles[1].pierceRemaining = 1
+Game.Update(clearProjectile, 0, 0, 0)
+assert(clearProjectile.state == "clear")
+assert(#clearProjectile.projectiles == 1, "piercing projectile must survive its final hit")
+local clearProjectileX = clearProjectile.projectiles[1].x
+Game.Update(clearProjectile, 0.1, 0, 0)
+assert(clearProjectile.projectiles[1].x > clearProjectileX, "projectile must keep moving after a room is cleared")
+
+local victoryProjectile = Game.New()
+Game.StartOrRestart(victoryProjectile)
+Game.ConsumeEvents(victoryProjectile)
+victoryProjectile.currentRoomId = "warden"
+victoryProjectile.room = victoryProjectile.map.rooms.warden
+victoryProjectile.state = "battle"
+victoryProjectile.enemies = { Entities.NewEnemy("boss", { x = 0.5, y = 0.5 }, 5002) }
+victoryProjectile.enemies[1].hp = 0.1
+victoryProjectile.enemies[1].stateTimer = 99
+victoryProjectile.projectiles = { Entities.NewProjectile(0.5, 0.5, 0.2, 0, "player", 1) }
+victoryProjectile.projectiles[1].pierceRemaining = 1
+Game.Update(victoryProjectile, 0, 0, 0)
+assert(victoryProjectile.state == "victory")
+assert(#victoryProjectile.projectiles == 1, "piercing projectile must survive the final boss hit")
+local victoryProjectileX = victoryProjectile.projectiles[1].x
+Game.Update(victoryProjectile, 0.1, 0, 0)
+assert(victoryProjectile.projectiles[1].x > victoryProjectileX, "projectile must keep moving after victory")
 
 print("PASS test_game_events")
