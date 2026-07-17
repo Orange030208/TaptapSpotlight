@@ -51,85 +51,166 @@ local function StrokeColor(ctx, color, alpha)
 end
 
 function Renderer.GetArena(width, height)
+    local left = width * 0.09
+    local right = width * 0.91
+    local top = height * 0.20
+    local bottom = height * 0.86
+    local wallThickness = math.max(16, math.min(width, height) * 0.035)
     return {
-        backLeft = width * 0.22,
-        backRight = width * 0.78,
-        frontLeft = width * 0.06,
-        frontRight = width * 0.94,
-        backY = height * 0.18,
-        frontY = height * 0.87,
+        left = left,
+        right = right,
+        top = top,
+        bottom = bottom,
+        wallTop = height * 0.085,
+        wallThickness = wallThickness,
     }
 end
 
 function Renderer.WorldToScreen(width, height, x, y)
     local arena = Renderer.GetArena(width, height)
-    local left = Lerp(arena.backLeft, arena.frontLeft, y)
-    local right = Lerp(arena.backRight, arena.frontRight, y)
-    return Lerp(left, right, x), Lerp(arena.backY, arena.frontY, y), Lerp(0.55, 1.16, y)
+    local scale = Clamp(math.min(width / 960, height / 720), 0.72, 1.35)
+    return Lerp(arena.left, arena.right, x), Lerp(arena.top, arena.bottom, y), scale
 end
 
 local function DrawBackground(ctx, width, height, time)
     local gradient = nvgLinearGradient(ctx, 0, 0, 0, height,
-        nvgRGBA(19, 21, 40, 255), nvgRGBA(44, 18, 48, 255))
+        nvgRGBA(18, 18, 25, 255), nvgRGBA(31, 24, 35, 255))
     nvgBeginPath(ctx)
     nvgRect(ctx, 0, 0, width, height)
     nvgFillPaint(ctx, gradient)
     nvgFill(ctx)
 
-    for index = 1, 18 do
-        local x = (index * 97) % width
-        local y = 20 + ((index * 61) % math.max(1, math.floor(height * 0.65)))
-        local pulse = 100 + math.floor(65 * math.sin(time * 1.4 + index))
+    local drift = (time * 6) % 42
+    for index = -2, math.ceil(width / 42) + 2 do
+        local x = index * 42 + drift
         nvgBeginPath(ctx)
-        nvgCircle(ctx, x, y, 1 + (index % 3))
-        nvgFillColor(ctx, nvgRGBA(135, 165, 255, pulse))
-        nvgFill(ctx)
+        nvgMoveTo(ctx, x, 0)
+        nvgLineTo(ctx, x - height * 0.16, height)
+        nvgStrokeWidth(ctx, 1)
+        nvgStrokeColor(ctx, nvgRGBA(145, 120, 160, 18))
+        nvgStroke(ctx)
     end
 end
 
-local function DrawArena(ctx, width, height, state)
-    local arena = Renderer.GetArena(width, height)
-    local floorGradient = nvgLinearGradient(ctx, 0, arena.backY, 0, arena.frontY,
-        nvgRGBA(65, 55, 88, 255), nvgRGBA(29, 26, 52, 255))
+local function DrawDoor(ctx, arena, direction, isOpen, time)
+    local floorWidth = arena.right - arena.left
+    local floorHeight = arena.bottom - arena.top
+    local doorColor = isOpen and { 92, 224, 155 } or { 215, 76, 92 }
+    local pulse = 185 + math.floor(35 * math.sin(time * 4.5))
+    local x, y, w, h
+
+    if direction == "north" then
+        w = floorWidth * 0.14
+        h = arena.top - arena.wallTop + 3
+        x = (arena.left + arena.right - w) * 0.5
+        y = arena.wallTop + 8
+    elseif direction == "south" then
+        w = floorWidth * 0.14
+        h = arena.wallThickness + 8
+        x = (arena.left + arena.right - w) * 0.5
+        y = arena.bottom - 3
+    elseif direction == "west" then
+        w = arena.wallThickness + 8
+        h = floorHeight * 0.18
+        x = arena.left - arena.wallThickness - 3
+        y = (arena.top + arena.bottom - h) * 0.5
+    else
+        w = arena.wallThickness + 8
+        h = floorHeight * 0.18
+        x = arena.right - 5
+        y = (arena.top + arena.bottom - h) * 0.5
+    end
 
     nvgBeginPath(ctx)
-    nvgMoveTo(ctx, arena.backLeft, arena.backY)
-    nvgLineTo(ctx, arena.backRight, arena.backY)
-    nvgLineTo(ctx, arena.frontRight, arena.frontY)
-    nvgLineTo(ctx, arena.frontLeft, arena.frontY)
-    nvgClosePath(ctx)
+    nvgRoundedRect(ctx, x, y, w, h, 4)
+    nvgFillColor(ctx, nvgRGBA(9, 10, 15, 255))
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, isOpen and 3 or 2)
+    StrokeColor(ctx, doorColor, isOpen and pulse or 235)
+    nvgStroke(ctx)
+
+    if not isOpen then
+        nvgBeginPath(ctx)
+        if direction == "north" or direction == "south" then
+            nvgMoveTo(ctx, x + w * 0.18, y + h * 0.34)
+            nvgLineTo(ctx, x + w * 0.82, y + h * 0.66)
+            nvgMoveTo(ctx, x + w * 0.82, y + h * 0.34)
+            nvgLineTo(ctx, x + w * 0.18, y + h * 0.66)
+        else
+            nvgMoveTo(ctx, x + w * 0.28, y + h * 0.15)
+            nvgLineTo(ctx, x + w * 0.72, y + h * 0.85)
+            nvgMoveTo(ctx, x + w * 0.72, y + h * 0.15)
+            nvgLineTo(ctx, x + w * 0.28, y + h * 0.85)
+        end
+        nvgStrokeWidth(ctx, 4)
+        StrokeColor(ctx, { 225, 94, 97 }, 235)
+        nvgStroke(ctx)
+    end
+end
+
+local function DrawArena(ctx, width, height, game)
+    local arena = Renderer.GetArena(width, height)
+    local floorGradient = nvgLinearGradient(ctx, 0, arena.top, 0, arena.bottom,
+        nvgRGBA(71, 64, 78, 255), nvgRGBA(43, 39, 50, 255))
+
+    nvgBeginPath(ctx)
+    nvgRect(ctx, arena.left, arena.top, arena.right - arena.left, arena.bottom - arena.top)
     nvgFillPaint(ctx, floorGradient)
     nvgFill(ctx)
 
-    nvgBeginPath(ctx)
-    nvgMoveTo(ctx, arena.backLeft, arena.backY)
-    nvgLineTo(ctx, arena.backRight, arena.backY)
-    nvgLineTo(ctx, arena.frontRight, arena.frontY)
-    nvgLineTo(ctx, arena.frontLeft, arena.frontY)
-    nvgClosePath(ctx)
-    nvgStrokeWidth(ctx, 3)
-    StrokeColor(ctx, state == "battle" and { 173, 126, 245 } or { 110, 135, 190 }, 230)
-    nvgStroke(ctx)
-
-    for row = 1, 7 do
-        local y = row / 8
-        local left = Lerp(arena.backLeft, arena.frontLeft, y)
-        local right = Lerp(arena.backRight, arena.frontRight, y)
-        local screenY = Lerp(arena.backY, arena.frontY, y)
+    -- Tile grid stays rectangular: no forced-perspective tapering.
+    for column = 1, 9 do
+        local x = Lerp(arena.left, arena.right, column / 10)
         nvgBeginPath(ctx)
-        nvgMoveTo(ctx, left, screenY)
-        nvgLineTo(ctx, right, screenY)
+        nvgMoveTo(ctx, x, arena.top)
+        nvgLineTo(ctx, x, arena.bottom)
         nvgStrokeWidth(ctx, 1)
-        StrokeColor(ctx, { 180, 155, 255 }, 35)
+        StrokeColor(ctx, { 196, 181, 205 }, 26)
+        nvgStroke(ctx)
+    end
+    for row = 1, 7 do
+        local y = Lerp(arena.top, arena.bottom, row / 8)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, arena.left, y)
+        nvgLineTo(ctx, arena.right, y)
+        nvgStrokeWidth(ctx, 1)
+        StrokeColor(ctx, { 196, 181, 205 }, 30)
         nvgStroke(ctx)
     end
 
-    local doorColor = state == "clear" and { 95, 235, 165 } or { 255, 105, 130 }
-    local doorX = (arena.backLeft + arena.backRight) * 0.5
+    -- Tall back wall makes the upper wall face visible in the 2.5D view.
+    local backWallGradient = nvgLinearGradient(ctx, 0, arena.wallTop, 0, arena.top,
+        nvgRGBA(104, 86, 108, 255), nvgRGBA(65, 53, 72, 255))
     nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, doorX - 34, arena.backY - 9, 68, 18, 5)
-    Color(ctx, doorColor, 210)
+    nvgRect(ctx, arena.left - arena.wallThickness, arena.wallTop,
+        arena.right - arena.left + arena.wallThickness * 2, arena.top - arena.wallTop)
+    nvgFillPaint(ctx, backWallGradient)
     nvgFill(ctx)
+
+    nvgBeginPath(ctx)
+    nvgRect(ctx, arena.left - arena.wallThickness, arena.top,
+        arena.wallThickness, arena.bottom - arena.top + arena.wallThickness)
+    nvgRect(ctx, arena.right, arena.top,
+        arena.wallThickness, arena.bottom - arena.top + arena.wallThickness)
+    nvgRect(ctx, arena.left, arena.bottom,
+        arena.right - arena.left, arena.wallThickness)
+    nvgFillColor(ctx, nvgRGBA(73, 60, 78, 255))
+    nvgFill(ctx)
+
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, arena.left - arena.wallThickness, arena.top)
+    nvgLineTo(ctx, arena.right + arena.wallThickness, arena.top)
+    nvgStrokeWidth(ctx, 4)
+    StrokeColor(ctx, { 143, 118, 142 }, 210)
+    nvgStroke(ctx)
+
+    if game.room ~= nil then
+        for _, direction in ipairs({ "north", "south", "west", "east" }) do
+            if game.room.connections[direction] ~= nil then
+                DrawDoor(ctx, arena, direction, game.roomCleared, game.time)
+            end
+        end
+    end
 end
 
 local function DrawSpawnMarkers(ctx, width, height, game)
@@ -462,9 +543,119 @@ local function DrawMessage(ctx, width, height, game)
     nvgText(ctx, width * 0.5, height * 0.11, game.message, nil)
 end
 
+local function IsRoomMapped(game, roomId)
+    if game.discoveredRooms[roomId] then
+        return true
+    end
+    if game.room ~= nil then
+        for _, targetRoomId in pairs(game.room.connections) do
+            if targetRoomId == roomId then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function DrawMinimap(ctx, width, height, game)
+    if game.room == nil or game.map == nil then
+        return
+    end
+
+    local minX, maxX, minY, maxY = 0, 0, 0, 0
+    for _, room in pairs(game.map.rooms) do
+        minX, maxX = math.min(minX, room.mapX), math.max(maxX, room.mapX)
+        minY, maxY = math.min(minY, room.mapY), math.max(maxY, room.mapY)
+    end
+
+    local cell = Clamp(math.min(width, height) * 0.021, 10, 15)
+    local gap = 4
+    local step = cell + gap
+    local mapWidth = (maxX - minX) * step + cell
+    local originX = width * 0.5 - mapWidth * 0.5
+    local originY = math.max(10, height * 0.018)
+
+    for _, room in pairs(game.map.rooms) do
+        if IsRoomMapped(game, room.id) then
+            local x = originX + (room.mapX - minX) * step
+            local y = originY + (room.mapY - minY) * step
+            for _, targetId in pairs(room.connections) do
+                local target = game.map.rooms[targetId]
+                if target ~= nil and IsRoomMapped(game, targetId) then
+                    local targetX = originX + (target.mapX - minX) * step
+                    local targetY = originY + (target.mapY - minY) * step
+                    nvgBeginPath(ctx)
+                    nvgMoveTo(ctx, x + cell * 0.5, y + cell * 0.5)
+                    nvgLineTo(ctx, targetX + cell * 0.5, targetY + cell * 0.5)
+                    nvgStrokeWidth(ctx, 2)
+                    StrokeColor(ctx, { 150, 146, 160 }, 105)
+                    nvgStroke(ctx)
+                end
+            end
+        end
+    end
+
+    for roomId, room in pairs(game.map.rooms) do
+        if IsRoomMapped(game, roomId) then
+            local x = originX + (room.mapX - minX) * step
+            local y = originY + (room.mapY - minY) * step
+            local state = game.roomStates[roomId]
+            local fill = { 68, 64, 76 }
+            local alpha = 145
+            if roomId == game.currentRoomId then
+                fill, alpha = { 244, 210, 112 }, 255
+            elseif state ~= nil and state.cleared then
+                fill, alpha = { 112, 196, 151 }, 220
+            elseif game.discoveredRooms[roomId] then
+                fill, alpha = { 182, 108, 120 }, 220
+            end
+
+            nvgBeginPath(ctx)
+            nvgRoundedRect(ctx, x, y, cell, cell, 2)
+            Color(ctx, fill, alpha)
+            nvgFill(ctx)
+            if room.boss then
+                nvgStrokeWidth(ctx, 2)
+                StrokeColor(ctx, { 235, 91, 92 }, 245)
+                nvgStroke(ctx)
+            end
+        end
+    end
+end
+
+local function GetTransitionOffset(game, width, height)
+    local transition = game.transition
+    if transition == nil or transition.duration <= 0 then
+        return 0, 0
+    end
+
+    local progress = Clamp(transition.elapsed / transition.duration, 0, 1)
+    local incomingX, incomingY = 0, 0
+    if transition.direction == "north" then
+        incomingY = -height
+    elseif transition.direction == "south" then
+        incomingY = height
+    elseif transition.direction == "west" then
+        incomingX = -width
+    else
+        incomingX = width
+    end
+
+    if not transition.switched then
+        local outgoingProgress = math.min(1, progress * 2)
+        return -incomingX * outgoingProgress, -incomingY * outgoingProgress
+    end
+
+    local incomingProgress = math.min(1, (progress - 0.5) * 2)
+    return incomingX * (1 - incomingProgress), incomingY * (1 - incomingProgress)
+end
+
 function Renderer.Draw(ctx, game, width, height)
     DrawBackground(ctx, width, height, game.time)
-    DrawArena(ctx, width, height, game.state)
+    local offsetX, offsetY = GetTransitionOffset(game, width, height)
+    nvgSave(ctx)
+    nvgTranslate(ctx, offsetX, offsetY)
+    DrawArena(ctx, width, height, game)
     if game.state == "intro" then
         DrawSpawnMarkers(ctx, width, height, game)
     end
@@ -492,9 +683,12 @@ function Renderer.Draw(ctx, game, width, height)
         DrawParryCone(ctx, width, height, game.player)
     end
     DrawParticles(ctx, width, height, game.particles)
-    DrawChestPauseDim(ctx, width, height, game)
-    DrawMessage(ctx, width, height, game)
     DrawDebug(ctx, width, height, game)
+    nvgRestore(ctx)
+
+    DrawChestPauseDim(ctx, width, height, game)
+    DrawMinimap(ctx, width, height, game)
+    DrawMessage(ctx, width, height, game)
     DrawOverlay(ctx, width, height, game)
 end
 

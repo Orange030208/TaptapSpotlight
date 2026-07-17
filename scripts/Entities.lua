@@ -52,6 +52,11 @@ local function MoveEnemy(enemy, moveX, moveY, speed, dt)
 end
 
 function Entities.NewPlayer()
+    local abilities = {}
+    for _, definition in ipairs(Config.Upgrades.definitions) do
+        abilities[definition.id] = 0
+    end
+
     return {
         x = 0.5,
         y = 0.72,
@@ -63,14 +68,7 @@ function Entities.NewPlayer()
         parryCooldown = 0,
         invulnerabilityTimer = 0,
         parryHalfAngleCos = Config.Player.parryHalfAngleCos,
-        abilities = {
-            wide_guard = 0,
-            quick_hands = 0,
-            heavy_return = 0,
-            repulse = 0,
-            piercing_echo = 0,
-            perfect_repair = 0,
-        },
+        abilities = abilities,
     }
 end
 

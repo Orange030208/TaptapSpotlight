@@ -4,6 +4,30 @@ local Entities = require "Entities"
 
 local Game = {}
 
+local OPPOSITE_DIRECTION = {
+    north = "south",
+    south = "north",
+    west = "east",
+    east = "west",
+}
+
+local function GetRoomCount()
+    local count = 0
+    for _ in pairs(RoomData.rooms) do
+        count = count + 1
+    end
+    return count
+end
+
+local function GetRoomState(game, roomId)
+    local state = game.roomStates[roomId]
+    if state == nil then
+        state = { visited = false, cleared = false, chests = {} }
+        game.roomStates[roomId] = state
+    end
+    return state
+end
+
 local function CopyColor(color)
     return { color[1], color[2], color[3] }
 end
@@ -72,35 +96,82 @@ local function HandleEnemyDeaths(game)
     end
 end
 
-local function LoadRoom(game, roomIndex)
-    game.roomIndex = roomIndex
-    game.room = RoomData[roomIndex]
-    game.enemies = {}
-    game.projectiles = {}
-    game.chests = {}
-    game.chestOptions = nil
-    game.state = "intro"
-    game.stateTimer = Config.Room.introDuration
-    game.message = game.room.boss and "监牢守卫正在注视" or "识别到敌对目标"
-    game.messageTimer = Config.Room.introDuration
-
-    local group = game.room.groups[math.random(1, #game.room.groups)]
-    for index, kind in ipairs(group) do
-        local spawn = game.room.spawns[((index - 1) % #game.room.spawns) + 1]
-        table.insert(game.enemies, Entities.NewEnemy(kind, spawn, game.nextEntityId))
-        game.nextEntityId = game.nextEntityId + 1
+local function PlacePlayerAtEntry(player, travelDirection)
+    if travelDirection == nil then
+        player.x = 0.5
+        player.y = 0.72
+        return
     end
 
-    print("加载房间 " .. tostring(roomIndex) .. ": " .. game.room.name)
+    local entryDirection = OPPOSITE_DIRECTION[travelDirection]
+    local inset = Config.Room.doorEntryInset
+    if entryDirection == "north" then
+        player.x, player.y = 0.5, Config.Room.minY + inset
+    elseif entryDirection == "south" then
+        player.x, player.y = 0.5, Config.Room.maxY - inset
+    elseif entryDirection == "west" then
+        player.x, player.y = Config.Room.minX + inset, 0.5
+    else
+        player.x, player.y = Config.Room.maxX - inset, 0.5
+    end
+end
+
+local function EnterRoom(game, roomId, travelDirection)
+    local room = RoomData.rooms[roomId]
+    assert(room ~= nil, "Unknown room id: " .. tostring(roomId))
+
+    game.currentRoomId = roomId
+    game.room = room
+    game.enemies = {}
+    game.projectiles = {}
+    game.chestOptions = nil
+    local roomState = GetRoomState(game, roomId)
+    game.chests = roomState.chests
+    game.roomCleared = roomState.cleared
+    PlacePlayerAtEntry(game.player, travelDirection)
+
+    if not roomState.visited then
+        roomState.visited = true
+        game.discoveredRooms[roomId] = true
+        game.visitedRoomCount = game.visitedRoomCount + 1
+    end
+
+    local arrivalState = "clear"
+    if not roomState.cleared then
+        arrivalState = "intro"
+        local group = room.groups[math.random(1, #room.groups)]
+        for index, kind in ipairs(group) do
+            local spawn = room.spawns[((index - 1) % #room.spawns) + 1]
+            table.insert(game.enemies, Entities.NewEnemy(kind, spawn, game.nextEntityId))
+            game.nextEntityId = game.nextEntityId + 1
+        end
+    end
+
+    game.stateTimer = Config.Room.introDuration
+    game.message = room.boss and "监牢守卫正在注视" or (roomState.cleared and "返回已清理房间" or "识别到敌对目标")
+    game.messageTimer = roomState.cleared and 0.8 or Config.Room.introDuration
+    if game.transition ~= nil then
+        game.transition.arrivalState = arrivalState
+        game.state = "room_transition"
+    else
+        game.state = arrivalState
+    end
+
+    print("加载房间 " .. roomId .. ": " .. room.name)
 end
 
 local function FinishRoom(game)
-    game.state = "clear"
+    local roomState = GetRoomState(game, game.currentRoomId)
+    if not roomState.cleared then
+        roomState.cleared = true
+        game.clearedRoomCount = game.clearedRoomCount + 1
+    end
+    game.roomCleared = true
     local hasChests = #game.chests > 0
-    game.stateTimer = hasChests and Config.Room.dropPickupDuration or Config.Room.clearDuration
+    game.state = game.room.boss and "victory" or "clear"
     SetMessage(game,
-        game.room.boss and "监牢守卫已倒下" or (hasChests and "房间已清理 - 拾取宝箱" or "房间已清理"),
-        game.stateTimer
+        game.room.boss and "监牢守卫已倒下" or (hasChests and "房间已清理 - 拾取宝箱或进入门" or "房间已清理 - 门已开启"),
+        game.room.boss and 999 or 1.8
     )
     AddParticles(game, game.player.x, game.player.y, { 130, 255, 185 }, 18)
 end
@@ -112,12 +183,19 @@ local function StartRun(game)
     game.chests = {}
     game.chestOptions = nil
     game.particles = {}
-    game.roomIndex = 0
+    game.currentRoomId = nil
+    game.roomStates = {}
+    game.discoveredRooms = {}
+    game.visitedRoomCount = 0
+    game.clearedRoomCount = 0
+    game.roomCleared = false
+    game.transition = nil
+    game.doorCooldown = 0
     game.nextEntityId = 1
     game.runTime = 0
     game.message = ""
     game.messageTimer = 0
-    LoadRoom(game, 1)
+    EnterRoom(game, RoomData.startRoomId, nil)
 end
 
 local function UpdateParticles(game, dt)
@@ -159,6 +237,74 @@ local function UpdateChests(game, dt)
         end
     end
     return false
+end
+
+-- Door trigger layout in normalized room space:
+--
+--                 north (x centered, y = minY)
+--       +--------------------[ ]--------------------+
+-- west [ ]                 room                    [ ] east
+--       +--------------------[ ]--------------------+
+--                 south (x centered, y = maxY)
+--
+-- Doors are locked until the room is cleared. Arrival points are placed farther
+-- inside than doorTriggerDepth so holding a movement key cannot bounce back.
+local function GetTouchedDoor(player)
+    local halfWidth = Config.Room.doorwayWidth * 0.5
+    local depth = Config.Room.doorTriggerDepth
+    if math.abs(player.x - 0.5) <= halfWidth then
+        if player.y <= Config.Room.minY + depth then return "north" end
+        if player.y >= Config.Room.maxY - depth then return "south" end
+    end
+    if math.abs(player.y - 0.5) <= halfWidth then
+        if player.x <= Config.Room.minX + depth then return "west" end
+        if player.x >= Config.Room.maxX - depth then return "east" end
+    end
+    return nil
+end
+
+local function TryBeginRoomTransition(game)
+    if not game.roomCleared or game.doorCooldown > 0 then
+        return false
+    end
+
+    local direction = GetTouchedDoor(game.player)
+    local targetRoomId = direction ~= nil and game.room.connections[direction] or nil
+    if targetRoomId == nil then
+        return false
+    end
+
+    game.transition = {
+        direction = direction,
+        targetRoomId = targetRoomId,
+        elapsed = 0,
+        duration = Config.Room.transitionDuration,
+        switched = false,
+        arrivalState = "clear",
+    }
+    game.state = "room_transition"
+    game.projectiles = {}
+    SetMessage(game, "", 0)
+    return true
+end
+
+local function UpdateRoomTransition(game, dt)
+    local transition = game.transition
+    if transition == nil then
+        return
+    end
+
+    transition.elapsed = math.min(transition.duration, transition.elapsed + dt)
+    if not transition.switched and transition.elapsed >= transition.duration * 0.5 then
+        transition.switched = true
+        EnterRoom(game, transition.targetRoomId, transition.direction)
+    end
+
+    if transition.elapsed >= transition.duration then
+        game.state = transition.arrivalState
+        game.transition = nil
+        game.doorCooldown = 0.2
+    end
 end
 
 local function MoveProjectiles(game, dt)
@@ -284,8 +430,17 @@ function Game.New()
         stateTimer = 0,
         time = 0,
         runTime = 0,
-        roomIndex = 0,
+        currentRoomId = nil,
         room = nil,
+        roomStates = {},
+        discoveredRooms = {},
+        visitedRoomCount = 0,
+        clearedRoomCount = 0,
+        roomCount = GetRoomCount(),
+        roomCleared = false,
+        map = RoomData,
+        transition = nil,
+        doorCooldown = 0,
         player = Entities.NewPlayer(),
         enemies = {},
         projectiles = {},
@@ -348,6 +503,15 @@ function Game.Update(game, dt, moveX, moveY)
     end
     UpdateParticles(game, dt)
 
+    if game.doorCooldown > 0 then
+        game.doorCooldown = math.max(0, game.doorCooldown - dt)
+    end
+
+    if game.state == "room_transition" then
+        UpdateRoomTransition(game, dt)
+        return
+    end
+
     if game.state == "menu" or game.state == "dead" or game.state == "victory" or game.state == "chest_select" then
         return
     end
@@ -373,15 +537,7 @@ function Game.Update(game, dt, moveX, moveY)
         if UpdateChests(game, dt) then
             return
         end
-        game.stateTimer = game.stateTimer - dt
-        if #game.chests == 0 or game.stateTimer <= 0 then
-            if game.roomIndex >= #RoomData then
-                game.state = "victory"
-                SetMessage(game, "成功逃离", 999)
-            else
-                LoadRoom(game, game.roomIndex + 1)
-            end
-        end
+        TryBeginRoomTransition(game)
     end
 end
 
@@ -403,7 +559,7 @@ function Game.GetHud(game)
 
     return {
         health = "生命 " .. hearts,
-        room = game.roomIndex > 0 and ("房间 " .. tostring(game.roomIndex) .. "/" .. tostring(#RoomData)) or "尚未开始",
+        room = game.room ~= nil and (game.room.name .. "  已清理 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount)) or "尚未开始",
         parry = "招架 " .. cooldownText,
         message = game.messageTimer > 0 and game.message or "",
         upgrades = #upgradeLines > 0 and table.concat(upgradeLines, "\n") or "暂无强化",

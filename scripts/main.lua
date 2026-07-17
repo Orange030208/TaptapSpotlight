@@ -187,7 +187,7 @@ local function CreateHud()
                         children = { parryLabel, abilityLabel },
                     },
                     UI.Label {
-                        text = "WASD 移动   空格招架   F1 调试",
+                        text = "WASD 移动   空格招架   清理房间后进入发光门",
                         position = "absolute",
                         bottom = 14,
                         left = 0,
