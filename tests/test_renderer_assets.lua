@@ -24,12 +24,12 @@ assert(Renderer.LoadAssets({}))
 assert(spineCreateCalls == 0, "incompatible Spine 3.8 asset must not be loaded by the 4.2 runtime")
 assert(imagePaths[1] == "Characters/player.png")
 assert(imagePaths[2] == "image/soot_monster.png")
-assert(imagePaths[3] == "image/luminous_wraith_solid_alpha_20260718134330.png")
-assert(imagePaths[4] == "image/stone_monster_rolling_20260718145411.png")
-assert(imagePaths[5] == "image/dark_spore_mushroom_20260718151718.png")
-assert(imagePaths[6] == "image/dark_dandelion_turret_20260718153010.png")
-assert(imagePaths[7] == "image/toxic_purple_fluorescent_orb_20260718155838.png")
-assert(imagePaths[8] == "image/low_toxic_purple_moss_20260718161117.png")
+assert(imagePaths[3] == "image/luminous_wraith_enemy.png")
+assert(imagePaths[4] == "image/stone_golem.png")
+assert(imagePaths[5] == "image/spore_mushroom.png")
+assert(imagePaths[6] == "image/dark_dandelion.png")
+assert(imagePaths[7] == "image/purple_glow_orb.png")
+assert(imagePaths[8] == "image/toxic_moss.png")
 assert(imagePaths[9] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
 assert(imagePaths[10] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
 assert(imagePaths[11] == "image/ui/lightning.png", "perfect streak lightning must load once with the renderer assets")
@@ -145,8 +145,10 @@ Renderer.Draw({}, game, 960, 540, nil)
 assert(#scaleCalls > scaleCount, "toxic moss must subtly jitter while idle")
 
 local lightningPatternCalls = 0
-nvgImagePatternTinted = function()
+local lightningAlphas = {}
+nvgImagePatternTinted = function(_, _, _, _, _, _, _, color)
     lightningPatternCalls = lightningPatternCalls + 1
+    table.insert(lightningAlphas, color[4])
     return {}
 end
 NVG_ALIGN_CENTER = 1
@@ -155,9 +157,10 @@ game.enemies = {}
 Renderer.Draw({}, game, 960, 540, {
     time = 0.05,
     impacts = {}, shockwaves = {}, bursts = {}, floatingTexts = {}, flash = nil, shake = nil,
-    perfectStreakDisplay = { count = 3, focusIndex = 3, life = 0.75, maxLife = 0.82 },
+    perfectStreakDisplay = { count = 3, focusIndex = 3, life = 0.41, maxLife = 0.82 },
 })
 assert(lightningPatternCalls == 3, "a three-hit perfect streak must draw three tinted lightning cards")
+assert(lightningAlphas[1] == 127, "lightning cards must fade continuously over their display lifetime")
 
 local birthRoomGame = {
     time = 0, state = "clear", transition = nil, room = { isBirthRoom = true, connections = {} }, map = nil,

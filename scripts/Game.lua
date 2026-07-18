@@ -353,6 +353,43 @@ local function PlacePlayerAtEntry(player, travelDirection)
     end
 end
 
+local function GetRandomTutorialSpawn(game, tutorialSpawn)
+    local area = tutorialSpawn.area
+    for _ = 1, 24 do
+        local spawn = {
+            x = area.minX + math.random() * (area.maxX - area.minX),
+            y = area.minY + math.random() * (area.maxY - area.minY),
+        }
+        local playerX = spawn.x - game.player.x
+        local playerY = spawn.y - game.player.y
+        local valid = playerX * playerX + playerY * playerY >= tutorialSpawn.minPlayerDistance ^ 2
+        if valid then
+            for _, enemy in ipairs(game.enemies) do
+                local enemyX = spawn.x - enemy.x
+                local enemyY = spawn.y - enemy.y
+                if enemyX * enemyX + enemyY * enemyY < tutorialSpawn.minSeparation ^ 2 then
+                    valid = false
+                    break
+                end
+            end
+        end
+        if valid then
+            return spawn
+        end
+    end
+    error("Unable to find a valid tutorial spawn position")
+end
+
+local function SpawnTutorialEnemies(game, tutorialSpawn)
+    assert(tutorialSpawn.randomized, "Tutorial spawns must be randomized")
+    assert(tutorialSpawn.count > 0, "Tutorial spawn count must be positive")
+    for _ = 1, tutorialSpawn.count do
+        local spawn = GetRandomTutorialSpawn(game, tutorialSpawn)
+        table.insert(game.enemies, Entities.NewEnemy(tutorialSpawn.kind, spawn, game.nextEntityId))
+        game.nextEntityId = game.nextEntityId + 1
+    end
+end
+
 local function EnterRoom(game, roomId, travelDirection)
     local room = RoomData.rooms[roomId]
     assert(room ~= nil, "Unknown room id: " .. tostring(roomId))
@@ -384,15 +421,19 @@ local function EnterRoom(game, roomId, travelDirection)
     local arrivalState = "clear"
     if not roomState.cleared and not room.isBirthRoom then
         arrivalState = "intro"
-        assert(#room.groups > 0, "Room has no enemy groups: " .. tostring(roomId))
-        assert(#room.spawns > 0, "Room has no enemy spawns: " .. tostring(roomId))
-        local group = room.groups[math.random(1, #room.groups)]
-        assert(group ~= nil, "Selected enemy group is missing: " .. tostring(roomId))
-        ---@cast group string[]
-        for index, kind in ipairs(group) do
-            local spawn = room.spawns[((index - 1) % #room.spawns) + 1]
-            table.insert(game.enemies, Entities.NewEnemy(kind, spawn, game.nextEntityId))
-            game.nextEntityId = game.nextEntityId + 1
+        if room.tutorialSpawn ~= nil then
+            SpawnTutorialEnemies(game, room.tutorialSpawn)
+        else
+            assert(#room.groups > 0, "Room has no enemy groups: " .. tostring(roomId))
+            assert(#room.spawns > 0, "Room has no enemy spawns: " .. tostring(roomId))
+            local group = room.groups[math.random(1, #room.groups)]
+            assert(group ~= nil, "Selected enemy group is missing: " .. tostring(roomId))
+            ---@cast group string[]
+            for index, kind in ipairs(group) do
+                local spawn = room.spawns[((index - 1) % #room.spawns) + 1]
+                table.insert(game.enemies, Entities.NewEnemy(kind, spawn, game.nextEntityId))
+                game.nextEntityId = game.nextEntityId + 1
+            end
         end
     end
 

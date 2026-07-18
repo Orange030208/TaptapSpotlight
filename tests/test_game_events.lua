@@ -144,6 +144,34 @@ assert(HasEvent(Game.ConsumeEvents(battle), "room_transition"), "the birth room 
 battle.transition = nil
 battle.doorCooldown = 0
 
+local reflectTutorial = Game.New()
+Game.StartOrRestart(reflectTutorial)
+Game.ConsumeEvents(reflectTutorial)
+Game.Update(reflectTutorial, 0.1, 1, 0)
+assert(Game.TryParry(reflectTutorial, reflectTutorial.player.x + 1, reflectTutorial.player.y, true))
+reflectTutorial.player.x, reflectTutorial.player.y = 0.5, RoomConfig.minY
+Game.Update(reflectTutorial, 0, 0, 0)
+assert(reflectTutorial.state == "room_transition")
+Game.Update(reflectTutorial, RoomConfig.transitionDuration * 0.5, 0, 0)
+
+local reflectRoom = reflectTutorial.room
+local tutorialSpawn = reflectRoom.tutorialSpawn
+assert(reflectRoom.id == "crossfire" and reflectRoom.isReflectTutorial)
+assert(#reflectRoom.spawns == 0 and tutorialSpawn.randomized, "the reflection tutorial must not use fixed spawn points")
+assert(#reflectTutorial.enemies == tutorialSpawn.count and tutorialSpawn.count == 2)
+for index, enemy in ipairs(reflectTutorial.enemies) do
+    assert(enemy.kind == tutorialSpawn.kind and tutorialSpawn.kind == "soot")
+    assert(enemy.x >= tutorialSpawn.area.minX and enemy.x <= tutorialSpawn.area.maxX)
+    assert(enemy.y >= tutorialSpawn.area.minY and enemy.y <= tutorialSpawn.area.maxY)
+    local playerDistance = math.sqrt((enemy.x - reflectTutorial.player.x) ^ 2 + (enemy.y - reflectTutorial.player.y) ^ 2)
+    assert(playerDistance >= tutorialSpawn.minPlayerDistance)
+    for previous = 1, index - 1 do
+        local other = reflectTutorial.enemies[previous]
+        local separation = math.sqrt((enemy.x - other.x) ^ 2 + (enemy.y - other.y) ^ 2)
+        assert(separation >= tutorialSpawn.minSeparation)
+    end
+end
+
 battle.state = "battle"
 battle.enemies = { Entities.NewEnemy("mushroom", { x = 0.2, y = 0.2 }, 1001) }
 battle.enemies[1].state = "telegraph"

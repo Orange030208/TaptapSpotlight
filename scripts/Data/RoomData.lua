@@ -12,17 +12,19 @@ return {
             groups = {},
         },
         crossfire = {
-            id = "crossfire", name = "交叉火力", mapX = 0, mapY = -1,
+            id = "crossfire", name = "反弹试炼", mapX = 0, mapY = -1,
+            isReflectTutorial = true,
             connections = { north = "warden", east = "ambush", south = "threshold", west = "crypt" },
-            spawns = {
-                { x = 0.22, y = 0.29 }, { x = 0.78, y = 0.29 },
-                { x = 0.32, y = 0.48 }, { x = 0.68, y = 0.48 },
-                { x = 0.5, y = 0.66 },
+            tutorialSpawn = {
+                kind = "soot",
+                count = 2,
+                randomized = true,
+                area = { minX = 0.20, maxX = 0.80, minY = 0.20, maxY = 0.54 },
+                minPlayerDistance = 0.32,
+                minSeparation = 0.20,
             },
-            groups = {
-                { "blue_swarm", "mushroom", "dandelion", "sap", "soot" },
-                { "sap", "soot", "mushroom", "blue_swarm", "dandelion" },
-            },
+            spawns = {},
+            groups = {},
         },
         pressure = {
             id = "pressure", name = "重压之间", mapX = 1, mapY = 0,
