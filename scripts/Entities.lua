@@ -172,11 +172,6 @@ function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind, style, 
         lifetime = ProjectileConfig.lifetime,
         reflected = false,
         pierceRemaining = 0,
-        chainsRemaining = 0,
-        turnFromX = 0,
-        turnFromY = 0,
-        turnTimer = 0,
-        turnDuration = 0,
         hitEnemies = {},
         dead = false,
     }
@@ -309,10 +304,12 @@ local function IsCircleTouch(first, second)
 end
 
 local function IsInsideAttackArc(enemy, player, range, arc)
+    -- [enemy collision] -- attack range --> [player collision]
+    -- Arc reach is measured from the attacker's edge, so both collision radii extend the center-distance limit.
     local dx = player.x - enemy.x
     local dy = player.y - enemy.y
     local distance = Length(dx, dy)
-    if distance > range + player.radius then
+    if distance > range + enemy.radius + player.radius then
         return false
     end
     if distance <= 0.0001 or arc >= 359 then
@@ -329,7 +326,14 @@ end
 
 function Entities.IsEnemyInAttackRange(enemy, player)
     local spec = EnemyConfig[enemy.kind]
-    return spec.attackRange ~= nil and spec.attackRange > 0 and IsInRange(player, enemy, spec.attackRange)
+    if spec.attackRange == nil or spec.attackRange <= 0 then
+        return false
+    end
+    local range = spec.attackRange
+    if spec.behavior == "melee_arc" then
+        range = range + enemy.radius + player.radius
+    end
+    return IsInRange(player, enemy, range)
 end
 
 function Entities.IsEnemyActive(enemy, player)
@@ -340,6 +344,9 @@ local function MoveMeleeEnemy(enemy, player, spec, dt)
     local dx, dy = player.x - enemy.x, player.y - enemy.y
     local distance = Length(dx, dy)
     local preferredDistance = spec.preferredDistance or spec.attackRange * 0.54
+    if spec.behavior == "melee_arc" then
+        preferredDistance = math.max(0, spec.attack.range + enemy.radius + player.radius - 0.01)
+    end
     if distance > math.max(enemy.radius + player.radius + 0.045, preferredDistance) then
         MoveEnemy(enemy, dx, dy, spec.moveSpeed, dt)
     else
@@ -476,7 +483,7 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
             EmitConfiguredProjectiles(enemy, spec, emitProjectile)
             enemy.state = "recovery"
             enemy.stateTimer = spec.attack.recovery
-        elseif behavior == "tree_swing" or behavior == "aoe_pulse" then
+        elseif behavior == "tree_swing" or behavior == "melee_arc" or behavior == "aoe_pulse" then
             enemy.attackSerial = enemy.attackSerial + 1
             enemy.state = "active"
             enemy.stateTimer = spec.attack.active
@@ -529,7 +536,7 @@ function Entities.GetSplitChildren(enemy)
         table.insert(children, {
             x = Clamp(enemy.x + math.cos(angle) * spec.split.offset, RoomConfig.minX, RoomConfig.maxX),
             y = Clamp(enemy.y + math.sin(angle) * spec.split.offset, RoomConfig.minY, RoomConfig.maxY),
-            hp = spec.hp * spec.split.childHpRatio,
+            hp = (enemy.splitHp or enemy.hp) * spec.split.childHpRatio,
             splitGeneration = enemy.splitGeneration + 1,
         })
     end
@@ -567,7 +574,7 @@ function Entities.CollectEnemyHit(enemy, player)
         return { amount = spec.touchDamage, sourceKind = enemy.kind }
     end
 
-    if enemy.state == "active" and behavior == "tree_swing"
+    if enemy.state == "active" and (behavior == "tree_swing" or behavior == "melee_arc")
         and enemy.attackHitSerial ~= enemy.attackSerial
         and IsInsideAttackArc(enemy, player, spec.attack.range, enemy.attackArc) then
         enemy.attackHitSerial = enemy.attackSerial
@@ -625,7 +632,6 @@ function Entities.UpdateProjectile(projectile, dt)
     projectile.x = projectile.x + projectile.vx * dt
     projectile.y = projectile.y + projectile.vy * dt
     projectile.lifetime = projectile.lifetime - dt
-    projectile.turnTimer = math.max(0, (projectile.turnTimer or 0) - dt)
     if projectile.lifetime <= 0 or projectile.x < 0 or projectile.x > 1 or projectile.y < 0 or projectile.y > 1 then
         projectile.dead = true
     end
@@ -636,7 +642,7 @@ local function EnemyCanBeParried(enemy, player)
     if spec.behavior == "melee_lunge" or spec.behavior == "rolling" then
         return enemy.state == "dash"
     end
-    if spec.behavior == "tree_swing" then
+    if spec.behavior == "tree_swing" or spec.behavior == "melee_arc" then
         return enemy.state == "active"
     end
     if spec.behavior == "contact_chase" then
@@ -646,6 +652,38 @@ local function EnemyCanBeParried(enemy, player)
         return true
     end
     return spec.behavior == "aoe_pulse" and enemy.state == "telegraph"
+end
+
+local function ApplyEnemyParry(enemy, spec, damage, knockbackX, knockbackY)
+    local remainingHp = enemy.hp
+    local appliedDamage = math.min(enemy.hp, damage)
+    enemy.hp = enemy.hp - appliedDamage
+    if spec.behavior == "contact_chase" then
+        enemy.state = "stagger"
+        enemy.stateTimer = spec.parryStagger
+    elseif spec.behavior == "ground_hazard" then
+        enemy.state = "idle"
+        enemy.stateTimer = 0
+    else
+        enemy.state = "recovery"
+        enemy.stateTimer = spec.attack.recovery + 0.3
+    end
+
+    if spec.behavior ~= "ground_hazard" then
+        local directionX, directionY = Normalize(knockbackX, knockbackY)
+        if directionX == 0 and directionY == 0 then
+            directionX, directionY = 1, 0
+        end
+        enemy.x = Clamp(enemy.x + directionX * PlayerConfig.meleeKnockback, RoomConfig.minX, RoomConfig.maxX)
+        enemy.y = Clamp(enemy.y + directionY * PlayerConfig.meleeKnockback, RoomConfig.minY, RoomConfig.maxY)
+    end
+    if enemy.hp <= 0 then
+        if spec.split ~= nil then
+            enemy.splitHp = remainingHp
+        end
+        enemy.dead = true
+    end
+    return appliedDamage
 end
 
 function Entities.TryParryEnemy(player, enemy, damage)
@@ -658,30 +696,45 @@ function Entities.TryParryEnemy(player, enemy, damage)
         return false
     end
 
-    local appliedDamage = math.min(enemy.hp, damage)
-    enemy.hp = enemy.hp - appliedDamage
     local spec = EnemyConfig[enemy.kind]
-    if spec.behavior == "contact_chase" then
-        enemy.state = "stagger"
-        enemy.stateTimer = spec.parryStagger
-    elseif spec.behavior == "ground_hazard" then
-        enemy.state = "idle"
-        enemy.stateTimer = 0
-    else
-        enemy.state = "recovery"
-        enemy.stateTimer = spec.attack.recovery + 0.3
-    end
-    local knockback = PlayerConfig.meleeKnockback
     local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
     local directionY = player.parryDirectionY or 0
-    directionX, directionY = Normalize(directionX, directionY)
-    if spec.behavior ~= "ground_hazard" then
-        enemy.x = Clamp(enemy.x + directionX * knockback, RoomConfig.minX, RoomConfig.maxX)
-        enemy.y = Clamp(enemy.y + directionY * knockback, RoomConfig.minY, RoomConfig.maxY)
+    local appliedDamage = ApplyEnemyParry(enemy, spec, damage, directionX, directionY)
+    return true, appliedDamage
+end
+
+function Entities.TryOrbitGuardEnemy(guard, enemy, player, damage)
+    if enemy == nil or enemy.dead or enemy.kind == "boss" then
+        return false
     end
-    if enemy.hp <= 0 then
-        enemy.dead = true
+    local spec = EnemyConfig[enemy.kind]
+    local behavior = spec.behavior
+    if behavior == "ground_hazard" then
+        return false
     end
+
+    local canBlock = false
+    if behavior == "contact_chase" then
+        canBlock = Entities.IsEnemyActive(enemy, player) and IsCircleTouch(enemy, guard)
+    elseif (behavior == "melee_lunge" or behavior == "rolling") and enemy.state == "dash" then
+        canBlock = enemy.attackHitSerial ~= enemy.attackSerial and IsCircleTouch(enemy, guard)
+    elseif (behavior == "tree_swing" or behavior == "melee_arc") and enemy.state == "active" then
+        canBlock = enemy.attackHitSerial ~= enemy.attackSerial
+            and IsInsideAttackArc(enemy, guard, spec.attack.range, enemy.attackArc)
+    elseif behavior == "aoe_pulse" and enemy.state == "active" then
+        canBlock = enemy.attackHitSerial ~= enemy.attackSerial
+            and IsInRange(guard, enemy, spec.attack.range + guard.radius)
+    end
+    if not canBlock then
+        return false
+    end
+
+    if behavior ~= "contact_chase" then
+        enemy.attackHitSerial = enemy.attackSerial
+    else
+        enemy.contactTimer = spec.contactCooldown
+    end
+    local appliedDamage = ApplyEnemyParry(enemy, spec, damage, enemy.x - guard.x, enemy.y - guard.y)
     return true, appliedDamage
 end
 
@@ -709,7 +762,6 @@ function Entities.TryParryProjectile(player, projectile, damageMultiplier, perfe
     end
     projectile.damage = baseDamage * damageMultiplier
     projectile.pierceRemaining = 0
-    projectile.chainsRemaining = perfect and ProjectileConfig.perfectReflectionChains or 0
     projectile.hitEnemies = {}
     projectile.lifetime = ProjectileConfig.lifetime
     return true

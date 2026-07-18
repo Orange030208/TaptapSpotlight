@@ -3,6 +3,5 @@ return {
     lifetime = 4.0,
     reflectedSpeedMultiplier = 1.45,
     perfectReflectedDamage = 2,
-    perfectReflectionChains = 1,
     playerDamage = 1,
 }

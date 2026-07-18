@@ -4,8 +4,8 @@ local EnemyConfig = require "Data.EnemyConfig"
 local RoomData = require "Data.RoomData"
 
 local expectedKinds = {
-    "soot", "blue_swarm", "tree", "sap", "ghost_a", "ghost_b", "stone",
-    "mushroom", "dandelion", "purple_orb", "toxic_moss", "luminous_wraith",
+    "soot", "blue_swarm", "tree", "sap", "shadow_wraith", "stone",
+    "mushroom", "dandelion", "purple_orb", "toxic_moss",
 }
 
 assert(EnemyConfig.roomWidthMeters == 30)
@@ -31,6 +31,11 @@ for _, kind in ipairs(expectedKinds) do
 end
 
 assert(EnemyConfig.soot.attackRangeMeters == 5)
+assert(EnemyConfig.blue_swarm.behavior == "aoe_pulse")
+assert(EnemyConfig.blue_swarm.attackRangeMeters == 3)
+assert(EnemyConfig.blue_swarm.attack.repeatInterval == 0.7)
+assert(EnemyConfig.blue_swarm.attack.telegraph == 0.2)
+assert(EnemyConfig.blue_swarm.moveSpeed >= 0.3, "blue swarm must move quickly")
 assert(EnemyConfig.tree.attackRangeMeters == 8)
 assert(EnemyConfig.mushroom.attackRangeMeters == 8)
 assert(EnemyConfig.mushroom.moveSpeed <= 0.1, "mushroom movement must stay low")
@@ -50,7 +55,12 @@ assert(EnemyConfig.purple_orb.attack.range == EnemyConfig.MetersToWorld(3))
 assert(EnemyConfig.purple_orb.attack.repeatInterval == 1, "purple orb must pulse every second")
 assert(EnemyConfig.purple_orb.moveSpeed == 0.18, "purple orb must use medium movement speed")
 assert(EnemyConfig.purple_orb.touchDamage == 1, "purple orb damage must stay low")
+assert(EnemyConfig.sap.behavior == "melee_arc")
+assert(EnemyConfig.sap.attackRangeMeters == 1)
+assert(EnemyConfig.sap.attack.range == EnemyConfig.MetersToWorld(1))
+assert(EnemyConfig.sap.attack.arc == 60)
 assert(EnemyConfig.sap.split.count == 2)
+assert(EnemyConfig.sap.split.childHpRatio == 0.5)
 assert(EnemyConfig.dandelion.immovable)
 assert(EnemyConfig.toxic_moss.immovable)
 assert(not EnemyConfig.stone.immovable)
@@ -58,10 +68,10 @@ assert(EnemyConfig.stone.behavior == "rolling")
 assert(EnemyConfig.stone.moveSpeed >= 0.25, "stone must quickly pursue the player")
 assert(EnemyConfig.stone.attack.telegraph == 0, "stone charge must start immediately")
 assert(EnemyConfig.stone.attack.dashSpeed >= 1.4, "stone charge must be fast")
-assert(EnemyConfig.luminous_wraith.behavior == "contact_chase")
-assert(EnemyConfig.luminous_wraith.moveSpeed == 0.2)
-assert(EnemyConfig.luminous_wraith.touchDamage == 1)
-assert(EnemyConfig.luminous_wraith.contactCooldown == 2.45)
+assert(EnemyConfig.shadow_wraith.behavior == "contact_chase")
+assert(EnemyConfig.shadow_wraith.moveSpeed == 0.2)
+assert(EnemyConfig.shadow_wraith.touchDamage == 1)
+assert(EnemyConfig.shadow_wraith.contactCooldown == 2.45)
 
 local encountered = {}
 for _, room in pairs(RoomData.rooms) do

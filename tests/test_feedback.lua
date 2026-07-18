@@ -51,12 +51,12 @@ assert(hurt.shake ~= nil and hurt.flash ~= nil, "damage needs a restrained scree
 local wraithHit = Feedback.New()
 Feedback.ProcessEvents(wraithHit, {
     {
-        name = "luminous_wraith_hit",
+        name = "shadow_wraith_hit",
         data = { x = 0.5, y = 0.5, originX = 0.57, originY = 0.5, directionX = -1, directionY = 0 },
     },
 })
 assert(#wraithHit.bursts == 1 and wraithHit.bursts[1].kind == "wraith_touch",
-    "luminous wraith contact must create a spectral strike burst")
+    "shadow wraith contact must create a spectral strike burst")
 
 Feedback.Update(peak, 1.0)
 assert(Feedback.GetSimulationDelta(peak, 0.016) == 0.016)
@@ -84,6 +84,20 @@ assert(defense.perfectStreakDisplay.count == 3, "the renderer needs the exact pe
 assert(defense.perfectStreakDisplay.focusIndex == 3, "the newest lightning must receive the entry animation")
 Feedback.Update(defense, 1.0)
 assert(defense.perfectStreakDisplay == nil, "lightning feedback must fade instead of becoming a permanent HUD")
+
+local damagePopups = Feedback.New()
+Feedback.ProcessEvents(damagePopups, {
+    { name = "damage_dealt", data = { x = 0.4, y = 0.5, damage = 1.5, popupKind = "perfect", killed = true } },
+    { name = "damage_dealt", data = { x = 0.6, y = 0.5, damage = 1, popupKind = "reflect" } },
+    { name = "crystal_orbit_block", data = { x = 0.5, y = 0.5 } },
+    { name = "parry_success", data = { x = 0.5, y = 0.5, damage = 0.5 } },
+})
+assert(#damagePopups.floatingTexts == 3, "only damage events and orbit blocks should create combat popups")
+assert(damagePopups.floatingTexts[1].text == "1.5 击破")
+assert(damagePopups.floatingTexts[2].text == "1")
+assert(damagePopups.floatingTexts[3].text == "格挡")
+assert(damagePopups.floatingTexts[1].offsetX ~= damagePopups.floatingTexts[2].offsetX,
+    "simultaneous damage popups must use separate lanes")
 
 local combo = Feedback.New()
 Feedback.ProcessEvents(combo, {

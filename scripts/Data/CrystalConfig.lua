@@ -30,8 +30,8 @@ return {
         {
             id = "orbit_shards",
             name = "星轨碎片",
-            description = "每次完美招架生成一枚环绕碎晶，最多三枚，接触敌人造成伤害。",
-            shortDescription = "完美招架生成环绕碎晶，\n最多三枚。",
+            description = "每次完美招架生成一枚环绕碎晶，最多三枚。每枚持续 8 秒，可抵挡一次攻击。",
+            shortDescription = "完美招架生成卫星，\n8 秒内抵挡一次攻击。",
             color = { 150, 135, 255 },
             iconKind = "orbit",
             maxStacks = 1,
@@ -77,8 +77,11 @@ return {
     orbit = {
         maxShards = 3,
         radius = 0.105,
-        damage = 0.65,
-        hitInterval = 0.48,
+        shardRadius = 0.032,
+        duration = 8.0,
+        fadeDuration = 1.5,
+        guardDamage = 0.1,
+        reflectionSpeedMultiplier = 1.15,
     },
     nova = {
         radius = 0.28,
