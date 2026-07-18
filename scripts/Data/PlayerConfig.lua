@@ -13,6 +13,6 @@ return {
     parryInputBuffer = 0.08,
     parryRange = 0.19,
     parryHalfAngleCos = math.cos(math.rad(60)), -- 120 degree cone
-    meleeKnockback = 0.11,
-    meleeKnockbackDuration = 0.16,
+    meleeKnockback = 0.045,
+    meleeKnockbackDuration = 0.24,
 }

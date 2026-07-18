@@ -18,8 +18,9 @@ return {
         },
         quake = { weight = 23, telegraph = 0.88, active = 0.16, range = 0.23, arc = 270, damage = 1 },
         feathers = {
-            weight = 20, telegraph = 0.76, pulseCount = 8, pulseInterval = 0.18,
-            range = 0.24, arc = 180, damage = 0.25, invulnerability = 0.14,
+            weight = 20, takeoff = 0.42, airborne = 0.78, landingTelegraph = 0.72,
+            active = 0.16, landingRadius = 0.095, damage = 1,
+            invulnerability = 0.24,
         },
     },
     attackOrder = { "sweep", "skewer", "charge", "quake", "feathers" },
