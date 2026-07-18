@@ -602,7 +602,7 @@ local function CreateHud()
                 height = 20,
                 flexShrink = 0,
                 backgroundImage = "image/ui/heart.png",
-                imageTint = COLORS.coral,
+                backgroundFit = "contain",
                 pointerEvents = "none",
             },
             UI.Panel {

@@ -6,6 +6,8 @@ local CrystalRenderer = {}
 local elapsed = 0
 local pendingAcquisitions = {}
 local acquireAnimations = {}
+local crystalIconHandles = {}
+local crystalIconSizes = {}
 
 local function Clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
@@ -26,6 +28,39 @@ local function FindDefinition(id)
         end
     end
     return nil
+end
+
+function CrystalRenderer.LoadAssets(ctx)
+    local allLoaded = true
+    for _, definition in ipairs(CrystalConfig.definitions) do
+        local handle = nvgCreateImage(ctx, definition.iconPath, 0)
+        if handle == nil or handle <= 0 then
+            allLoaded = false
+            print("WARNING: Failed to load crystal icon: " .. tostring(definition.iconPath))
+        else
+            local width, height = nvgImageSize(ctx, handle)
+            if width <= 0 or height <= 0 then
+                nvgDeleteImage(ctx, handle)
+                allLoaded = false
+                print("WARNING: Crystal icon has invalid dimensions: " .. tostring(definition.iconPath))
+            else
+                crystalIconHandles[definition.id] = handle
+                crystalIconSizes[definition.id] = { width = width, height = height }
+                print("Crystal icon loaded: " .. definition.id .. " (" .. width .. "x" .. height .. ")")
+            end
+        end
+    end
+    return allLoaded
+end
+
+function CrystalRenderer.UnloadAssets(ctx)
+    for id, handle in pairs(crystalIconHandles) do
+        if handle ~= nil and handle > 0 then
+            nvgDeleteImage(ctx, handle)
+        end
+        crystalIconHandles[id] = nil
+        crystalIconSizes[id] = nil
+    end
 end
 
 local function DrawDiamond(ctx, x, y, radius, color, alpha)
@@ -133,7 +168,29 @@ local function DrawIconFrame(ctx, definition, x, y, size, pulse, alpha)
     nvgStrokeWidth(ctx, math.max(1.25, size * 0.045))
     StrokeColor(ctx, definition.color, opacity)
     nvgStroke(ctx)
-    DrawCrystalGlyph(ctx, definition, x, y, size, opacity)
+
+    local iconHandle = crystalIconHandles[definition.id]
+    local iconSize = crystalIconSizes[definition.id]
+    if iconHandle ~= nil and iconHandle > 0 and iconSize ~= nil then
+        local drawSize = size * 0.9
+        local aspect = iconSize.width / iconSize.height
+        local drawWidth = drawSize
+        local drawHeight = drawSize
+        if aspect > 1 then
+            drawHeight = drawSize / aspect
+        else
+            drawWidth = drawSize * aspect
+        end
+        local drawX = x - drawWidth * 0.5
+        local drawY = y - drawHeight * 0.5
+        nvgBeginPath(ctx)
+        nvgRect(ctx, drawX, drawY, drawWidth, drawHeight)
+        nvgFillPaint(ctx, nvgImagePatternTinted(ctx, drawX, drawY, drawWidth, drawHeight, 0,
+            iconHandle, nvgRGBA(255, 255, 255, opacity)))
+        nvgFill(ctx)
+    else
+        DrawCrystalGlyph(ctx, definition, x, y, size, opacity)
+    end
 end
 
 local function GetStatusPosition(index, width)
