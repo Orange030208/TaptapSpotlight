@@ -1150,7 +1150,7 @@ function Game.Update(game, dt, moveX, moveY, realDt)
         if game.stateTimer <= 0 then
             game.state = "battle"
             SetMessage(game, "敌人开始行动", 1.0)
-            EmitEvent(game, "battle_start")
+            EmitEvent(game, game.room.boss and "boss_entrance" or "battle_start")
         end
         return
     end

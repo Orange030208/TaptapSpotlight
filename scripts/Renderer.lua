@@ -2153,6 +2153,8 @@ local function DrawGuardStreak(ctx, width, height, feedback, game)
     end
 
     local fontSize = profile.textSize * (0.68 + 0.32 * popEase)
+    local headOffsetX = display.kind == "perfect" and 30 or 0
+    local textX = anchorX + headOffsetX
     local sway = math.sin((feedback.time or 0) * 8.5) * (display.kind == "perfect" and 2.5 or 1.2)
     local lift = math.sin(popProgress * math.pi) * 5
     local textY = anchorY - lift
@@ -2161,9 +2163,9 @@ local function DrawGuardStreak(ctx, width, height, feedback, game)
     nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFontSize(ctx, fontSize)
     nvgFillColor(ctx, nvgRGBA(10, 11, 18, math.floor(alpha * 0.78)))
-    nvgText(ctx, anchorX + sway + 2, textY + 3, text, nil)
+    nvgText(ctx, textX + sway + 2, textY + 3, text, nil)
     Color(ctx, profile.textColor, alpha)
-    nvgText(ctx, anchorX + sway, textY, text, nil)
+    nvgText(ctx, textX + sway, textY, text, nil)
 
     local comboX, comboY = Renderer.WorldToScreen(width, height, display.comboX, display.comboY)
     local comboText = "x" .. tostring(display.comboCount) .. "连击"
