@@ -274,8 +274,13 @@ function Entities.BeginParry(player, targetX, targetY)
     return true, true
 end
 
-function Entities.RegisterParrySuccess(player)
-    player.parryCooldown = math.min(player.parryCooldown, PlayerConfig.successfulParryCooldown)
+function Entities.RegisterParrySuccess(player, perfect)
+    local refundRatio = perfect and PlayerConfig.perfectParryCooldownRefund
+        or PlayerConfig.normalParryCooldownRefund
+    local refund = PlayerConfig.parryCooldown * refundRatio
+    player.parryCooldown = math.max(0, player.parryCooldown - refund)
+    print(string.format("[Combat] Parry cooldown refund result=%s ratio=%.0f%% remaining=%.2fs",
+        perfect and "perfect" or "normal", refundRatio * 100, player.parryCooldown))
 end
 
 function Entities.IsParrying(player)

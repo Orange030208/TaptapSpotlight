@@ -889,7 +889,7 @@ local function ResolveParries(game)
         end
     end
     if parriedAnything then
-        Entities.RegisterParrySuccess(game.player)
+        Entities.RegisterParrySuccess(game.player, perfect)
         AddComboProgress(game, perfect, game.player.x, game.player.y, parriedMelee)
         local guardData = {
             kind = perfect and "perfect" or "normal",
@@ -924,6 +924,16 @@ local function ResolveEnemyContacts(game)
     for _, enemy in ipairs(game.enemies) do
         if enemy.kind == "boss" then
             for _, hit in ipairs(Boss.CollectPlayerHits(enemy, game.player)) do
+                EmitEvent(game, "boss_attack_hit", {
+                    x = game.player.x,
+                    y = game.player.y,
+                    attack = enemy.attack,
+                    sourceKind = hit.source,
+                    originX = enemy.x,
+                    originY = enemy.y,
+                    directionX = game.player.x - enemy.x,
+                    directionY = game.player.y - enemy.y,
+                })
                 local damaged, saved = TryDamagePlayer(game, hit.amount, hit.invulnerability)
                 if damaged then
                     ResetCombo(game)

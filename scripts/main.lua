@@ -1162,10 +1162,11 @@ function Start()
         print("ERROR: Failed to create NanoVG context")
         return
     end
-    if nvgCreateFont(nvgContext, "sans", "Fonts/MiSans-Regular.ttf") == -1 then
+    if nvgCreateFont(nvgContext, "sans", "Fonts/NotoSansSC-Black.ttf") == -1 then
         print("WARNING: Could not load NanoVG font")
     end
     Renderer.LoadAssets(nvgContext)
+    CrystalRenderer.LoadAssets(nvgContext)
 
     game = Game.New()
     feedback = Feedback.New()
@@ -1182,6 +1183,7 @@ function Stop()
     AudioManager.Shutdown()
     UI.Shutdown()
     if nvgContext ~= nil then
+        CrystalRenderer.UnloadAssets(nvgContext)
         Renderer.UnloadAssets(nvgContext)
         nvgDelete(nvgContext)
         nvgContext = nil
