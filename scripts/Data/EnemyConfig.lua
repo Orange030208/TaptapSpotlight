@@ -20,9 +20,9 @@ return {
 
     soot = {
         behavior = "melee_lunge", hp = 2, radius = 0.035,
-        attackRangeMeters = 6, attackRange = MetersToWorld(6),
+        attackRangeMeters = 8, attackRange = MetersToWorld(8),
         moveSpeed = 0.19, touchDamage = 1,
-        attack = { interval = 1.45, telegraph = 0.44, active = 0.24, recovery = 0.52, dashSpeed = 0.88, arc = 70 },
+        attack = { interval = 1.45, telegraph = 0.44, active = 0.30, recovery = 0.52, dashSpeed = 0.92, arc = 70 },
         visual = Visual({ 55, 58, 68 }, { 136, 140, 154 }, { 18, 20, 30 }),
     },
     blue_swarm = {

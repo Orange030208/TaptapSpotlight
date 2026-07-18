@@ -1,6 +1,7 @@
 local PlayerConfig = require "Data.PlayerConfig"
 local EnemyConfig = require "Data.EnemyConfig"
 local Feedback = require "Feedback"
+local FeedbackConfig = require "Data.FeedbackConfig"
 local BossRenderer = require "BossRenderer"
 
 local Renderer = {}
@@ -2122,6 +2123,55 @@ local function DrawFeedbackWorld(ctx, width, height, feedback)
     end
 end
 
+local function DrawGuardStreak(ctx, width, height, feedback, game)
+    local display = Feedback.GetGuardStreakDisplay(feedback)
+    if display == nil then
+        return
+    end
+
+    local remaining = Clamp(display.life / math.max(0.001, display.maxLife), 0, 1)
+    local elapsed = 1 - remaining
+    local popProgress = Clamp(elapsed / math.max(0.001, display.popDuration or 0.2), 0, 1)
+    local popEase = 1 - (1 - popProgress) * (1 - popProgress)
+    local fade = Clamp(remaining / 0.22, 0, 1)
+    local alpha = math.floor(255 * fade)
+    local profile = display.kind == "perfect" and FeedbackConfig.perfectStreak or FeedbackConfig.normalParry
+    local text = display.kind == "perfect" and "金色S" or "N"
+    if display.kind == "perfect" then
+        text = text .. string.rep("！", math.min(3, math.max(0, display.count - 1)))
+    end
+
+    local player = game ~= nil and game.player or nil
+    local anchorX, anchorY
+    if player ~= nil then
+        anchorX, anchorY = Renderer.WorldToScreen(width, height, player.x, player.y)
+        anchorY = anchorY - 62
+    else
+        anchorX, anchorY = Renderer.WorldToScreen(width, height, display.x, display.y)
+    end
+
+    local fontSize = profile.textSize * (0.68 + 0.32 * popEase)
+    local sway = math.sin((feedback.time or 0) * 8.5) * (display.kind == "perfect" and 2.5 or 1.2)
+    local lift = math.sin(popProgress * math.pi) * 5
+    local textY = anchorY - lift
+
+    nvgFontFace(ctx, "sans")
+    nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFontSize(ctx, fontSize)
+    nvgFillColor(ctx, nvgRGBA(10, 11, 18, math.floor(alpha * 0.78)))
+    nvgText(ctx, anchorX + sway + 2, textY + 3, text, nil)
+    Color(ctx, profile.textColor, alpha)
+    nvgText(ctx, anchorX + sway, textY, text, nil)
+
+    local comboX, comboY = Renderer.WorldToScreen(width, height, display.comboX, display.comboY)
+    local comboText = "x" .. tostring(display.comboCount) .. "连击"
+    nvgFontSize(ctx, 17 * (0.75 + 0.25 * popEase))
+    nvgFillColor(ctx, nvgRGBA(10, 11, 18, math.floor(alpha * 0.72)))
+    nvgText(ctx, comboX + 1.5, comboY - 34 + 2, comboText, nil)
+    nvgFillColor(ctx, nvgRGBA(235, 239, 247, alpha))
+    nvgText(ctx, comboX, comboY - 34, comboText, nil)
+end
+
 local function DrawFeedbackFlash(ctx, width, height, feedback)
     if feedback == nil or feedback.flash == nil then
         return
@@ -2361,7 +2411,7 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     BossRenderer.DrawFog(ctx, width, height, boss, game.player, Renderer.WorldToScreen)
 
     DrawFeedbackFlash(ctx, width, height, feedback)
-    DrawPerfectStreak(ctx, width, height, feedback)
+    DrawGuardStreak(ctx, width, height, feedback, game)
     DrawChestPauseDim(ctx, width, height, game)
     DrawMinimap(ctx, width, height, game)
 end

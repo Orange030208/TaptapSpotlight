@@ -882,6 +882,14 @@ local function ResolveParries(game)
     if parriedAnything then
         Entities.RegisterParrySuccess(game.player)
         AddComboProgress(game, perfect, game.player.x, game.player.y, parriedMelee)
+        local guardData = {
+            kind = perfect and "perfect" or "normal",
+            comboCount = game.combo.count,
+            perfectStreak = game.perfectStreak ~= nil and game.perfectStreak.count or 0,
+            x = game.player.x,
+            y = game.player.y,
+        }
+        EmitEvent(game, "guard_combo_feedback", guardData)
         if perfect then
             CrystalAbilities.OnPerfectParry(game)
         end

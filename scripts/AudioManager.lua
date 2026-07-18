@@ -1,6 +1,7 @@
 local AudioManager = {}
 
 local RESOURCE_ROOT = "audio/SFX/"
+local MUSIC_RESOURCE_PATH = "audio/BGM/main_theme.ogg"
 local MAX_ACTIVE_VOICES = 20
 
 ---@class AudioCueDefinition
@@ -42,6 +43,11 @@ local CUES = {
 
 ---@type Scene|nil
 local audioScene = nil
+---@type Sound|nil
+local musicSound = nil
+---@type SoundSource|nil
+local musicSource = nil
+local musicGain = 0.30
 ---@type table<string, Sound>
 local loadedSounds = {}
 ---@class AudioVoice
@@ -81,6 +87,13 @@ function AudioManager.Initialize()
     lastPlayedAt = {}
     elapsed = 0
 
+    musicSound = cache:GetResource("Sound", MUSIC_RESOURCE_PATH)
+    if musicSound ~= nil then
+        musicSound:SetLooped(true)
+    else
+        print("WARNING: Missing BGM at " .. MUSIC_RESOURCE_PATH)
+    end
+
     local loadedCount = 0
     for name, definition in pairs(CUES) do
         local path = RESOURCE_ROOT .. definition.file
@@ -96,8 +109,47 @@ function AudioManager.Initialize()
     return loadedCount > 0
 end
 
+function AudioManager.PlayMusic(gain)
+    if audioScene == nil or musicSound == nil then
+        return false
+    end
+
+    if musicSource == nil then
+        local node = audioScene:CreateChild("BGM")
+        musicSource = node:CreateComponent("SoundSource")
+        musicSource:SetSoundType(SOUND_MUSIC)
+        musicSource:SetAutoRemoveMode(REMOVE_NODE)
+    end
+
+    local targetGain = math.max(0, math.min(1, gain or musicGain))
+    musicGain = targetGain
+    musicSource:SetGain(targetGain * masterGain)
+    if not musicSource:IsPlaying() then
+        musicSource:Play(musicSound, musicSound.frequency, targetGain * masterGain, 0)
+    end
+    return true
+end
+
+function AudioManager.StopMusic()
+    if musicSource ~= nil then
+        musicSource:StopImmediate()
+        musicSource = nil
+    end
+end
+
+function AudioManager.SetMusicGain(gain)
+    local targetGain = math.max(0, math.min(1, gain or musicGain))
+    musicGain = targetGain
+    if musicSource ~= nil then
+        musicSource:SetGain(targetGain * masterGain)
+    end
+end
+
 function AudioManager.SetMasterGain(gain)
     masterGain = math.max(0, math.min(1, gain or 1))
+    if musicSource ~= nil then
+        musicSource:SetGain(musicGain * masterGain)
+    end
 end
 
 function AudioManager.Update(dt)
@@ -177,6 +229,8 @@ function AudioManager.Shutdown()
     activeVoices = {}
     loadedSounds = {}
     lastPlayedAt = {}
+    musicSource = nil
+    musicSound = nil
 
     if audioScene ~= nil then
         audioScene:Dispose()

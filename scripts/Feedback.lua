@@ -171,12 +171,16 @@ end
 
 local function StartGuardStreakDisplay(state, data, kind)
     local profile = kind == "perfect" and FeedbackConfig.perfectStreak or FeedbackConfig.normalParry
+    local perfectCount = type(data) == "table" and data.perfectStreak or 1
     state.guardStreakCount = (state.guardStreakCount or 0) + 1
     state.guardStreakDisplay = {
         kind = kind,
-        count = state.guardStreakCount,
-        x = type(data) == "table" and data.x or 0,
-        y = type(data) == "table" and data.y or 0,
+        count = kind == "perfect" and math.max(1, math.floor(perfectCount or 1)) or 1,
+        comboCount = type(data) == "table" and math.max(1, math.floor(data.comboCount or data.count or 1)) or 1,
+        x = type(data) == "table" and (data.originX or data.x) or 0,
+        y = type(data) == "table" and (data.originY or data.y) or 0,
+        comboX = type(data) == "table" and data.x or 0,
+        comboY = type(data) == "table" and data.y or 0,
         life = profile.displayDuration,
         maxLife = profile.displayDuration,
         popDuration = profile.popDuration,
@@ -223,7 +227,11 @@ function Feedback.ProcessEvents(state, events)
         elseif name == "perfect_parry" then
             ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, nil)
             AddBurst(state, FeedbackConfig.perfectParry, data)
-            StartPerfectStreakDisplay(state, data)
+        elseif name == "parry_success" then
+            ApplyWorldProfile(state, FeedbackConfig.normalParry, data, nil)
+            AddBurst(state, FeedbackConfig.normalParry, data)
+        elseif name == "guard_combo_feedback" then
+            StartGuardStreakDisplay(state, data, data ~= nil and data.kind == "perfect" and "perfect" or "normal")
         elseif name == "damage_dealt" then
             AddDamagePopup(state, data)
         elseif name == "crystal_orbit_block" then
@@ -275,10 +283,10 @@ function Feedback.Update(state, dt)
             state.flash = nil
         end
     end
-    if state.perfectStreakDisplay ~= nil then
-        state.perfectStreakDisplay.life = state.perfectStreakDisplay.life - dt
-        if state.perfectStreakDisplay.life <= 0 then
-            state.perfectStreakDisplay = nil
+    if state.guardStreakDisplay ~= nil then
+        state.guardStreakDisplay.life = state.guardStreakDisplay.life - dt
+        if state.guardStreakDisplay.life <= 0 then
+            state.guardStreakDisplay = nil
         end
     end
 
@@ -334,6 +342,10 @@ function Feedback.GetHudPulse(state)
         return 0
     end
     return math.max(0, state.hudPulseTimer / state.hudPulseDuration)
+end
+
+function Feedback.GetGuardStreakDisplay(state)
+    return state ~= nil and state.guardStreakDisplay or nil
 end
 
 function Feedback.GetPerfectStreakDisplay(state)

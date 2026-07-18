@@ -1088,6 +1088,7 @@ function Start()
     graphics.windowTitle = GameConfig.Title
     math.randomseed(os.time())
     AudioManager.Initialize()
+    AudioManager.PlayMusic(0.30)
     RefreshCanvasMetrics()
 
     UI.Init({
