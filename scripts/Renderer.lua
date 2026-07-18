@@ -77,6 +77,7 @@ local playerSpineLastTime = nil
 
 function Renderer.LoadAssets(ctx)
     local playerLoaded = false
+    BossRenderer.LoadAssets(ctx)
     if ENABLE_SPINE_PLAYER then
         playerSpine = nvgSpineCreate(ctx)
     end
@@ -373,6 +374,7 @@ function Renderer.LoadAssets(ctx)
 end
 
 function Renderer.UnloadAssets(ctx)
+    BossRenderer.UnloadAssets(ctx)
     if playerSpine ~= nil then
         playerSpine:Unload()
         playerSpine:Dispose()
