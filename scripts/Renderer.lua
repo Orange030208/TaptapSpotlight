@@ -8,6 +8,8 @@ local SOOT_SPRITE_PATH = "image/soot_monster.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
+-- Re-enable after the Spine atlas is repacked within the device texture budget.
+local ENABLE_SPINE_PLAYER = false
 local playerImageHandle = 0
 local playerImageWidth = 1
 local playerImageHeight = 1
@@ -23,7 +25,9 @@ local playerSpineLastTime = nil
 
 function Renderer.LoadAssets(ctx)
     local playerLoaded = false
-    playerSpine = nvgSpineCreate(ctx)
+    if ENABLE_SPINE_PLAYER then
+        playerSpine = nvgSpineCreate(ctx)
+    end
     if playerSpine ~= nil and playerSpine:Load(PLAYER_SPINE_PATH) then
         playerSpine:SetDefaultMix(0.12)
         playerSpine:SetAnimation(0, PLAYER_IDLE_ANIMATION, true)
@@ -105,9 +109,6 @@ local function Clamp(value, minValue, maxValue)
 end
 
 local function Atan2(y, x)
-    if math.atan2 ~= nil then
-        return math.atan2(y, x)
-    end
     return math.atan(y, x)
 end
 
