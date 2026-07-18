@@ -145,10 +145,6 @@ function Boss.Initialize(enemy)
     enemy.lastAttack = nil
     enemy.attackTimer = 0
     enemy.attackHitToken = nil
-    enemy.featherPulse = 0
-    enemy.parriedPulse = 0
-    enemy.feathersPhase = nil
-    enemy.landingX, enemy.landingY = nil, nil
     enemy.mechanism = nil
     enemy.mechanismProgress = 0
     enemy.mechanismTransition = 0
@@ -187,8 +183,6 @@ local function BeginAttack(boss, player, name)
     boss.lastAttack = name
     boss.attackTimer = 0
     boss.attackHitToken = nil
-    boss.featherPulse = 0
-    boss.parriedPulse = 0
     boss.feathersPhase = nil
     boss.landingX, boss.landingY = nil, nil
     if name == "feathers" then
@@ -359,7 +353,7 @@ function Boss.CollectPlayerHits(boss, player)
     local hits = {}
     if boss.dead or boss.state == "phase_transition" or boss.state == "purifying" then return hits end
     if IsAttackHitting(boss, player) then
-        local token = boss.attack == "feathers" and ("feather_" .. tostring(boss.featherPulse)) or boss.attack
+        local token = boss.attack
         if boss.attackHitToken ~= token then
             boss.attackHitToken = token
             local spec = BossConfig.attacks[boss.attack]
@@ -462,8 +456,7 @@ function Boss.TryParry(boss, player, damage)
             result.damage = applied
             if boss.hp <= thresholdHp + 0.0001 then EnterPhaseTwo(boss, player) else ResetAttack(boss, BossConfig.recoveryDuration + 0.3) end
         elseif boss.attack == "feathers" then
-            boss.parriedPulse = boss.featherPulse
-            boss.attackHitToken = "feather_" .. tostring(boss.featherPulse)
+            boss.attackHitToken = "feathers_parried"
         else
             ResetAttack(boss, BossConfig.recoveryDuration + 0.3)
         end

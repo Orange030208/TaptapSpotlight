@@ -561,6 +561,21 @@ function BossRenderer.DrawMechanismTarget(ctx, width, height, boss, player, time
         nvgStrokeWidth(ctx, 2 * scale)
         Stroke(ctx, { 218, 230, 225 }, 235)
         nvgStroke(ctx)
+    elseif boss.mechanism == "metal" then
+        local targetX, targetY = Boss.GetMechanismTarget(boss, player)
+        local x, y, scale = WorldPoint(worldToScreen, width, height, targetX, targetY)
+        local radius = (12 + math.sin(time * 7) * 2) * scale
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius * 1.8)
+        Fill(ctx, { 210, 72, 104 }, 38)
+        nvgFill(ctx)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius)
+        Fill(ctx, { 38, 42, 54 }, 235)
+        nvgFill(ctx)
+        nvgStrokeWidth(ctx, 2 * scale)
+        Stroke(ctx, { 238, 166, 96 }, 240)
+        nvgStroke(ctx)
     end
 end
 
