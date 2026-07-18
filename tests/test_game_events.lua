@@ -420,10 +420,12 @@ Game.StartOrRestart(transition)
 Game.ConsumeEvents(transition)
 transition.state = "clear"
 transition.roomCleared = true
+transition.perfectStreak = { count = 2, timer = ComboConfig.perfectStreakWindow }
 transition.player.x = 0.5
 transition.player.y = RoomConfig.minY
 Game.Update(transition, 0, 0, 0)
 assert(HasEvent(Game.ConsumeEvents(transition), "room_transition"))
+assert(transition.perfectStreak.count == 0, "crossing a doorway must immediately reset the perfect streak")
 
 local boss = Game.New()
 Game.StartOrRestart(boss)

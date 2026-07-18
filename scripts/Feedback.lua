@@ -140,11 +140,24 @@ local function ApplyWorldProfile(state, profile, data, text)
     AddFloatingText(state, profile, data, text)
 end
 
-local function FormatDamage(data)
-    if type(data) ~= "table" or data.defenseOnly or type(data.damage) ~= "number" then
-        return nil
+local function StartPerfectStreakDisplay(state, data)
+    local profile = FeedbackConfig.perfectStreak
+    local count = type(data) == "table" and math.max(1, math.floor(data.perfectStreak or 1)) or 1
+    state.perfectStreakDisplay = {
+        count = count,
+        focusIndex = math.min(count, profile.iconLimit),
+        life = profile.displayDuration,
+        maxLife = profile.displayDuration,
+    }
+
+    local strength = math.min(profile.shakeMax, profile.shakeBase + (count - 1) * profile.shakePerStack)
+    if state.shake == nil or strength >= state.shake.strength then
+        state.shake = {
+            timer = profile.shakeDuration,
+            maxTimer = profile.shakeDuration,
+            strength = strength,
+        }
     end
-    return string.format("%.1f", data.damage)
 end
 
 function Feedback.New()
@@ -159,6 +172,7 @@ function Feedback.New()
         shockwaves = {},
         bursts = {},
         floatingTexts = {},
+        perfectStreakDisplay = nil,
     }
 end
 
@@ -168,13 +182,10 @@ function Feedback.ProcessEvents(state, events)
         local data = event.data
         if name == "parry_start" then
             AddBurst(state, FeedbackConfig.parryStart, data)
-        elseif name == "parry_success" then
-            ApplyWorldProfile(state, FeedbackConfig.normalParry, data, nil)
-            AddBurst(state, FeedbackConfig.normalParry, data)
         elseif name == "perfect_parry" then
-            local damage = FormatDamage(data)
-            ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, damage ~= nil and ("完美 " .. damage) or "完美")
+            ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, nil)
             AddBurst(state, FeedbackConfig.perfectParry, data)
+            StartPerfectStreakDisplay(state, data)
         elseif name == "player_hurt" then
             ApplyScreenProfile(state, FeedbackConfig.playerHurt)
         elseif name == "luminous_wraith_hit" then
@@ -220,6 +231,12 @@ function Feedback.Update(state, dt)
         state.flash.timer = state.flash.timer - dt
         if state.flash.timer <= 0 then
             state.flash = nil
+        end
+    end
+    if state.perfectStreakDisplay ~= nil then
+        state.perfectStreakDisplay.life = state.perfectStreakDisplay.life - dt
+        if state.perfectStreakDisplay.life <= 0 then
+            state.perfectStreakDisplay = nil
         end
     end
 
@@ -275,6 +292,10 @@ function Feedback.GetHudPulse(state)
         return 0
     end
     return math.max(0, state.hudPulseTimer / state.hudPulseDuration)
+end
+
+function Feedback.GetPerfectStreakDisplay(state)
+    return state ~= nil and state.perfectStreakDisplay or nil
 end
 
 return Feedback

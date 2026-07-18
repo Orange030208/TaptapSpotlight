@@ -31,10 +31,6 @@ local roomLabel = nil
 ---@type Widget|nil
 local roomProgressLabel = nil
 ---@type Widget|nil
-local parryPanel = nil
----@type Widget|nil
-local parryLabel = nil
----@type Widget|nil
 local comboPanel = nil
 ---@type Widget|nil
 local comboLabel = nil
@@ -580,11 +576,12 @@ local function CreateHud()
                 alignItems = "center",
                 gap = 7,
                 children = {
-                    UI.Label {
-                        text = "♥",
-                        fontSize = 16,
-                        fontColor = COLORS.coral,
-                        textShadow = { offsetX = 0, offsetY = 1, blur = 6, color = { 244, 112, 112, 150 } },
+                    UI.Panel {
+                        width = 16,
+                        height = 16,
+                        backgroundImage = "image/ui/heart.png",
+                        imageTint = COLORS.coral,
+                        pointerEvents = "none",
                     },
                     UI.Label {
                         text = "生命律动",
@@ -603,24 +600,6 @@ local function CreateHud()
                 children = { roomLabel, UI.Spacer(), roomProgressLabel },
             },
         },
-    }
-    parryLabel = UI.Label {
-        text = "招架 就绪",
-        fontSize = 12,
-        fontWeight = "bold",
-        letterSpacing = 1,
-        fontColor = COLORS.cyan,
-    }
-    parryPanel = UI.Panel {
-        padding = { 7, 12, 7, 12 },
-        borderRadius = 16,
-        borderWidth = 1,
-        borderColor = { 105, 225, 221, 145 },
-        backgroundColor = { 15, 38, 48, 225 },
-        shadowBlur = 12,
-        shadowColor = { 48, 197, 205, 65 },
-        pointerEvents = "none",
-        children = { parryLabel },
     }
     comboLabel = UI.Label {
         text = "连击 x0",
@@ -736,8 +715,15 @@ local function CreateHud()
             UI.Panel {
                 width = "100%", flexDirection = "row", alignItems = "baseline",
                 children = {
+                    UI.Panel {
+                        width = 15,
+                        height = 15,
+                        backgroundImage = "image/ui/diamond-card.png",
+                        imageTint = COLORS.gold,
+                        pointerEvents = "none",
+                    },
                     UI.Label {
-                        text = "✦  弹反共鸣",
+                        text = "弹反共鸣",
                         fontSize = 12,
                         fontWeight = "bold",
                         letterSpacing = 1,
@@ -808,7 +794,7 @@ local function CreateHud()
             UI.Panel {
                 position = "absolute", top = 14, right = 16,
                 width = "100%", alignItems = "flex-end", gap = 8,
-                pointerEvents = "box-none", children = { parryPanel, comboPanel, insightPanel },
+                pointerEvents = "box-none", children = { comboPanel, insightPanel },
             },
             UI.Panel {
                 position = "absolute", top = 30, left = 0, right = 0,
@@ -1149,12 +1135,6 @@ local function UpdateHud()
     end
     roomLabel:SetText(hud.room)
     roomProgressLabel:SetText(hud.roomProgress)
-    parryLabel:SetText(hud.parry)
-    parryLabel:SetFontColor(hud.parryReady and COLORS.cyan or COLORS.violet)
-    parryPanel:SetStyle({
-        borderColor = hud.parryReady and { 105, 225, 221, 145 } or { 170, 142, 238, 120 },
-        backgroundColor = hud.parryReady and { 15, 38, 48, 225 } or { 31, 25, 51, 225 },
-    })
     local combo = hud.combo
     local comboColor = combo.color
     comboLabel:SetText("连击 x" .. tostring(combo.count))

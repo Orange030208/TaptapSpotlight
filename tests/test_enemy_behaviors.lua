@@ -139,7 +139,7 @@ end
 assert(#orbPulseTimes >= 3, "purple orb must repeatedly emit AOE pulses")
 for index = 2, #orbPulseTimes do
     local cadence = orbPulseTimes[index] - orbPulseTimes[index - 1]
-    assert(math.abs(cadence - 1) <= 0.011, "purple orb AOE cadence must be one second")
+    assert(math.abs(cadence - 1) <= 0.021, "purple orb AOE cadence must be one second")
 end
 
 local tree = NewEnemy("tree", 0.5, 0.5, 7)

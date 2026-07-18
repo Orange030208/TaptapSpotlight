@@ -546,6 +546,7 @@ local function TryBeginRoomTransition(game)
         switched = false,
         arrivalState = "clear",
     }
+    ResetPerfectStreak(game)
     game.state = "room_transition"
     game.projectiles = {}
     SetMessage(game, "", 0)
@@ -746,11 +747,6 @@ local function GetGaugeGain(game, perfect)
     return gain * GetActiveBuffMultiplier(game, "gaugeGainMultiplier")
 end
 
-local function FormatParryMessage(perfect, damage)
-    local prefix = perfect and "完美招架" or "招架成功"
-    return prefix .. " - " .. string.format("%.2f", damage) .. " 伤害"
-end
-
 local function AnnounceParryStart(game)
     AddParticles(game, game.player.x, game.player.y, { 110, 215, 255 }, 5)
     EmitEvent(game, "parry_start", {
@@ -759,6 +755,16 @@ local function AnnounceParryStart(game)
         directionX = game.player.parryDirectionX,
         directionY = game.player.parryDirectionY,
     })
+end
+
+local function EmitParryResult(game, perfect, eventData)
+    if perfect then
+        eventData.perfectStreak = RegisterPerfectStreak(game)
+        EmitEvent(game, "perfect_parry", eventData)
+    else
+        ResetPerfectStreak(game)
+        EmitEvent(game, "parry_success", eventData)
+    end
 end
 
 local function ResolveParries(game)
@@ -785,9 +791,11 @@ local function ResolveParries(game)
                     originX = game.player.x, originY = game.player.y,
                     directionX = game.player.parryDirectionX, directionY = game.player.parryDirectionY,
                 }
-                EmitEvent(game, perfect and "perfect_parry" or "parry_success", eventData)
-                AddParticles(game, hitX, hitY,
-                    result.kind == "mechanism" and { 245, 205, 105 } or { 115, 240, 255 }, 15)
+                EmitParryResult(game, perfect, eventData)
+                if perfect then
+                    AddParticles(game, hitX, hitY,
+                        result.kind == "mechanism" and { 245, 205, 105 } or { 255, 225, 130 }, 15)
+                end
                 if result.kind == "mechanism" then
                     EmitEvent(game, "projectile_reflect", eventData)
                     EmitEvent(game, "boss_mechanism_progress", {
@@ -803,10 +811,6 @@ local function ResolveParries(game)
                     game.projectiles = {}
                     EmitEvent(game, "boss_phase_changed", { phase = 2, x = enemy.x, y = enemy.y })
                     SetMessage(game, "第二阶段 - 诅咒显形", 1.2)
-                else
-                    SetMessage(game,
-                        result.damage > 0 and FormatParryMessage(perfect, result.damage) or "防御成功 - Boss 无效",
-                        0.65)
                 end
             end
         else
@@ -814,16 +818,15 @@ local function ResolveParries(game)
             if parried then
                 parriedAnything = true
                 parriedMelee = true
-                EmitEvent(game, perfect and "perfect_parry" or "parry_success", {
+                EmitParryResult(game, perfect, {
                     x = hitX, y = hitY, damage = appliedDamage, sourceKind = enemy.kind,
                     originX = game.player.x, originY = game.player.y,
                     directionX = game.player.parryDirectionX, directionY = game.player.parryDirectionY,
                 })
-                AddParticles(game, hitX, hitY, { 115, 240, 255 }, 15)
-                local rewarded = AddGaugeProgress(game, gain, hitX, hitY)
-                if not rewarded then
-                    SetMessage(game, FormatParryMessage(perfect, appliedDamage), 0.65)
+                if perfect then
+                    AddParticles(game, hitX, hitY, { 255, 225, 130 }, 15)
                 end
+                AddGaugeProgress(game, gain, hitX, hitY)
             end
         end
     end
@@ -843,14 +846,13 @@ local function ResolveParries(game)
                 directionX = game.player.parryDirectionX,
                 directionY = game.player.parryDirectionY,
             }
-            EmitEvent(game, perfect and "perfect_parry" or "parry_success", eventData)
+            EmitParryResult(game, perfect, eventData)
             EmitEvent(game, "projectile_reflect", eventData)
             CrystalAbilities.OnProjectileReflected(game, projectile, perfect)
-            AddParticles(game, hitX, hitY, { 115, 240, 255 }, 11)
-            local rewarded = AddGaugeProgress(game, gain, hitX, hitY)
-            if not rewarded then
-                SetMessage(game, "反射成功", 0.65)
+            if perfect then
+                AddParticles(game, hitX, hitY, { 255, 225, 130 }, 11)
             end
+            AddGaugeProgress(game, gain, hitX, hitY)
         end
     end
     if parriedAnything then

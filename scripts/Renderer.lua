@@ -9,8 +9,11 @@ local LUMINOUS_WRAITH_SPRITE_PATH = "image/luminous_wraith_solid_alpha_202607181
 local STONE_SPRITE_PATH = "image/stone_monster_rolling_20260718145411.png"
 local MUSHROOM_SPRITE_PATH = "image/dark_spore_mushroom_20260718151718.png"
 local DANDELION_SPRITE_PATH = "image/dark_dandelion_turret_20260718153010.png"
+local PURPLE_ORB_SPRITE_PATH = "image/toxic_purple_fluorescent_orb_20260718155838.png"
+local TOXIC_MOSS_SPRITE_PATH = "image/low_toxic_purple_moss_20260718161117.png"
 local SPAWN_ROOM_GUIDE_SPRITE_PATH = "image/spawn_room_wasd_floor_guide_20260718145203.png"
 local SPAWN_ROOM_PARRY_GUIDE_SPRITE_PATH = "image/spawn_room_left_click_parry_chalk_20260718151041.png"
+local PERFECT_STREAK_LIGHTNING_PATH = "image/ui/lightning.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
@@ -35,12 +38,21 @@ local mushroomImageHeight = 1
 local dandelionImageHandle = 0
 local dandelionImageWidth = 1
 local dandelionImageHeight = 1
+local purpleOrbImageHandle = 0
+local purpleOrbImageWidth = 1
+local purpleOrbImageHeight = 1
+local toxicMossImageHandle = 0
+local toxicMossImageWidth = 1
+local toxicMossImageHeight = 1
 local spawnRoomGuideImageHandle = 0
 local spawnRoomGuideImageWidth = 1
 local spawnRoomGuideImageHeight = 1
 local spawnRoomParryGuideImageHandle = 0
 local spawnRoomParryGuideImageWidth = 1
 local spawnRoomParryGuideImageHeight = 1
+local perfectStreakLightningImageHandle = 0
+local perfectStreakLightningImageWidth = 1
+local perfectStreakLightningImageHeight = 1
 ---@type SpineInstance|nil
 local playerSpine = nil
 ---@type string|nil
@@ -169,6 +181,40 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
+    local purpleOrbLoaded = true
+    purpleOrbImageHandle = nvgCreateImage(ctx, PURPLE_ORB_SPRITE_PATH, 0)
+    if purpleOrbImageHandle == nil or purpleOrbImageHandle <= 0 then
+        purpleOrbImageHandle = 0
+        purpleOrbLoaded = false
+        print("WARNING: Failed to load purple orb sprite: " .. PURPLE_ORB_SPRITE_PATH .. "; using vector fallback")
+    else
+        purpleOrbImageWidth, purpleOrbImageHeight = nvgImageSize(ctx, purpleOrbImageHandle)
+        if purpleOrbImageWidth <= 0 or purpleOrbImageHeight <= 0 then
+            nvgDeleteImage(ctx, purpleOrbImageHandle)
+            purpleOrbImageHandle = 0
+            purpleOrbImageWidth, purpleOrbImageHeight = 1, 1
+            purpleOrbLoaded = false
+            print("WARNING: Purple orb sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
+    local toxicMossLoaded = true
+    toxicMossImageHandle = nvgCreateImage(ctx, TOXIC_MOSS_SPRITE_PATH, 0)
+    if toxicMossImageHandle == nil or toxicMossImageHandle <= 0 then
+        toxicMossImageHandle = 0
+        toxicMossLoaded = false
+        print("WARNING: Failed to load toxic moss sprite: " .. TOXIC_MOSS_SPRITE_PATH .. "; using vector fallback")
+    else
+        toxicMossImageWidth, toxicMossImageHeight = nvgImageSize(ctx, toxicMossImageHandle)
+        if toxicMossImageWidth <= 0 or toxicMossImageHeight <= 0 then
+            nvgDeleteImage(ctx, toxicMossImageHandle)
+            toxicMossImageHandle = 0
+            toxicMossImageWidth, toxicMossImageHeight = 1, 1
+            toxicMossLoaded = false
+            print("WARNING: Toxic moss sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
     local spawnRoomGuideLoaded = true
     spawnRoomGuideImageHandle = nvgCreateImage(ctx, SPAWN_ROOM_GUIDE_SPRITE_PATH, 0)
     if spawnRoomGuideImageHandle == nil or spawnRoomGuideImageHandle <= 0 then
@@ -203,8 +249,25 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and spawnRoomGuideLoaded
-        and spawnRoomParryGuideLoaded
+    local perfectStreakLightningLoaded = true
+    perfectStreakLightningImageHandle = nvgCreateImage(ctx, PERFECT_STREAK_LIGHTNING_PATH, 0)
+    if perfectStreakLightningImageHandle == nil or perfectStreakLightningImageHandle <= 0 then
+        perfectStreakLightningImageHandle = 0
+        perfectStreakLightningLoaded = false
+        print("WARNING: Failed to load perfect streak lightning: " .. PERFECT_STREAK_LIGHTNING_PATH)
+    else
+        perfectStreakLightningImageWidth, perfectStreakLightningImageHeight = nvgImageSize(ctx, perfectStreakLightningImageHandle)
+        if perfectStreakLightningImageWidth <= 0 or perfectStreakLightningImageHeight <= 0 then
+            nvgDeleteImage(ctx, perfectStreakLightningImageHandle)
+            perfectStreakLightningImageHandle = 0
+            perfectStreakLightningImageWidth, perfectStreakLightningImageHeight = 1, 1
+            perfectStreakLightningLoaded = false
+            print("WARNING: Perfect streak lightning has invalid dimensions")
+        end
+    end
+
+    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and spawnRoomGuideLoaded
+        and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded
 end
 
 function Renderer.UnloadAssets(ctx)
@@ -246,6 +309,16 @@ function Renderer.UnloadAssets(ctx)
     end
     dandelionImageHandle = 0
     dandelionImageWidth, dandelionImageHeight = 1, 1
+    if purpleOrbImageHandle ~= nil and purpleOrbImageHandle > 0 then
+        nvgDeleteImage(ctx, purpleOrbImageHandle)
+    end
+    purpleOrbImageHandle = 0
+    purpleOrbImageWidth, purpleOrbImageHeight = 1, 1
+    if toxicMossImageHandle ~= nil and toxicMossImageHandle > 0 then
+        nvgDeleteImage(ctx, toxicMossImageHandle)
+    end
+    toxicMossImageHandle = 0
+    toxicMossImageWidth, toxicMossImageHeight = 1, 1
     if spawnRoomGuideImageHandle ~= nil and spawnRoomGuideImageHandle > 0 then
         nvgDeleteImage(ctx, spawnRoomGuideImageHandle)
     end
@@ -256,6 +329,11 @@ function Renderer.UnloadAssets(ctx)
     end
     spawnRoomParryGuideImageHandle = 0
     spawnRoomParryGuideImageWidth, spawnRoomParryGuideImageHeight = 1, 1
+    if perfectStreakLightningImageHandle ~= nil and perfectStreakLightningImageHandle > 0 then
+        nvgDeleteImage(ctx, perfectStreakLightningImageHandle)
+    end
+    perfectStreakLightningImageHandle = 0
+    perfectStreakLightningImageWidth, perfectStreakLightningImageHeight = 1, 1
 end
 
 local function Lerp(a, b, t)
@@ -383,36 +461,12 @@ local function DrawDoor(ctx, arena, direction, isOpen, time)
     end
 end
 
-local function DrawSpawnRoomFloorAtmosphere(ctx, width, height, game, arena)
+local function DrawSpawnRoomWallLights(ctx, width, height, game, arena)
     if game.room == nil or not game.room.isBirthRoom then
         return
     end
 
-    local centerX, centerY, scale = Renderer.WorldToScreen(width, height, 0.5, 0.47)
-    local radius = 128 * scale
-    nvgBeginPath(ctx)
-    nvgCircle(ctx, centerX, centerY, radius)
-    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, radius * 0.12, radius,
-        nvgRGBA(236, 199, 128, 30), nvgRGBA(66, 42, 88, 0)))
-    nvgFill(ctx)
-
-    nvgBeginPath(ctx)
-    nvgCircle(ctx, centerX, centerY, radius * 0.58)
-    nvgStrokeWidth(ctx, math.max(1, 1.5 * scale))
-    StrokeColor(ctx, { 226, 188, 119 }, 65)
-    nvgStroke(ctx)
-
-    for _, angle in ipairs({ 0, math.pi * 0.5, math.pi, math.pi * 1.5 }) do
-        local innerRadius = radius * 0.66
-        local outerRadius = radius * 0.82
-        nvgBeginPath(ctx)
-        nvgMoveTo(ctx, centerX + math.cos(angle) * innerRadius, centerY + math.sin(angle) * innerRadius)
-        nvgLineTo(ctx, centerX + math.cos(angle) * outerRadius, centerY + math.sin(angle) * outerRadius)
-        nvgStrokeWidth(ctx, math.max(1, 2 * scale))
-        StrokeColor(ctx, { 142, 197, 210 }, 58)
-        nvgStroke(ctx)
-    end
-
+    local _, _, scale = Renderer.WorldToScreen(width, height, 0.5, 0.47)
     local pulse = 0.62 + 0.38 * math.sin(game.time * 2.2)
     for _, light in ipairs({
         { x = arena.left + (arena.right - arena.left) * 0.14, y = arena.top + 24 },
@@ -460,7 +514,7 @@ local function DrawArena(ctx, width, height, game)
         nvgStroke(ctx)
     end
 
-    DrawSpawnRoomFloorAtmosphere(ctx, width, height, game, arena)
+    DrawSpawnRoomWallLights(ctx, width, height, game, arena)
 
     -- Tall back wall makes the upper wall face visible in the 2.5D view.
     local backWallGradient = nvgLinearGradient(ctx, 0, arena.wallTop, 0, arena.top,
@@ -957,6 +1011,36 @@ local function DrawSpriteDandelion(ctx, x, y, enemy, time, scale)
     nvgRestore(ctx)
 end
 
+local function GetPurpleOrbSpriteHeight(scale)
+    return 44 * scale
+end
+
+local function DrawSpritePurpleOrb(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetPurpleOrbSpriteHeight(scale)
+    local displayWidth = displayHeight * purpleOrbImageWidth / purpleOrbImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 6 * scale
+    local shakeX, shakeY, rotation = 0, 0, 0
+
+    if enemy.state == "telegraph" then
+        local attack = EnemyConfig.purple_orb.attack
+        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
+        local jitter = math.sin(time * 68 + enemy.id * 1.71) * progress
+        shakeX = jitter * 1.5 * scale
+        shakeY = math.cos(time * 59 + enemy.id * 0.83) * progress * 0.7 * scale
+        rotation = jitter * 0.045
+    end
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x + shakeX, y + shakeY)
+    nvgRotate(ctx, rotation)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, purpleOrbImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
 local function DrawBlueSwarm(ctx, x, y, size, scale, time, color, secondary)
     local centerY = y - size * 0.58
     for index = 1, 12 do
@@ -1125,6 +1209,23 @@ local function DrawOrb(ctx, x, y, size, scale, color, secondary, outline)
     end
 end
 
+local function DrawSpriteToxicMoss(ctx, x, y, enemy, time, scale)
+    local displayHeight = 38 * scale
+    local displayWidth = displayHeight * toxicMossImageWidth / toxicMossImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight * 0.6
+    local pulse = math.sin(time * 5.2 + enemy.id * 0.91)
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x + pulse * 0.45 * scale, y + math.cos(time * 4.4 + enemy.id) * 0.22 * scale)
+    nvgScale(ctx, 1 + pulse * 0.012, 1 - pulse * 0.01)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, toxicMossImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
 local function DrawMoss(ctx, x, y, size, scale, color, secondary, outline)
     nvgBeginPath(ctx)
     nvgEllipse(ctx, x, y - size * 0.08, size * 0.7, size * 0.24)
@@ -1192,7 +1293,17 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
             DrawDandelion(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
         end
     elseif enemy.kind == "purple_orb" then
-        DrawOrb(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        if purpleOrbImageHandle ~= nil and purpleOrbImageHandle > 0 then
+            DrawSpritePurpleOrb(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawOrb(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        end
+    elseif enemy.kind == "toxic_moss" then
+        if toxicMossImageHandle ~= nil and toxicMossImageHandle > 0 then
+            DrawSpriteToxicMoss(ctx, x, y, enemy, time, scale)
+        else
+            DrawMoss(ctx, x, y, size, scale, visual.primary, visual.secondary, visual.outline)
+        end
     else
         DrawMoss(ctx, x, y, size, scale, visual.primary, visual.secondary, visual.outline)
     end
@@ -1213,6 +1324,8 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         healthY = y - GetMushroomSpriteHeight(scale) - 4 * scale
     elseif enemy.kind == "dandelion" and dandelionImageHandle ~= nil and dandelionImageHandle > 0 then
         healthY = y - GetDandelionSpriteHeight(scale) - 4 * scale
+    elseif enemy.kind == "purple_orb" and purpleOrbImageHandle ~= nil and purpleOrbImageHandle > 0 then
+        healthY = y - GetPurpleOrbSpriteHeight(scale) - 4 * scale
     end
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
     nvgBeginPath(ctx)
@@ -1650,6 +1763,61 @@ local function DrawFeedbackFlash(ctx, width, height, feedback)
     nvgFill(ctx)
 end
 
+local function DrawPerfectStreak(ctx, width, height, feedback)
+    local display = Feedback.GetPerfectStreakDisplay(feedback)
+    if display == nil or perfectStreakLightningImageHandle == nil or perfectStreakLightningImageHandle <= 0 then
+        return
+    end
+
+    local remaining = Clamp(display.life / math.max(0.001, display.maxLife), 0, 1)
+    local elapsed = 1 - remaining
+    local iconSize = Clamp(math.min(width, height) * 0.078, 34, 54)
+    local visibleCount = math.min(display.count, 10)
+    local centerX = width * 0.5
+    local centerY = Clamp(height * 0.31, 156, 230)
+    local alpha = math.floor(255 * math.min(1, remaining * 2.5))
+
+    local glow = nvgRadialGradient(ctx, centerX, centerY, iconSize * 0.22, iconSize * 2.35,
+        nvgRGBA(255, 230, 130, math.floor(alpha * 0.25)), nvgRGBA(255, 195, 85, 0))
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, iconSize * 2.35)
+    nvgFillPaint(ctx, glow)
+    nvgFill(ctx)
+
+    local focusProgress = Clamp(elapsed / 0.18, 0, 1)
+    local focusScale = 1 + (1 - focusProgress) * 0.42
+    for index = 1, visibleCount do
+        local slot = index - (visibleCount + 1) * 0.5
+        local x = centerX + slot * iconSize * 0.56
+        local y = centerY + slot * slot * iconSize * 0.026
+        local isFocus = index == display.focusIndex
+        local jitter = isFocus and (1 - focusProgress) * 4.2 or 0
+        local jitterX = jitter * math.sin((feedback.time or 0) * 155 + index * 2.7)
+        local jitterY = jitter * math.cos((feedback.time or 0) * 193 + index * 1.9) * 0.55
+        local size = iconSize * (isFocus and focusScale or 1)
+
+        nvgSave(ctx)
+        nvgTranslate(ctx, x + jitterX, y + jitterY)
+        nvgRotate(ctx, slot * math.rad(7))
+        nvgBeginPath(ctx)
+        nvgRect(ctx, -size * 0.5, -size * 0.5, size, size)
+        nvgFillPaint(ctx, nvgImagePatternTinted(ctx, -size * 0.5, -size * 0.5, size, size, 0,
+            perfectStreakLightningImageHandle, nvgRGBA(255, 226, 120, alpha)))
+        nvgFill(ctx)
+        nvgRestore(ctx)
+    end
+
+    if display.count > 10 then
+        nvgFontFace(ctx, "sans")
+        nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFontSize(ctx, 15)
+        nvgFillColor(ctx, nvgRGBA(12, 10, 18, math.floor(alpha * 0.82)))
+        nvgText(ctx, centerX + 1, centerY + iconSize * 0.82 + 1, "x" .. tostring(display.count), nil)
+        nvgFillColor(ctx, nvgRGBA(255, 241, 187, alpha))
+        nvgText(ctx, centerX, centerY + iconSize * 0.82, "x" .. tostring(display.count), nil)
+    end
+end
+
 local function DrawChestPauseDim(ctx, width, height, game)
     if game.state ~= "chest_select" then
         return
@@ -1821,6 +1989,7 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     BossRenderer.DrawFog(ctx, width, height, boss, game.player, Renderer.WorldToScreen)
 
     DrawFeedbackFlash(ctx, width, height, feedback)
+    DrawPerfectStreak(ctx, width, height, feedback)
     DrawChestPauseDim(ctx, width, height, game)
     DrawMinimap(ctx, width, height, game)
 end

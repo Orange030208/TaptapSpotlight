@@ -43,6 +43,14 @@ return {
         textColor = { 255, 244, 190 },
         textSize = 25,
     },
+    perfectStreak = {
+        displayDuration = 0.82,
+        iconLimit = 10,
+        shakeBase = 10,
+        shakePerStack = 0.70,
+        shakeMax = 16,
+        shakeDuration = 0.15,
+    },
     luminousWraithHit = {
         burstKind = "wraith_touch",
         burstColor = { 218, 255, 86 },

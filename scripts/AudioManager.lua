@@ -104,7 +104,7 @@ function AudioManager.Update(dt)
     PruneVoices()
 end
 
-function AudioManager.Play(name)
+function AudioManager.Play(name, options)
     if audioScene == nil then
         return false
     end
@@ -115,9 +115,12 @@ function AudioManager.Play(name)
         return false
     end
 
-    local lastPlayed = lastPlayedAt[name]
-    if lastPlayed ~= nil and elapsed - lastPlayed < definition.cooldown then
-        return false
+    local bypassCooldown = options ~= nil and options.bypassCooldown == true
+    if not bypassCooldown then
+        local lastPlayed = lastPlayedAt[name]
+        if lastPlayed ~= nil and elapsed - lastPlayed < definition.cooldown then
+            return false
+        end
     end
     lastPlayedAt[name] = elapsed
 
@@ -129,20 +132,33 @@ function AudioManager.Play(name)
         end
     end
 
-    local pitch = definition.pitchMin + math.random() * (definition.pitchMax - definition.pitchMin)
+    local pitch = options ~= nil and options.pitch
+        or (definition.pitchMin + math.random() * (definition.pitchMax - definition.pitchMin))
+    local gain = options ~= nil and options.gain or definition.gain
     local frequency = math.max(1, sound.frequency) * pitch
     local node = audioScene:CreateChild("SFX_" .. name)
     local source = node:CreateComponent("SoundSource")
     source:SetSoundType(SOUND_EFFECT)
-    source:Play(sound, frequency, definition.gain * masterGain, 0)
+    source:Play(sound, frequency, gain * masterGain, 0)
     source:SetAutoRemoveMode(REMOVE_NODE)
     table.insert(activeVoices, { node = node, source = source })
     return true
 end
 
+local function PlayPerfectStreak(streak)
+    local step = math.max(0, math.min(9, (tonumber(streak) or 1) - 1))
+    return AudioManager.Play("perfect_parry", {
+        bypassCooldown = true,
+        pitch = math.min(1.43, 1.02 + step * 0.045),
+        gain = math.min(0.90, 0.76 + step * 0.014),
+    })
+end
+
 function AudioManager.ProcessEvents(events)
     for _, event in ipairs(events or {}) do
-        if event.name == "combo_tier_up" then
+        if event.name == "perfect_parry" then
+            PlayPerfectStreak(event.data ~= nil and event.data.perfectStreak or 1)
+        elseif event.name == "combo_tier_up" then
             local tier = event.data ~= nil and event.data.tier or 0
             AudioManager.Play("combo_tier_" .. tostring(tier))
         else

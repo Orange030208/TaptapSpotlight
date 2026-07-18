@@ -32,7 +32,7 @@ end
 
 assert(EnemyConfig.soot.attackRangeMeters == 5)
 assert(EnemyConfig.tree.attackRangeMeters == 8)
-assert(EnemyConfig.mushroom.attackRangeMeters == EnemyConfig.purple_orb.attackRangeMeters)
+assert(EnemyConfig.mushroom.attackRangeMeters == 8)
 assert(EnemyConfig.mushroom.moveSpeed <= 0.1, "mushroom movement must stay low")
 assert(EnemyConfig.mushroom.attack.repeatInterval == 0.5, "mushroom must fire every 0.5 seconds")
 assert(EnemyConfig.mushroom.projectile.count == 1, "mushroom must fire one spore")
