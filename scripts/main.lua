@@ -768,11 +768,6 @@ local function CreateHud()
                 children = { healthPanel, gaugePanel },
             },
             UI.Panel {
-                position = "absolute", top = 14, right = 16,
-                width = "100%", alignItems = "flex-end", gap = 8,
-                pointerEvents = "box-none", children = { comboPanel, insightPanel },
-            },
-            UI.Panel {
                 position = "absolute", top = 30, left = 0, right = 0,
                 alignItems = "center", pointerEvents = "none", children = { bossPanel },
             },

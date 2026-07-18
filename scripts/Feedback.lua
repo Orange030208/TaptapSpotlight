@@ -247,6 +247,8 @@ function Feedback.ProcessEvents(state, events)
             local profile = FeedbackConfig.bossAttack[attack]
             if profile ~= nil then
                 ApplyWorldProfile(state, profile, data, nil)
+            elseif data ~= nil and data.sourceKind == "thorns" then
+                ApplyWorldProfile(state, FeedbackConfig.bossAttack.quake, data, nil)
             end
         elseif name == "boss_phase_changed" then
             ApplyWorldProfile(state, FeedbackConfig.bossPhase, data, "诅咒显形")
