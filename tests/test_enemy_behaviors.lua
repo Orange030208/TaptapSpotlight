@@ -186,12 +186,35 @@ for index = 2, #orbPulseTimes do
 end
 
 local tree = NewEnemy("tree", 0.5, 0.5, 7)
-tree.state, tree.attackSerial, tree.attackX, tree.attackY, tree.attackArc = "active", 1, 1, 0, 180
-player.x, player.y = 0.62, 0.5
-assert(Entities.CollectEnemyHit(tree, player) ~= nil)
+tree.state, tree.attackSerial, tree.attackX, tree.attackY, tree.attackArc = "active", 1, 1, 0, 60
+player.x, player.y = 0.58, 0.5
+assert(Entities.CollectEnemyHit(tree, player) ~= nil, "tree must hit inside its front root cone")
 tree.attackSerial = 2
-player.x = 0.35
-assert(Entities.CollectEnemyHit(tree, player) == nil, "tree's rear must be safe")
+player.x = 0.42
+assert(Entities.CollectEnemyHit(tree, player) ~= nil, "tree must hit inside its rear root cone")
+tree.attackSerial = 3
+player.x, player.y = 0.5, 0.58
+assert(Entities.CollectEnemyHit(tree, player) == nil, "tree's 60 degree root cones must not hit beside it")
+
+tree = NewEnemy("tree", 0.5, 0.5, 19)
+tree.stateTimer = 0
+player.x, player.y = 0.58, 0.5
+local treeSlamTimes = {}
+local elapsedTree = 0
+local lastTreeSerial = tree.attackSerial
+for _ = 1, 600 do
+    Entities.UpdateEnemy(tree, player, 0.01, function() end)
+    if tree.attackSerial ~= lastTreeSerial then
+        table.insert(treeSlamTimes, elapsedTree)
+        lastTreeSerial = tree.attackSerial
+    end
+    elapsedTree = elapsedTree + 0.01
+end
+assert(#treeSlamTimes >= 3, "tree must repeatedly slam its roots")
+for index = 2, #treeSlamTimes do
+    local cadence = treeSlamTimes[index] - treeSlamTimes[index - 1]
+    assert(math.abs(cadence - 1.5) <= 0.021, "tree root slam cadence must be 1.5 seconds")
+end
 
 local stone = NewEnemy("stone", 0.5, 0.5, 8)
 stone.state, stone.attackSerial = "dash", 1

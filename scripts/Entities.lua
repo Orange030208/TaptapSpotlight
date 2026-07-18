@@ -318,6 +318,20 @@ local function IsInsideAttackArc(enemy, player, range, arc)
     return Dot(dx / distance, dy / distance, enemy.attackX, enemy.attackY) >= math.cos(math.rad(arc * 0.5))
 end
 
+-- Tree root impact zones:
+--   [rear 60 degree cone] <- tree -> [front 60 degree cone]
+-- Both cones use the same attack serial, so one root slam can damage the player only once.
+local function IsInsideTreeSwingArc(enemy, player, range, arc)
+    local dx = player.x - enemy.x
+    local dy = player.y - enemy.y
+    local distance = Length(dx, dy)
+    if distance > range + player.radius or distance <= 0.0001 then
+        return distance <= 0.0001
+    end
+    local directionDot = Dot(dx / distance, dy / distance, enemy.attackX, enemy.attackY)
+    return math.abs(directionDot) >= math.cos(math.rad(arc * 0.5))
+end
+
 function Entities.IsEnemyInTrackingRange(enemy, player)
     local spec = EnemyConfig[enemy.kind]
     local range = spec.trackingRange or EnemyConfig.defaultTrackingRange
@@ -380,7 +394,7 @@ local function BeginTelegraph(enemy, player, spec)
         enemy.facing = enemy.attackX < 0 and "left" or "right"
     end
     if spec.behavior == "tree_swing" then
-        enemy.attackArc = math.random() < 0.5 and attack.narrowArc or attack.wideArc
+        enemy.attackArc = attack.arc or 60
     else
         enemy.attackArc = attack.arc or 360
     end
@@ -576,7 +590,10 @@ function Entities.CollectEnemyHit(enemy, player)
 
     if enemy.state == "active" and (behavior == "tree_swing" or behavior == "melee_arc")
         and enemy.attackHitSerial ~= enemy.attackSerial
-        and IsInsideAttackArc(enemy, player, spec.attack.range, enemy.attackArc) then
+        and (behavior == "tree_swing"
+            and IsInsideTreeSwingArc(enemy, player, spec.attack.range, enemy.attackArc)
+            or behavior == "melee_arc"
+            and IsInsideAttackArc(enemy, player, spec.attack.range, enemy.attackArc)) then
         enemy.attackHitSerial = enemy.attackSerial
         return { amount = spec.touchDamage, sourceKind = enemy.kind }
     end
@@ -720,7 +737,10 @@ function Entities.TryOrbitGuardEnemy(guard, enemy, player, damage)
         canBlock = enemy.attackHitSerial ~= enemy.attackSerial and IsCircleTouch(enemy, guard)
     elseif (behavior == "tree_swing" or behavior == "melee_arc") and enemy.state == "active" then
         canBlock = enemy.attackHitSerial ~= enemy.attackSerial
-            and IsInsideAttackArc(enemy, guard, spec.attack.range, enemy.attackArc)
+            and (behavior == "tree_swing"
+                and IsInsideTreeSwingArc(enemy, guard, spec.attack.range, enemy.attackArc)
+                or behavior == "melee_arc"
+                and IsInsideAttackArc(enemy, guard, spec.attack.range, enemy.attackArc))
     elseif behavior == "aoe_pulse" and enemy.state == "active" then
         canBlock = enemy.attackHitSerial ~= enemy.attackSerial
             and IsInRange(guard, enemy, spec.attack.range + guard.radius)

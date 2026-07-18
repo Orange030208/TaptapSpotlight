@@ -27,22 +27,24 @@ assert(imagePaths[2] == "image/soot_monster.png")
 assert(imagePaths[3] == "image/blue_swarm.png")
 assert(imagePaths[4] == "image/shadow_wraith.png")
 assert(imagePaths[5] == "image/hard_slime.png")
-assert(imagePaths[6] == "image/stone_golem.png")
-assert(imagePaths[7] == "image/spore_mushroom.png")
-assert(imagePaths[8] == "image/dark_dandelion.png")
-assert(imagePaths[9] == "image/purple_glow_orb.png")
-assert(imagePaths[10] == "image/toxic_moss.png")
-assert(imagePaths[11] == "image/projectile_spore.png")
-assert(imagePaths[12] == "image/projectile_seed.png")
-assert(imagePaths[13] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
-assert(imagePaths[14] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
-assert(imagePaths[15] == "image/ui/lightning.png", "perfect streak lightning must load once with the renderer assets")
+assert(imagePaths[6] == "image/tree_wraith.png")
+assert(imagePaths[7] == "image/stone_golem.png")
+assert(imagePaths[8] == "image/spore_mushroom.png")
+assert(imagePaths[9] == "image/dark_dandelion.png")
+assert(imagePaths[10] == "image/purple_glow_orb.png")
+assert(imagePaths[11] == "image/toxic_moss.png")
+assert(imagePaths[12] == "image/projectile_spore.png")
+assert(imagePaths[13] == "image/projectile_seed.png")
+assert(imagePaths[14] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
+assert(imagePaths[15] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
+assert(imagePaths[16] == "image/ui/lightning.png", "perfect streak lightning must load once with the renderer assets")
 
 Renderer.UnloadAssets({})
 
 local scaleCalls = {}
 local rotationCalls = {}
 local radialGradients = {}
+local rootBezierCalls = 0
 local noop = function() end
 setmetatable(_G, {
     __index = function(_, name)
@@ -63,6 +65,9 @@ end
 nvgRadialGradient = function(_, _, _, _, _, innerColor, outerColor)
     table.insert(radialGradients, { inner = innerColor, outer = outerColor })
     return {}
+end
+nvgBezierTo = function()
+    rootBezierCalls = rootBezierCalls + 1
 end
 
 assert(Renderer.LoadAssets({}))
@@ -121,6 +126,18 @@ scaleCount = #scaleCalls
 game.enemies = { hardSlime }
 Renderer.Draw({}, game, 960, 540, nil)
 assert(#scaleCalls > scaleCount, "hard slime must compress before its melee arc attack")
+
+local tree = {
+    kind = "tree", id = 20, x = 0.5, y = 0.5,
+    vx = 0, vy = 0, facing = "right", attackX = 1, attackY = 0, attackArc = 60,
+    state = "telegraph", stateTimer = 0.275, hp = 3, maxHp = 3, radius = 0.055,
+}
+local treeRootCount = rootBezierCalls
+scaleCount = #scaleCalls
+game.enemies = { tree }
+Renderer.Draw({}, game, 960, 540, nil)
+assert(#scaleCalls > scaleCount, "tree wraith must render as a sprite")
+assert(rootBezierCalls >= treeRootCount + 2, "tree must draw roots on both its front and rear sides")
 
 local stone = {
     kind = "stone", id = 2, x = 0.5, y = 0.5,
