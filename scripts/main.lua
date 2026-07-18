@@ -6,6 +6,7 @@ local GameConfig = require "Data.GameConfig"
 local Feedback = require "Feedback"
 local Game = require "Game"
 local Renderer = require "Renderer"
+local CrystalRenderer = require "CrystalRenderer"
 
 ---@type any
 local nvgContext = nil
@@ -42,7 +43,6 @@ local overdriveLabel = nil
 ---@type Widget|nil
 local buffLabel = nil
 ---@type Widget|nil
-local abilityLabel = nil
 ---@type ProgressBar|nil
 local gaugeProgressBar = nil
 ---@type Widget|nil
@@ -105,17 +105,17 @@ local function RefreshCanvasMetrics()
 end
 
 local function ChooseChestOption(index)
-    if game ~= nil and Game.SelectUpgrade(game, index) then
+    if game ~= nil and Game.SelectCrystal(game, index) then
         hudTimer = 1.0
     end
 end
 
-local function TryParryAtLogicalPosition(screenX, screenY)
+local function TryParryAtLogicalPosition(screenX, screenY, allowBirthTutorial)
     if game == nil then
         return false
     end
     local worldX, worldY = Renderer.ScreenToWorld(logicalWidth, logicalHeight, screenX, screenY)
-    return Game.TryParry(game, worldX, worldY)
+    return Game.TryParry(game, worldX, worldY, allowBirthTutorial)
 end
 
 local function TryParryAtCursor()
@@ -386,7 +386,7 @@ local function CreateChestCard(index)
         children = { icon },
     }
     local title = UI.Label {
-        text = "强化名称",
+        text = "水晶能力",
         width = "100%",
         fontSize = 21,
         fontWeight = "bold",
@@ -398,7 +398,7 @@ local function CreateChestCard(index)
         textShadow = { offsetX = 0, offsetY = 2, blur = 2, color = { 0, 0, 0, 190 } },
     }
     local description = UI.Label {
-        text = "强化说明",
+        text = "能力说明",
         width = "100%",
         fontSize = 13,
         textAlign = "center",
@@ -662,13 +662,6 @@ local function CreateHud()
         whiteSpace = "normal",
         fontColor = { 132, 244, 184, 240 },
     }
-    abilityLabel = UI.Label {
-        text = "暂无强化",
-        width = "100%",
-        fontSize = 10,
-        whiteSpace = "normal",
-        fontColor = { 210, 191, 255, 235 },
-    }
     bossNameLabel = UI.Label {
         text = "晦暗低鸣", width = "100%", fontSize = 16, fontWeight = "bold",
         letterSpacing = 2, textAlign = "center", fontColor = COLORS.cream,
@@ -776,9 +769,6 @@ local function CreateHud()
         children = {
             UI.Label { text = "临时回响", fontSize = 9, letterSpacing = 1, fontColor = { 112, 225, 175, 220 } },
             buffLabel,
-            UI.Divider { width = "100%", color = { 255, 255, 255, 24 }, spacing = 1 },
-            UI.Label { text = "遗物构筑", fontSize = 9, letterSpacing = 1, fontColor = { 183, 154, 243, 220 } },
-            abilityLabel,
         },
     }
 
@@ -856,7 +846,7 @@ local function CreateHud()
                 height = "100%",
                 children = {
                     UI.Label {
-                        text = "遗物抉择  ·  选择一份回响",
+                        text = "水晶能力  ·  选择一枚晶核",
                         position = "absolute",
                         top = 22,
                         left = 0,
@@ -1098,79 +1088,7 @@ local function RefreshChestPanel()
     if chestPanel == nil or game == nil then
         return
     end
-
-    local isChoosing = game.state == "chest_select"
-    chestPanel:SetVisible(isChoosing)
-    if not isChoosing then
-        if chestPanelWasVisible then
-            for _, card in ipairs(chestCards) do
-                card:StopAnimation()
-                card:SetStyle({ opacity = 1.0, scale = 1.0, translateY = 0 })
-                card:SetState({ hovered = false, pressed = false, hoverRotation = 0 })
-                if card.state.floatPanel ~= nil then
-                    card.state.floatPanel:StopAnimation()
-                    card.state.floatPanel:SetStyle({ translateY = 0 })
-                end
-                SetChestCardRest(card)
-            end
-        end
-        chestPanelWasVisible = false
-        return
-    end
-
-    for index = 1, 3 do
-        local option = game.chestOptions and game.chestOptions[index] or nil
-        local card = chestCards[index]
-        card:SetVisible(option ~= nil)
-        if option ~= nil then
-            local color = option.color or { 236, 202, 105 }
-            if not chestPanelWasVisible or card.state.optionId ~= option.id then
-                local borderColor = { color[1], color[2], color[3], 220 }
-                card:SetState({
-                    optionId = option.id,
-                    accentColor = color,
-                    borderColor = borderColor,
-                    iconBorderColor = { color[1], color[2], color[3], 190 },
-                    hovered = false,
-                    pressed = false,
-                    hoverRotation = 0,
-                })
-                chestTitleLabels[index]:SetText(option.name)
-                chestDescriptionLabels[index]:SetText(option.description)
-                chestIconLabels[index]:SetText(option.icon or "✦")
-                chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
-                chestIconLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
-                chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
-                chestIconPanels[index]:SetStyle({
-                    borderColor = { color[1], color[2], color[3], 190 },
-                    shadowColor = { color[1], color[2], color[3], 78 },
-                    scale = 1.0,
-                    translateX = 0,
-                    translateY = 0,
-                    rotate = 0,
-                })
-                chestLiftPanels[index]:SetStyle({
-                    scale = 1.0,
-                    translateY = 0,
-                })
-                chestFacePanels[index]:SetStyle({
-                    borderColor = borderColor,
-                    shadowBlur = 18,
-                    shadowOffsetY = 7,
-                    shadowColor = { 0, 0, 0, 175 },
-                    rotate = card.state.idleRotation or 0,
-                })
-                chestFloatPanels[index]:StopAnimation()
-                chestFloatPanels[index]:SetStyle({ translateY = 0 })
-                StartChestCardIdle(card)
-                if not chestPanelWasVisible then
-                    card:StopAnimation()
-                    StartChestCardEntrance(card, index)
-                end
-            end
-        end
-    end
-    chestPanelWasVisible = true
+    chestPanel:SetVisible(false)
 end
 
 local function RefreshStateOverlay()
@@ -1187,7 +1105,7 @@ local function RefreshStateOverlay()
     if game.state == "menu" then
         stateKickerLabel:SetText("绘本奇幻 · 弹反冒险")
         stateTitleLabel:SetText("弹反之室")
-        stateSubtitleLabel:SetText("拨动琴弦般把握节奏，弹回每一枚诅咒，在幽暗房间中收集遗物与回响。")
+        stateSubtitleLabel:SetText("拨动琴弦般把握节奏，弹回每一枚诅咒，在幽暗房间中收集水晶能力与回响。")
         stateActionButton:SetText("踏入房间")
     elseif game.state == "victory" then
         stateKickerLabel:SetText("诅咒已净化 · 回响仍在延续")
@@ -1253,7 +1171,6 @@ local function UpdateHud()
         backgroundColor = combo.overdriveRemaining > 0 and { 57, 24, 49, 235 } or { 20, 24, 41, 225 },
     })
     buffLabel:SetText(hud.buffs == "暂无临时增益" and "暂无回响" or hud.buffs)
-    abilityLabel:SetText(hud.upgrades)
     messagePanel:SetVisible(hud.message ~= "")
     messageLabel:SetText(hud.message)
     gaugeProgressBar:SetValue(hud.gaugeRatio)
@@ -1340,6 +1257,9 @@ function HandleUpdate(eventType, eventData)
     end
 
     local dt = eventData:GetFloat("TimeStep")
+    local cursor = input:GetMousePosition()
+    game.cursorX = cursor.x / devicePixelRatio
+    game.cursorY = cursor.y / devicePixelRatio
     local moveX, moveY = 0, 0
     if input:GetKeyDown(KEY_A) then moveX = moveX - 1 end
     if input:GetKeyDown(KEY_D) then moveX = moveX + 1 end
@@ -1347,12 +1267,14 @@ function HandleUpdate(eventType, eventData)
     if input:GetKeyDown(KEY_S) then moveY = moveY + 1 end
 
     Feedback.Update(feedback, dt)
+    CrystalRenderer.Update(dt)
     local simulationDt = Feedback.GetSimulationDelta(feedback, dt)
     Game.Update(game, simulationDt, moveX, moveY, dt)
     AudioManager.Update(dt)
     local events = Game.ConsumeEvents(game)
     AudioManager.ProcessEvents(events)
     Feedback.ProcessEvents(feedback, events)
+    CrystalRenderer.ProcessEvents(events)
     hudTimer = hudTimer + dt
     if Feedback.GetHudPulse(feedback) > 0 or hudTimer >= 0.08 then
         UpdateHud()
@@ -1401,13 +1323,23 @@ function HandleMouseButtonDown(eventType, eventData)
     if game == nil or eventData:GetInt("Button") ~= MOUSEB_LEFT then
         return
     end
+    local screenX = eventData:GetInt("X") / devicePixelRatio
+    local screenY = eventData:GetInt("Y") / devicePixelRatio
+    if game.state == "chest_select" then
+        local choice = CrystalRenderer.GetChoiceAt(game, logicalWidth, logicalHeight, screenX, screenY)
+        if choice ~= nil then
+            ChooseChestOption(choice)
+        end
+        return
+    end
+    if CrystalRenderer.IsPointerOverStatusIcon(game, logicalWidth, logicalHeight, screenX, screenY) then
+        return
+    end
     if game.state ~= "battle" then
         return
     end
 
-    local screenX = eventData:GetInt("X") / devicePixelRatio
-    local screenY = eventData:GetInt("Y") / devicePixelRatio
-    TryParryAtLogicalPosition(screenX, screenY)
+    TryParryAtLogicalPosition(screenX, screenY, true)
 end
 
 ---@param eventType string
@@ -1425,5 +1357,6 @@ function HandleNanoVGRender(eventType, eventData)
 
     nvgBeginFrame(nvgContext, logicalWidth, logicalHeight, devicePixelRatio)
     Renderer.Draw(nvgContext, game, logicalWidth, logicalHeight, feedback)
+    CrystalRenderer.Draw(nvgContext, game, logicalWidth, logicalHeight)
     nvgEndFrame(nvgContext)
 end

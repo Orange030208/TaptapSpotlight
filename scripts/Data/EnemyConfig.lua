@@ -67,8 +67,9 @@ return {
     stone = {
         behavior = "rolling", hp = 3, radius = 0.052,
         attackRangeMeters = 30, attackRange = MetersToWorld(30),
-        moveSpeed = 0.14, preferredDistance = MetersToWorld(4.5), touchDamage = 1,
-        attack = { interval = 1.95, telegraph = 0.38, active = 0.58, recovery = 0.76, dashSpeed = 1.22, arc = 360 },
+        -- A fast, immediate melee charge: contact during the roll is the only damage window.
+        moveSpeed = 0.26, preferredDistance = MetersToWorld(4.5), touchDamage = 1,
+        attack = { interval = 0.92, telegraph = 0, active = 0.72, recovery = 0.24, dashSpeed = 1.45, arc = 360 },
         visual = Visual({ 93, 100, 121 }, { 159, 169, 190 }, { 39, 42, 57 }),
     },
     mushroom = {

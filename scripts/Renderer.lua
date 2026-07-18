@@ -6,6 +6,8 @@ local BossRenderer = require "BossRenderer"
 local Renderer = {}
 local SOOT_SPRITE_PATH = "image/soot_monster.png"
 local LUMINOUS_WRAITH_SPRITE_PATH = "image/luminous_wraith_solid_alpha_20260718134330.png"
+local STONE_SPRITE_PATH = "image/stone_monster_rolling_20260718145411.png"
+local SPAWN_ROOM_GUIDE_SPRITE_PATH = "image/spawn_room_wasd_floor_guide_20260718145203.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
@@ -21,6 +23,12 @@ local sootImageHeight = 1
 local luminousWraithImageHandle = 0
 local luminousWraithImageWidth = 1
 local luminousWraithImageHeight = 1
+local stoneImageHandle = 0
+local stoneImageWidth = 1
+local stoneImageHeight = 1
+local spawnRoomGuideImageHandle = 0
+local spawnRoomGuideImageWidth = 1
+local spawnRoomGuideImageHeight = 1
 ---@type SpineInstance|nil
 local playerSpine = nil
 ---@type string|nil
@@ -98,7 +106,41 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    return playerLoaded and sootLoaded and luminousWraithLoaded
+    local stoneLoaded = true
+    stoneImageHandle = nvgCreateImage(ctx, STONE_SPRITE_PATH, 0)
+    if stoneImageHandle == nil or stoneImageHandle <= 0 then
+        stoneImageHandle = 0
+        stoneLoaded = false
+        print("WARNING: Failed to load stone sprite: " .. STONE_SPRITE_PATH .. "; using vector fallback")
+    else
+        stoneImageWidth, stoneImageHeight = nvgImageSize(ctx, stoneImageHandle)
+        if stoneImageWidth <= 0 or stoneImageHeight <= 0 then
+            nvgDeleteImage(ctx, stoneImageHandle)
+            stoneImageHandle = 0
+            stoneImageWidth, stoneImageHeight = 1, 1
+            stoneLoaded = false
+            print("WARNING: Stone sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
+    local spawnRoomGuideLoaded = true
+    spawnRoomGuideImageHandle = nvgCreateImage(ctx, SPAWN_ROOM_GUIDE_SPRITE_PATH, 0)
+    if spawnRoomGuideImageHandle == nil or spawnRoomGuideImageHandle <= 0 then
+        spawnRoomGuideImageHandle = 0
+        spawnRoomGuideLoaded = false
+        print("WARNING: Failed to load birth room guide: " .. SPAWN_ROOM_GUIDE_SPRITE_PATH)
+    else
+        spawnRoomGuideImageWidth, spawnRoomGuideImageHeight = nvgImageSize(ctx, spawnRoomGuideImageHandle)
+        if spawnRoomGuideImageWidth <= 0 or spawnRoomGuideImageHeight <= 0 then
+            nvgDeleteImage(ctx, spawnRoomGuideImageHandle)
+            spawnRoomGuideImageHandle = 0
+            spawnRoomGuideImageWidth, spawnRoomGuideImageHeight = 1, 1
+            spawnRoomGuideLoaded = false
+            print("WARNING: Birth room guide has invalid dimensions")
+        end
+    end
+
+    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and spawnRoomGuideLoaded
 end
 
 function Renderer.UnloadAssets(ctx)
@@ -125,6 +167,16 @@ function Renderer.UnloadAssets(ctx)
     end
     luminousWraithImageHandle = 0
     luminousWraithImageWidth, luminousWraithImageHeight = 1, 1
+    if stoneImageHandle ~= nil and stoneImageHandle > 0 then
+        nvgDeleteImage(ctx, stoneImageHandle)
+    end
+    stoneImageHandle = 0
+    stoneImageWidth, stoneImageHeight = 1, 1
+    if spawnRoomGuideImageHandle ~= nil and spawnRoomGuideImageHandle > 0 then
+        nvgDeleteImage(ctx, spawnRoomGuideImageHandle)
+    end
+    spawnRoomGuideImageHandle = 0
+    spawnRoomGuideImageWidth, spawnRoomGuideImageHeight = 1, 1
 end
 
 local function Lerp(a, b, t)
@@ -252,6 +304,53 @@ local function DrawDoor(ctx, arena, direction, isOpen, time)
     end
 end
 
+local function DrawSpawnRoomFloorAtmosphere(ctx, width, height, game, arena)
+    if game.room == nil or not game.room.isBirthRoom then
+        return
+    end
+
+    local centerX, centerY, scale = Renderer.WorldToScreen(width, height, 0.5, 0.47)
+    local radius = 128 * scale
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, radius)
+    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, radius * 0.12, radius,
+        nvgRGBA(236, 199, 128, 30), nvgRGBA(66, 42, 88, 0)))
+    nvgFill(ctx)
+
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, radius * 0.58)
+    nvgStrokeWidth(ctx, math.max(1, 1.5 * scale))
+    StrokeColor(ctx, { 226, 188, 119 }, 65)
+    nvgStroke(ctx)
+
+    for _, angle in ipairs({ 0, math.pi * 0.5, math.pi, math.pi * 1.5 }) do
+        local innerRadius = radius * 0.66
+        local outerRadius = radius * 0.82
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, centerX + math.cos(angle) * innerRadius, centerY + math.sin(angle) * innerRadius)
+        nvgLineTo(ctx, centerX + math.cos(angle) * outerRadius, centerY + math.sin(angle) * outerRadius)
+        nvgStrokeWidth(ctx, math.max(1, 2 * scale))
+        StrokeColor(ctx, { 142, 197, 210 }, 58)
+        nvgStroke(ctx)
+    end
+
+    local pulse = 0.62 + 0.38 * math.sin(game.time * 2.2)
+    for _, light in ipairs({
+        { x = arena.left + (arena.right - arena.left) * 0.14, y = arena.top + 24 },
+        { x = arena.right - (arena.right - arena.left) * 0.14, y = arena.top + 24 },
+    }) do
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, light.x, light.y, 22 * scale)
+        nvgFillPaint(ctx, nvgRadialGradient(ctx, light.x, light.y, 2, 22 * scale,
+            nvgRGBA(255, 205, 126, math.floor(72 * pulse)), nvgRGBA(255, 168, 100, 0)))
+        nvgFill(ctx)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, light.x, light.y, math.max(2, 3 * scale))
+        nvgFillColor(ctx, nvgRGBA(255, 231, 175, math.floor(190 + 45 * pulse)))
+        nvgFill(ctx)
+    end
+end
+
 local function DrawArena(ctx, width, height, game)
     local arena = Renderer.GetArena(width, height)
     local floorGradient = nvgLinearGradient(ctx, 0, arena.top, 0, arena.bottom,
@@ -281,6 +380,8 @@ local function DrawArena(ctx, width, height, game)
         StrokeColor(ctx, { 196, 181, 205 }, 30)
         nvgStroke(ctx)
     end
+
+    DrawSpawnRoomFloorAtmosphere(ctx, width, height, game, arena)
 
     -- Tall back wall makes the upper wall face visible in the 2.5D view.
     local backWallGradient = nvgLinearGradient(ctx, 0, arena.wallTop, 0, arena.top,
@@ -670,6 +771,33 @@ local function DrawSpriteLuminousWraith(ctx, x, y, enemy, time, scale)
     nvgRestore(ctx)
 end
 
+local function GetStoneSpriteHeight(scale)
+    return 44 * scale
+end
+
+local function DrawSpriteStone(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetStoneSpriteHeight(scale)
+    local displayWidth = displayHeight * stoneImageWidth / stoneImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 2 * scale
+    local motionX = enemy.state == "dash" and enemy.dashX or enemy.vx
+    local direction = motionX < -0.001 and -1 or 1
+    local speed = math.sqrt(enemy.vx * enemy.vx + enemy.vy * enemy.vy)
+    local rollSpeed = enemy.state == "dash" and 20 or math.min(5, speed * 20)
+    local centerY = drawY + displayHeight * 0.5
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y)
+    nvgTranslate(ctx, 0, centerY)
+    nvgRotate(ctx, (time * rollSpeed + enemy.id * 0.37) * direction)
+    nvgTranslate(ctx, 0, -centerY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, stoneImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
 local function DrawBlueSwarm(ctx, x, y, size, scale, time, color, secondary)
     local centerY = y - size * 0.58
     for index = 1, 12 do
@@ -887,7 +1015,11 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     elseif enemy.kind == "ghost_a" or enemy.kind == "ghost_b" then
         DrawGhost(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
     elseif enemy.kind == "stone" then
-        DrawStone(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        if stoneImageHandle ~= nil and stoneImageHandle > 0 then
+            DrawSpriteStone(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawStone(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        end
     elseif enemy.kind == "mushroom" then
         DrawMushroom(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
     elseif enemy.kind == "dandelion" then
@@ -908,6 +1040,8 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         healthY = y - GetSootSpriteHeight(scale) - 5 * scale
     elseif enemy.kind == "luminous_wraith" and luminousWraithImageHandle ~= nil and luminousWraithImageHandle > 0 then
         healthY = y - GetLuminousWraithSpriteHeight(scale) - 2 * scale
+    elseif enemy.kind == "stone" and stoneImageHandle ~= nil and stoneImageHandle > 0 then
+        healthY = y - GetStoneSpriteHeight(scale) - 4 * scale
     end
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
     nvgBeginPath(ctx)
@@ -925,6 +1059,10 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
     local x, y, scale = Renderer.WorldToScreen(width, height, projectile.x, projectile.y)
     ---@type number[]
     local color = projectile.owner == "player" and { 125, 238, 255 } or { 255, 135, 205 }
+    if projectile.crystalSplit then
+        color = { 247, 171, 255 }
+    end
+
     if projectile.owner == "enemy" and projectile.style == "spore" then
         color = { 208, 166, 238 }
     elseif projectile.owner == "enemy" and projectile.style == "seed" then
@@ -1012,6 +1150,37 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
     nvgStrokeWidth(ctx, 1.4 * scale)
     StrokeColor(ctx, color, 100)
     nvgStroke(ctx)
+end
+
+local function DrawSpawnRoomGuide(ctx, width, height, game)
+    if game.room == nil or not game.room.isBirthRoom or spawnRoomGuideImageHandle <= 0 then
+        return
+    end
+
+    local guideAlpha = Clamp(game.spawnGuideAlpha or 0, 0, 1)
+    if guideAlpha <= 0 then
+        return
+    end
+
+    local centerX, centerY, scale = Renderer.WorldToScreen(width, height, 0.5, 0.47)
+    local guideWidth = 236 * scale
+    local guideHeight = guideWidth * spawnRoomGuideImageHeight / spawnRoomGuideImageWidth
+    local guideX = centerX - guideWidth * 0.5
+    local guideY = centerY - guideHeight * 0.5
+    local pulse = 0.9 + 0.1 * math.sin(game.time * 2.4)
+
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, guideX - 10 * scale, guideY - 8 * scale,
+        guideWidth + 20 * scale, guideHeight + 16 * scale, 12 * scale)
+    nvgFillPaint(ctx, nvgBoxGradient(ctx, guideX, guideY, guideWidth, guideHeight, 10 * scale, 18 * scale,
+        nvgRGBA(95, 169, 190, math.floor(24 * guideAlpha * pulse)), nvgRGBA(69, 44, 88, 0)))
+    nvgFill(ctx)
+
+    nvgBeginPath(ctx)
+    nvgRect(ctx, guideX, guideY, guideWidth, guideHeight)
+    nvgFillPaint(ctx, nvgImagePatternTinted(ctx, guideX, guideY, guideWidth, guideHeight, 0,
+        spawnRoomGuideImageHandle, nvgRGBA(255, 246, 221, math.floor(214 * guideAlpha * pulse))))
+    nvgFill(ctx)
 end
 
 local function DrawChest(ctx, width, height, chest)
@@ -1411,6 +1580,7 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     nvgTranslate(ctx, shakeX, shakeY)
     nvgTranslate(ctx, offsetX, offsetY)
     DrawArena(ctx, width, height, game)
+    DrawSpawnRoomGuide(ctx, width, height, game)
     if game.state == "intro" then
         DrawSpawnMarkers(ctx, width, height, game)
     end

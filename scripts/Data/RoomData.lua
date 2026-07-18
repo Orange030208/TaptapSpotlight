@@ -4,16 +4,12 @@ return {
     startRoomId = "threshold",
     rooms = {
         threshold = {
-            id = "threshold", name = "门槛之间", mapX = 0, mapY = 0,
+            id = "threshold", name = "初醒之间", mapX = 0, mapY = 0,
+            -- The birth room is deliberately non-combat: it teaches movement before the first encounter.
+            isBirthRoom = true,
             connections = { north = "crossfire", east = "pressure" },
-            spawns = {
-                { x = 0.22, y = 0.31 }, { x = 0.78, y = 0.31 }, { x = 0.5, y = 0.27 },
-                { x = 0.34, y = 0.55 }, { x = 0.66, y = 0.55 },
-            },
-            groups = {
-                { "soot", "mushroom", "blue_swarm" },
-                { "soot", "soot", "mushroom" },
-            },
+            spawns = {},
+            groups = {},
         },
         crossfire = {
             id = "crossfire", name = "交叉火力", mapX = 0, mapY = -1,

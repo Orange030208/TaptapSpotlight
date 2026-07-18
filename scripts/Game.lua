@@ -6,7 +6,8 @@ local PlayerConfig = require "Data.PlayerConfig"
 local ProjectileConfig = require "Data.ProjectileConfig"
 local RoomConfig = require "Data.RoomConfig"
 local RoomData = require "Data.RoomData"
-local UpgradeConfig = require "Data.UpgradeConfig"
+local CrystalConfig = require "Data.CrystalConfig"
+local CrystalAbilities = require "CrystalAbilities"
 local Entities = require "Entities"
 local Boss = require "Boss"
 
@@ -170,6 +171,7 @@ local function AddComboProgress(game, perfect, x, y, canShockwave)
             count = combo.count,
             color = CopyColor(ComboConfig.tiers[combo.tier].color),
         })
+        CrystalAbilities.OnOverdrive(game)
     end
 
     if perfect and canShockwave and combo.tier >= ComboConfig.shockwaveTier then
@@ -237,10 +239,10 @@ local function AddGaugeProgress(game, amount, x, y)
     return rewarded
 end
 
-local function GetAvailableUpgrades(player)
+local function GetAvailableCrystals(player)
     local available = {}
-    for _, definition in ipairs(UpgradeConfig.definitions) do
-        if player.abilities[definition.id] < definition.maxStacks then
+    for _, definition in ipairs(CrystalConfig.definitions) do
+        if player.crystals[definition.id] < definition.maxStacks then
             table.insert(available, definition)
         end
     end
@@ -248,7 +250,7 @@ local function GetAvailableUpgrades(player)
 end
 
 local function CreateChestOptions(player)
-    local available = GetAvailableUpgrades(player)
+    local available = GetAvailableCrystals(player)
     local options = {}
     local count = math.min(3, #available)
     for _ = 1, count do
@@ -262,7 +264,7 @@ local function SpawnChestForEnemy(game, enemy)
     if enemy.kind == "boss" or math.random() > ChestConfig.chance then
         return
     end
-    if #GetAvailableUpgrades(game.player) > 0 then
+    if #GetAvailableCrystals(game.player) > 0 then
         table.insert(game.chests, Entities.NewChest(enemy.x, enemy.y))
     end
 end
@@ -325,6 +327,13 @@ local function EnterRoom(game, roomId, travelDirection)
     local roomState = GetRoomState(game, roomId)
     game.chests = roomState.chests
     game.roomCleared = roomState.cleared
+    local birthTutorialComplete = room.isBirthRoom and roomState.cleared
+    game.spawnGuideAlpha = room.isBirthRoom and not birthTutorialComplete and 1 or 0
+    game.spawnGuideDismissed = not room.isBirthRoom or birthTutorialComplete
+    game.spawnParryGuideAlpha = 0
+    game.spawnParryGuideDismissed = true
+    game.birthTutorialMoved = birthTutorialComplete
+    game.birthTutorialParried = birthTutorialComplete
     PlacePlayerAtEntry(game.player, travelDirection)
 
     if not roomState.visited then
@@ -334,7 +343,7 @@ local function EnterRoom(game, roomId, travelDirection)
     end
 
     local arrivalState = "clear"
-    if not roomState.cleared then
+    if not roomState.cleared and not room.isBirthRoom then
         arrivalState = "intro"
         assert(#room.groups > 0, "Room has no enemy groups: " .. tostring(roomId))
         assert(#room.spawns > 0, "Room has no enemy spawns: " .. tostring(roomId))
@@ -348,9 +357,10 @@ local function EnterRoom(game, roomId, travelDirection)
         end
     end
 
-    game.stateTimer = RoomConfig.introDuration
-    game.message = room.boss and "晦暗低鸣苏醒" or (roomState.cleared and "返回已清理房间" or "识别到敌对目标")
-    game.messageTimer = roomState.cleared and 0.8 or RoomConfig.introDuration
+    game.stateTimer = room.isBirthRoom and 0 or RoomConfig.introDuration
+    game.message = room.isBirthRoom and "" or (room.boss and "晦暗低鸣苏醒"
+        or (roomState.cleared and "返回已清理房间" or "识别到敌对目标"))
+    game.messageTimer = room.isBirthRoom and 0 or (roomState.cleared and 0.8 or RoomConfig.introDuration)
     if game.transition ~= nil then
         game.transition.arrivalState = arrivalState
         game.state = "room_transition"
@@ -387,6 +397,7 @@ local function StartRun(game)
     game.particles = {}
     game.gauge = CreateGauge()
     game.combo = CreateCombo()
+    game.crystalState = CrystalAbilities.NewState()
     game.activeBuffs = {}
     game.currentRoomId = nil
     game.roomStates = {}
@@ -400,6 +411,12 @@ local function StartRun(game)
     game.runTime = 0
     game.message = ""
     game.messageTimer = 0
+    game.spawnGuideAlpha = 0
+    game.spawnGuideDismissed = true
+    game.spawnParryGuideAlpha = 0
+    game.spawnParryGuideDismissed = true
+    game.birthTutorialMoved = false
+    game.birthTutorialParried = false
     game.events = {}
     EnterRoom(game, RoomData.startRoomId, nil)
 end
@@ -420,14 +437,14 @@ end
 local function OpenChest(game, chest)
     local options = CreateChestOptions(game.player)
     if #options == 0 then
-        SetMessage(game, "所有强化均已达到上限", 1.0)
+        SetMessage(game, "所有水晶能力均已获得", 1.0)
         return false
     end
 
     game.stateBeforeChest = game.state
     game.state = "chest_select"
     game.chestOptions = options
-    SetMessage(game, "选择一项强化", 999)
+    SetMessage(game, "选择一枚水晶能力", 999)
     AddParticles(game, chest.x, chest.y, { 255, 215, 100 }, 18)
     EmitEvent(game, "chest_open")
     return true
@@ -581,14 +598,55 @@ local function ResolveProjectileContinuation(game, projectile, enemy, killed)
     projectile.dead = true
 end
 
+local function CompleteBirthTutorial(game)
+    if game.roomCleared then
+        return
+    end
+
+    local roomState = GetRoomState(game, game.currentRoomId)
+    roomState.cleared = true
+    game.roomCleared = true
+    SetMessage(game, "通路已开启", 1.2)
+end
+
+local function UpdateBirthTutorial(game, dt, moveX, moveY)
+    if game.room == nil or not game.room.isBirthRoom or game.roomCleared then
+        return
+    end
+
+    if not game.birthTutorialMoved and (moveX ~= 0 or moveY ~= 0) then
+        game.birthTutorialMoved = true
+        game.spawnGuideDismissed = true
+        game.spawnParryGuideDismissed = false
+        game.spawnParryGuideAlpha = 1
+    end
+    if game.spawnGuideDismissed then
+        game.spawnGuideAlpha = math.max(0, game.spawnGuideAlpha - dt / 0.55)
+    end
+    if game.spawnParryGuideDismissed then
+        game.spawnParryGuideAlpha = math.max(0, game.spawnParryGuideAlpha - dt / 0.55)
+    end
+    if game.birthTutorialMoved and game.birthTutorialParried then
+        CompleteBirthTutorial(game)
+    end
+end
+
+local function TryDamagePlayer(game, amount, invulnerabilityDuration)
+    if CrystalAbilities.TryPreventLethalDamage(game, amount) then
+        return true, true
+    end
+    return Entities.DamagePlayer(game.player, amount, invulnerabilityDuration), false
+end
+
 local function ResolveProjectileContacts(game)
     for _, projectile in ipairs(game.projectiles) do
         if Entities.ProjectileHitsPlayer(projectile, game.player) then
             projectile.dead = true
-            if Entities.DamagePlayer(game.player, ProjectileConfig.playerDamage) then
+            local damaged, saved = TryDamagePlayer(game, ProjectileConfig.playerDamage)
+            if damaged then
                 ResetCombo(game)
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                SetMessage(game, "受到伤害", 0.5)
+                SetMessage(game, saved and "时隙之心 - 时间碎裂" or "受到伤害", 0.8)
                 EmitEvent(game, "player_hurt", {
                     x = game.player.x,
                     y = game.player.y,
@@ -630,22 +688,6 @@ local function ResolveProjectileContacts(game)
     RemoveDeadProjectiles(game)
 end
 
-local function TryPerfectRepair(game)
-    if game.perfectRepairConsumed or game.player.abilities.perfect_repair <= 0 then
-        return false
-    end
-    if not Entities.IsPerfectParry(game.player) then
-        return false
-    end
-
-    game.perfectRepairConsumed = true
-    if Entities.HealPlayer(game.player, 1) then
-        SetMessage(game, "完美招架 - 生命恢复", 0.8)
-        return true
-    end
-    return false
-end
-
 local function GetParryDamage(game, perfect)
     local damage = GaugeConfig.normalDamage
     if perfect then
@@ -665,7 +707,6 @@ local function FormatParryMessage(perfect, damage)
 end
 
 local function AnnounceParryStart(game)
-    game.perfectRepairConsumed = false
     AddParticles(game, game.player.x, game.player.y, { 110, 215, 255 }, 5)
     EmitEvent(game, "parry_start", {
         x = game.player.x,
@@ -702,7 +743,6 @@ local function ResolveParries(game)
                 EmitEvent(game, perfect and "perfect_parry" or "parry_success", eventData)
                 AddParticles(game, hitX, hitY,
                     result.kind == "mechanism" and { 245, 205, 105 } or { 115, 240, 255 }, 15)
-                local repaired = TryPerfectRepair(game)
                 if result.kind == "mechanism" then
                     EmitEvent(game, "projectile_reflect", eventData)
                     EmitEvent(game, "boss_mechanism_progress", {
@@ -718,7 +758,7 @@ local function ResolveParries(game)
                     game.projectiles = {}
                     EmitEvent(game, "boss_phase_changed", { phase = 2, x = enemy.x, y = enemy.y })
                     SetMessage(game, "第二阶段 - 诅咒显形", 1.2)
-                elseif not repaired then
+                else
                     SetMessage(game,
                         result.damage > 0 and FormatParryMessage(perfect, result.damage) or "防御成功 - Boss 无效",
                         0.65)
@@ -735,9 +775,8 @@ local function ResolveParries(game)
                     directionX = game.player.parryDirectionX, directionY = game.player.parryDirectionY,
                 })
                 AddParticles(game, hitX, hitY, { 115, 240, 255 }, 15)
-                local repaired = TryPerfectRepair(game)
                 local rewarded = AddGaugeProgress(game, gain, hitX, hitY)
-                if not rewarded and not repaired then
+                if not rewarded then
                     SetMessage(game, FormatParryMessage(perfect, appliedDamage), 0.65)
                 end
             end
@@ -761,10 +800,10 @@ local function ResolveParries(game)
             }
             EmitEvent(game, perfect and "perfect_parry" or "parry_success", eventData)
             EmitEvent(game, "projectile_reflect", eventData)
+            CrystalAbilities.OnProjectileReflected(game, projectile, perfect)
             AddParticles(game, hitX, hitY, { 115, 240, 255 }, 11)
-            local repaired = TryPerfectRepair(game)
             local rewarded = AddGaugeProgress(game, gain, hitX, hitY)
-            if not rewarded and not repaired then
+            if not rewarded then
                 SetMessage(game, "反射成功", 0.65)
             end
         end
@@ -772,6 +811,9 @@ local function ResolveParries(game)
     if parriedAnything then
         Entities.RegisterParrySuccess(game.player)
         AddComboProgress(game, perfect, game.player.x, game.player.y, parriedMelee)
+        if perfect then
+            CrystalAbilities.OnPerfectParry(game)
+        end
     end
 end
 
@@ -795,10 +837,12 @@ local function ResolveEnemyContacts(game)
     for _, enemy in ipairs(game.enemies) do
         if enemy.kind == "boss" then
             for _, hit in ipairs(Boss.CollectPlayerHits(enemy, game.player)) do
-                if Entities.DamagePlayer(game.player, hit.amount, hit.invulnerability) then
+                local damaged, saved = TryDamagePlayer(game, hit.amount, hit.invulnerability)
+                if damaged then
                     ResetCombo(game)
                     AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                    SetMessage(game, hit.source == "thorns" and "遭到荆棘鞭打" or "受到伤害", 0.5)
+                    SetMessage(game, saved and "时隙之心 - 时间碎裂"
+                        or (hit.source == "thorns" and "遭到荆棘鞭打" or "受到伤害"), 0.8)
                     EmitEvent(game, "player_hurt", {
                         x = game.player.x, y = game.player.y, amount = hit.amount, sourceKind = hit.source,
                     })
@@ -806,10 +850,14 @@ local function ResolveEnemyContacts(game)
             end
         else
             local hit = Entities.CollectEnemyHit(enemy, game.player)
-            if hit ~= nil and Entities.DamagePlayer(game.player, hit.amount) then
+            local damaged, saved = false, false
+            if hit ~= nil then
+                damaged, saved = TryDamagePlayer(game, hit.amount)
+            end
+            if damaged then
                 ResetCombo(game)
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                SetMessage(game, "受到伤害", 0.5)
+                SetMessage(game, saved and "时隙之心 - 时间碎裂" or "受到伤害", 0.8)
                 EmitEvent(game, "player_hurt", {
                     x = game.player.x,
                     y = game.player.y,
@@ -840,9 +888,14 @@ local function ResolveEnemyContacts(game)
 end
 
 local function UpdateBattle(game, dt, moveX, moveY)
-    if Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier")) then
+    local playerMoveX, playerMoveY = moveX, moveY
+    if CrystalAbilities.IsDashing(game) then
+        playerMoveX, playerMoveY = 0, 0
+    end
+    if Entities.UpdatePlayer(game.player, dt, playerMoveX, playerMoveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier")) then
         AnnounceParryStart(game)
     end
+    CrystalAbilities.Update(game, dt, moveX, moveY)
     UpdateEnemies(game, dt)
     MoveProjectiles(game, dt)
     ResolveParries(game)
@@ -893,10 +946,16 @@ function Game.New()
         gauge = CreateGauge(),
         combo = CreateCombo(),
         activeBuffs = {},
+        crystalState = CrystalAbilities.NewState(),
+        spawnGuideAlpha = 0,
+        spawnGuideDismissed = true,
+        spawnParryGuideAlpha = 0,
+        spawnParryGuideDismissed = true,
+        birthTutorialMoved = false,
+        birthTutorialParried = false,
         message = "按回车开始",
         messageTimer = 999,
         nextEntityId = 1,
-        perfectRepairConsumed = false,
         events = {},
     }
 end
@@ -906,8 +965,11 @@ function Game.StartOrRestart(game)
     EmitEvent(game, "run_start")
 end
 
-function Game.TryParry(game, targetX, targetY)
-    if game.state ~= "battle" then
+function Game.TryParry(game, targetX, targetY, allowBirthTutorial)
+    local isBirthTutorial = allowBirthTutorial and game.state == "clear" and game.room ~= nil
+        and game.room.isBirthRoom and not game.roomCleared and game.birthTutorialMoved
+        and not game.birthTutorialParried
+    if game.state ~= "battle" and not isBirthTutorial then
         return false
     end
 
@@ -915,25 +977,30 @@ function Game.TryParry(game, targetX, targetY)
     if started then
         AnnounceParryStart(game)
     end
+    if accepted and isBirthTutorial then
+        game.birthTutorialParried = true
+        game.spawnParryGuideDismissed = true
+        CompleteBirthTutorial(game)
+    end
     return accepted
 end
 
-function Game.SelectUpgrade(game, index)
+function Game.SelectCrystal(game, index)
     if game.state ~= "chest_select" or game.chestOptions == nil then
         return false
     end
 
     local definition = game.chestOptions[index]
-    if definition == nil or not Entities.ApplyUpgrade(game.player, definition) then
+    if definition == nil or not Entities.ApplyCrystal(game.player, definition) then
         return false
     end
 
     AddParticles(game, game.player.x, game.player.y, definition.color, 18)
-    SetMessage(game, "获得强化：" .. definition.name, 1.4)
+    SetMessage(game, "获得水晶能力：" .. definition.name, 1.4)
     game.chestOptions = nil
     game.state = game.stateBeforeChest
     game.stateBeforeChest = nil
-    EmitEvent(game, "upgrade_select")
+    EmitEvent(game, "crystal_acquired", { id = definition.id, choiceIndex = index })
     return true
 end
 
@@ -992,6 +1059,7 @@ function Game.Update(game, dt, moveX, moveY, realDt)
     end
 
     game.runTime = game.runTime + dt
+    UpdateBirthTutorial(game, dt, moveX, moveY)
     if game.state == "intro" then
         Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
         game.stateTimer = game.stateTimer - dt
@@ -1023,14 +1091,6 @@ end
 function Game.GetHud(game)
     local cooldown = game.player.parryCooldown
     local cooldownText = cooldown <= 0 and "就绪" or "恢复中"
-    local upgradeLines = {}
-    for _, definition in ipairs(UpgradeConfig.definitions) do
-        local stacks = game.player.abilities[definition.id]
-        if stacks > 0 then
-            table.insert(upgradeLines, definition.name .. " ×" .. tostring(stacks))
-        end
-    end
-
     local buffLines = {}
     for _, definition in ipairs(GaugeConfig.buffs) do
         local active = game.activeBuffs[definition.id]
@@ -1050,6 +1110,7 @@ function Game.GetHud(game)
     local healthRatio = math.max(0, math.min(1, game.player.hp / PlayerConfig.maxHp))
     local gaugeRatio = math.max(0, math.min(1, game.gauge.value / game.gauge.threshold))
     local hudVisible = game.state ~= "menu" and game.state ~= "dead" and game.state ~= "victory"
+        and game.state ~= "chest_select"
     local combo = game.combo or CreateCombo()
     local comboDefinition = ComboConfig.tiers[combo.tier]
 
@@ -1062,7 +1123,7 @@ function Game.GetHud(game)
         parry = "招架 " .. cooldownText,
         parryReady = cooldown <= 0,
         message = game.messageTimer > 0 and game.message or "",
-        upgrades = #upgradeLines > 0 and table.concat(upgradeLines, "\n") or "暂无强化",
+        crystals = game.player.crystalOrder,
         buffs = #buffLines > 0 and table.concat(buffLines, "\n") or "暂无临时增益",
         boss = bossHud,
         combo = {
