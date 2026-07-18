@@ -86,6 +86,7 @@ end
 
 local function GetSpriteKey(boss)
     if boss.state == "purifying" then return "purifying" end
+    if boss.state == "defeat" then return "defeat" end
     if boss.dead then return "defeat" end
     if boss.state == "phase_transition" then return "phase_transition" end
     if boss.state == "recovery" then return "recovery" end
