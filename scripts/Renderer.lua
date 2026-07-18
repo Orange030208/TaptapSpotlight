@@ -636,10 +636,12 @@ local function DrawSpriteSoot(ctx, x, y, enemy, time, scale)
     local drawX = -displayWidth * 0.5
     local drawY = -displayHeight
     local scaleX, scaleY = GetSootSquashStretch(enemy, time)
+    -- The source sprite faces left, so only right-facing soot needs mirroring.
+    local flip = enemy.facing == "right" and -1 or 1
 
     nvgSave(ctx)
     nvgTranslate(ctx, x, y)
-    nvgScale(ctx, scaleX, scaleY)
+    nvgScale(ctx, flip * scaleX, scaleY)
     nvgBeginPath(ctx)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
     nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, sootImageHandle, 1.0))
