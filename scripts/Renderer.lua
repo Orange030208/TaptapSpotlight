@@ -1,4 +1,5 @@
 local PlayerConfig = require "Data.PlayerConfig"
+local EnemyConfig = require "Data.EnemyConfig"
 local Feedback = require "Feedback"
 local BossRenderer = require "BossRenderer"
 
@@ -41,6 +42,13 @@ end
 
 local function Clamp(value, minValue, maxValue)
     return math.max(minValue, math.min(maxValue, value))
+end
+
+local function Atan2(y, x)
+    if math.atan2 ~= nil then
+        return math.atan2(y, x)
+    end
+    return math.atan(y, x)
 end
 
 local function Color(ctx, color, alpha)
@@ -323,10 +331,9 @@ local function DrawPlayer(ctx, width, height, player, time)
 end
 
 local function EnemyColor(kind)
-    if kind == "melee" then
-        return { 255, 105, 130 }
-    elseif kind == "ranged" then
-        return { 185, 125, 255 }
+    local spec = EnemyConfig[kind]
+    if spec ~= nil and spec.visual ~= nil then
+        return spec.visual.primary
     end
     return { 255, 145, 74 }
 end
@@ -336,15 +343,46 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
         return
     end
     local x, y, scale = Renderer.WorldToScreen(width, height, enemy.x, enemy.y)
+    local spec = EnemyConfig[enemy.kind]
     local radius = (enemy.radius * 180 + 6) * scale
     local pulse = 120 + math.floor(100 * math.abs(math.sin(enemy.stateTimer * 13)))
+    local directionX, directionY = enemy.attackX or 1, enemy.attackY or 0
+    local behavior = spec and spec.behavior or ""
+
+    if behavior == "aoe_pulse" then
+        radius = (spec.attack.range * 180 + 6) * scale
+    end
     nvgBeginPath(ctx)
     nvgCircle(ctx, x, y, radius)
     nvgStrokeWidth(ctx, 2 * scale)
     StrokeColor(ctx, { 255, 230, 120 }, pulse)
     nvgStroke(ctx)
 
-    if player ~= nil then
+    if behavior == "tree_swing" then
+        local arc = math.rad(enemy.attackArc or spec.attack.narrowArc)
+        local startAngle = Atan2(directionY, directionX) - arc * 0.5
+        for index = 0, 5 do
+            local angle = startAngle + arc * index / 5
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, x, y)
+            nvgLineTo(ctx, x + math.cos(angle) * radius * 1.8, y + math.sin(angle) * radius * 1.8)
+            nvgStrokeWidth(ctx, 1.2 * scale)
+            StrokeColor(ctx, { 222, 150, 255 }, math.floor(pulse * 0.72))
+            nvgStroke(ctx)
+        end
+    elseif behavior == "ranged_fan" then
+        local spread = math.rad(spec.projectile.spread)
+        local startAngle = Atan2(directionY, directionX) - spread * 0.5
+        for index = 0, spec.projectile.count - 1 do
+            local angle = startAngle + spread * index / (spec.projectile.count - 1)
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, x, y)
+            nvgLineTo(ctx, x + math.cos(angle) * radius * 2.5, y + math.sin(angle) * radius * 2.5)
+            nvgStrokeWidth(ctx, 1.4 * scale)
+            StrokeColor(ctx, { 202, 174, 235 }, math.floor(pulse * 0.7))
+            nvgStroke(ctx)
+        end
+    elseif player ~= nil then
         local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
         nvgBeginPath(ctx)
         nvgMoveTo(ctx, x, y)
@@ -375,39 +413,257 @@ local function DrawEnemyMotionTrail(ctx, width, height, enemy)
     nvgStroke(ctx)
 end
 
+local function DrawEyes(ctx, x, y, scale, spacing, eyeColor)
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x - spacing, y, 3.6 * scale)
+    nvgCircle(ctx, x + spacing, y, 3.6 * scale)
+    Color(ctx, eyeColor or { 255, 249, 231 }, 255)
+    nvgFill(ctx)
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x - spacing + scale, y + scale * 0.5, 1.25 * scale)
+    nvgCircle(ctx, x + spacing + scale, y + scale * 0.5, 1.25 * scale)
+    Color(ctx, { 25, 26, 39 }, 255)
+    nvgFill(ctx)
+end
+
+local function DrawSoot(ctx, x, y, size, scale, time, color, secondary)
+    local centerY = y - size * 0.58
+    for index = 1, 6 do
+        local angle = index * math.pi * 2 / 6 + time * 0.5
+        local radius = size * (0.16 + (index % 3) * 0.025)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x + math.cos(angle) * size * 0.32, centerY + math.sin(angle) * size * 0.25, radius)
+        Color(ctx, index % 2 == 0 and secondary or color, 245)
+        nvgFill(ctx)
+    end
+    DrawEyes(ctx, x, centerY - size * 0.04, scale, size * 0.14)
+end
+
+local function DrawBlueSwarm(ctx, x, y, size, scale, time, color, secondary)
+    local centerY = y - size * 0.58
+    for index = 1, 12 do
+        local angle = index * 2.39 + time * (1.3 + (index % 3) * 0.17)
+        local orbit = size * (0.18 + (index % 4) * 0.08)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x + math.cos(angle) * orbit, centerY + math.sin(angle * 1.3) * orbit * 0.62,
+            (1.6 + (index % 3) * 0.7) * scale)
+        Color(ctx, index % 2 == 0 and secondary or color, 235)
+        nvgFill(ctx)
+    end
+    DrawEyes(ctx, x, centerY, scale, size * 0.1, { 225, 248, 255 })
+end
+
+local function DrawTree(ctx, x, y, size, scale, color, secondary)
+    local centerY = y - size * 0.52
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x - size * 0.2, centerY - size * 0.02, size * 0.4, size * 0.64, size * 0.12)
+    Color(ctx, color, 255)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2 * scale)
+    StrokeColor(ctx, secondary, 240)
+    nvgStroke(ctx)
+    for side = -1, 1, 2 do
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x + side * size * 0.12, centerY + size * 0.17)
+        nvgLineTo(ctx, x + side * size * 0.5, centerY - size * 0.2)
+        nvgLineTo(ctx, x + side * size * 0.66, centerY - size * 0.08)
+        nvgStrokeWidth(ctx, 2.4 * scale)
+        StrokeColor(ctx, color, 245)
+        nvgStroke(ctx)
+    end
+    DrawEyes(ctx, x, centerY + size * 0.12, scale, size * 0.11, { 188, 130, 232 })
+end
+
+local function DrawSap(ctx, x, y, size, scale, color, secondary, outline)
+    local centerY = y - size * 0.55
+    local shine = nvgRadialGradient(ctx, x - size * 0.17, centerY - size * 0.18, size * 0.04, size * 0.72,
+        nvgRGBA(244, 255, 250, 230), nvgRGBA(color[1], color[2], color[3], 205))
+    nvgBeginPath(ctx)
+    nvgEllipse(ctx, x, centerY, size * 0.53, size * 0.42)
+    nvgFillPaint(ctx, shine)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2 * scale)
+    StrokeColor(ctx, outline, 240)
+    nvgStroke(ctx)
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, x - size * 0.12, centerY - size * 0.18)
+    nvgLineTo(ctx, x + size * 0.03, centerY + size * 0.02)
+    nvgLineTo(ctx, x - size * 0.02, centerY + size * 0.2)
+    nvgStrokeWidth(ctx, 1.35 * scale)
+    StrokeColor(ctx, secondary, 185)
+    nvgStroke(ctx)
+    DrawEyes(ctx, x, centerY - size * 0.03, scale, size * 0.12)
+end
+
+local function DrawGhost(ctx, x, y, size, scale, color, secondary, outline)
+    local centerY = y - size * 0.58
+    local glow = nvgRadialGradient(ctx, x, centerY, size * 0.28, size * 1.18,
+        nvgRGBA(outline[1], outline[2], outline[3], 120), nvgRGBA(outline[1], outline[2], outline[3], 0))
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x, centerY, size * 1.18)
+    nvgFillPaint(ctx, glow)
+    nvgFill(ctx)
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, x - size * 0.45, centerY + size * 0.38)
+    nvgBezierTo(ctx, x - size * 0.64, centerY, x - size * 0.38, centerY - size * 0.55, x, centerY - size * 0.48)
+    nvgBezierTo(ctx, x + size * 0.48, centerY - size * 0.62, x + size * 0.62, centerY + size * 0.04, x + size * 0.42, centerY + size * 0.42)
+    nvgBezierTo(ctx, x + size * 0.16, centerY + size * 0.18, x - size * 0.08, centerY + size * 0.65, x - size * 0.45, centerY + size * 0.38)
+    Color(ctx, color, 174)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2.2 * scale)
+    StrokeColor(ctx, outline, 255)
+    nvgStroke(ctx)
+    DrawEyes(ctx, x, centerY - size * 0.03, scale, size * 0.12, secondary)
+end
+
+local function DrawStone(ctx, x, y, size, scale, color, secondary, outline)
+    local centerY = y - size * 0.52
+    nvgBeginPath(ctx)
+    for index = 0, 5 do
+        local angle = math.pi * 0.166 + index * math.pi * 2 / 6
+        local px = x + math.cos(angle) * size * 0.48
+        local py = centerY + math.sin(angle) * size * 0.45
+        if index == 0 then nvgMoveTo(ctx, px, py) else nvgLineTo(ctx, px, py) end
+    end
+    nvgClosePath(ctx)
+    Color(ctx, color, 255)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2 * scale)
+    StrokeColor(ctx, outline, 255)
+    nvgStroke(ctx)
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, x - size * 0.26, centerY - size * 0.08)
+    nvgLineTo(ctx, x + size * 0.24, centerY - size * 0.26)
+    nvgStrokeWidth(ctx, 1.3 * scale)
+    StrokeColor(ctx, secondary, 170)
+    nvgStroke(ctx)
+    DrawEyes(ctx, x, centerY + size * 0.04, scale, size * 0.13, { 255, 255, 255 })
+end
+
+local function DrawMushroom(ctx, x, y, size, scale, color, secondary, outline)
+    local centerY = y - size * 0.54
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x - size * 0.14, centerY, size * 0.28, size * 0.43, size * 0.08)
+    Color(ctx, secondary, 255)
+    nvgFill(ctx)
+    nvgBeginPath(ctx)
+    nvgEllipse(ctx, x, centerY - size * 0.06, size * 0.55, size * 0.28)
+    Color(ctx, color, 255)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2 * scale)
+    StrokeColor(ctx, outline, 255)
+    nvgStroke(ctx)
+    DrawEyes(ctx, x, centerY + size * 0.17, scale, size * 0.1)
+end
+
+local function DrawDandelion(ctx, x, y, size, scale, color, secondary, outline)
+    local centerY = y - size * 0.66
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, x, centerY + size * 0.18)
+    nvgLineTo(ctx, x, y)
+    nvgStrokeWidth(ctx, 2.2 * scale)
+    StrokeColor(ctx, secondary, 235)
+    nvgStroke(ctx)
+    for index = 0, 11 do
+        local angle = index * math.pi * 2 / 12
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x, centerY)
+        nvgLineTo(ctx, x + math.cos(angle) * size * 0.48, centerY + math.sin(angle) * size * 0.42)
+        nvgStrokeWidth(ctx, 1.1 * scale)
+        StrokeColor(ctx, secondary, 200)
+        nvgStroke(ctx)
+    end
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x, centerY, size * 0.26)
+    Color(ctx, color, 255)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 1.7 * scale)
+    StrokeColor(ctx, outline, 250)
+    nvgStroke(ctx)
+    DrawEyes(ctx, x, centerY, scale, size * 0.08)
+end
+
+local function DrawOrb(ctx, x, y, size, scale, color, secondary, outline)
+    local centerY = y - size * 0.56
+    local glow = nvgRadialGradient(ctx, x, centerY, size * 0.2, size * 1.35,
+        nvgRGBA(secondary[1], secondary[2], secondary[3], 165), nvgRGBA(secondary[1], secondary[2], secondary[3], 0))
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x, centerY, size * 1.25)
+    nvgFillPaint(ctx, glow)
+    nvgFill(ctx)
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x, centerY, size * 0.43)
+    Color(ctx, color, 245)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2 * scale)
+    StrokeColor(ctx, outline, 250)
+    nvgStroke(ctx)
+    for index = 0, 7 do
+        local angle = index * math.pi * 2 / 8
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x + math.cos(angle) * size * 0.67, centerY + math.sin(angle) * size * 0.58, 1.4 * scale)
+        Color(ctx, secondary, 210)
+        nvgFill(ctx)
+    end
+end
+
+local function DrawMoss(ctx, x, y, size, scale, color, secondary, outline)
+    nvgBeginPath(ctx)
+    nvgEllipse(ctx, x, y - size * 0.08, size * 0.7, size * 0.24)
+    Color(ctx, outline, 200)
+    nvgFill(ctx)
+    for index = 0, 4 do
+        local angle = index * math.pi * 2 / 5
+        nvgBeginPath(ctx)
+        nvgEllipse(ctx, x + math.cos(angle) * size * 0.35, y - size * 0.08 + math.sin(angle) * size * 0.12,
+            size * 0.28, size * 0.13)
+        Color(ctx, index % 2 == 0 and secondary or color, 235)
+        nvgFill(ctx)
+    end
+end
+
 local function DrawEnemy(ctx, width, height, enemy, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, enemy.x, enemy.y)
-    local color = EnemyColor(enemy.kind)
-    local size = (enemy.kind == "boss" and 34 or 22) * scale
-    local pulse = math.sin(time * 7 + enemy.id) * 1.4 * scale
+    local spec = EnemyConfig[enemy.kind]
+    local visual = spec.visual
+    local size = 24 * scale
+    local pulse = math.sin(time * 7 + enemy.id) * 1.2 * scale
 
     DrawEnemyMotionTrail(ctx, width, height, enemy)
     DrawEnemyTelegraph(ctx, width, height, enemy, player)
-    DrawShadow(ctx, x, y, scale, size * 0.68, 130)
-
-    nvgBeginPath(ctx)
-    if enemy.kind == "ranged" then
-        nvgCircle(ctx, x, y - size * 0.46 + pulse, size * 0.52)
-    else
-        nvgRoundedRect(ctx, x - size * 0.5, y - size + pulse, size, size, size * 0.25)
+    if enemy.kind ~= "toxic_moss" then
+        DrawShadow(ctx, x, y, scale, size * 0.68, 125)
     end
-    Color(ctx, color, enemy.state == "recovery" and 135 or 255)
-    nvgFill(ctx)
-    nvgStrokeWidth(ctx, 2 * scale)
-    StrokeColor(ctx, { 35, 20, 55 }, 230)
-    nvgStroke(ctx)
 
-    nvgBeginPath(ctx)
-    nvgCircle(ctx, x - size * 0.17, y - size * 0.57 + pulse, 3.2 * scale)
-    nvgCircle(ctx, x + size * 0.17, y - size * 0.57 + pulse, 3.2 * scale)
-    Color(ctx, { 255, 247, 225 }, 255)
-    nvgFill(ctx)
+    if enemy.kind == "soot" then
+        DrawSoot(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
+    elseif enemy.kind == "blue_swarm" then
+        DrawBlueSwarm(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
+    elseif enemy.kind == "tree" then
+        DrawTree(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary)
+    elseif enemy.kind == "sap" then
+        DrawSap(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+    elseif enemy.kind == "ghost_a" or enemy.kind == "ghost_b" then
+        DrawGhost(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+    elseif enemy.kind == "stone" then
+        DrawStone(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+    elseif enemy.kind == "mushroom" then
+        DrawMushroom(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+    elseif enemy.kind == "dandelion" then
+        DrawDandelion(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+    elseif enemy.kind == "purple_orb" then
+        DrawOrb(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+    else
+        DrawMoss(ctx, x, y, size, scale, visual.primary, visual.secondary, visual.outline)
+    end
 
-    local healthWidth = enemy.kind == "boss" and size * 1.32 or size * 1.06
-    local healthHeight = enemy.kind == "boss" and 5 * scale or 3.5 * scale
-    local healthY = y - size * (enemy.kind == "boss" and 1.36 or 1.18)
+    if enemy.kind == "toxic_moss" then
+        return
+    end
+    local healthWidth = size * 1.06
+    local healthHeight = 3.5 * scale
+    local healthY = y - size * 1.18
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
-
     nvgBeginPath(ctx)
     nvgRoundedRect(ctx, x - healthWidth * 0.5, healthY, healthWidth, healthHeight, healthHeight * 0.5)
     Color(ctx, { 28, 21, 43 }, 225)
@@ -415,13 +671,18 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     nvgBeginPath(ctx)
     nvgRoundedRect(ctx, x - healthWidth * 0.5 + scale, healthY + scale,
         math.max(0, (healthWidth - scale * 2) * healthRatio), math.max(1, healthHeight - scale * 2), healthHeight * 0.4)
-    Color(ctx, enemy.kind == "boss" and { 255, 120, 74 } or color, 255)
+    Color(ctx, visual.primary, 255)
     nvgFill(ctx)
 end
 
 local function DrawProjectile(ctx, width, height, projectile, combo)
     local x, y, scale = Renderer.WorldToScreen(width, height, projectile.x, projectile.y)
     local color = projectile.owner == "player" and { 125, 238, 255 } or { 255, 135, 205 }
+    if projectile.owner == "enemy" and projectile.style == "spore" then
+        color = { 208, 166, 238 }
+    elseif projectile.owner == "enemy" and projectile.style == "seed" then
+        color = { 192, 175, 220 }
+    end
     if projectile.reflected and combo ~= nil and combo.tier > 0 then
         local tierColors = {
             { 105, 225, 221 },
@@ -431,6 +692,11 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
         color = tierColors[math.min(combo.tier, #tierColors)]
     end
     local radius = (5 + projectile.radius * 80) * scale
+    if projectile.style == "spore" then
+        radius = radius * 1.22
+    elseif projectile.style == "seed" then
+        radius = radius * 0.82
+    end
     local speed = math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy)
     local directionX, directionY = 0, 0
     if speed > 0.0001 then
@@ -469,8 +735,20 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
         nvgStroke(ctx)
     end
 
+    if projectile.style == "spore" and not projectile.reflected then
+        local sporeGlow = nvgRadialGradient(ctx, x, y, radius * 0.2, radius * 2.5,
+            nvgRGBA(color[1], color[2], color[3], 150), nvgRGBA(color[1], color[2], color[3], 0))
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius * 2.5)
+        nvgFillPaint(ctx, sporeGlow)
+        nvgFill(ctx)
+    end
     nvgBeginPath(ctx)
-    nvgCircle(ctx, x, y, radius)
+    if projectile.style == "seed" and not projectile.reflected then
+        nvgEllipse(ctx, x, y, radius * 0.72, radius)
+    else
+        nvgCircle(ctx, x, y, radius)
+    end
     Color(ctx, color, 255)
     nvgFill(ctx)
     if projectile.reflected then

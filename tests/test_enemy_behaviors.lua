@@ -1,0 +1,92 @@
+package.path = "./scripts/?.lua;./scripts/?/init.lua;" .. package.path
+
+local EnemyConfig = require "Data.EnemyConfig"
+local Entities = require "Entities"
+local Game = require "Game"
+
+local function NewEnemy(kind, x, y, id)
+    return Entities.NewEnemy(kind, { x = x, y = y }, id or 1)
+end
+
+local player = Entities.NewPlayer()
+player.x, player.y = 0.5, 0.5
+
+local ghostA = NewEnemy("ghost_a", 0.1, 0.1, 1)
+local ghostB = NewEnemy("ghost_b", 0.1, 0.1, 2)
+assert(Entities.IsEnemyActive(ghostA, player))
+assert(not Entities.IsEnemyActive(ghostB, player))
+ghostB.x, ghostB.y = 0.55, 0.5
+assert(Entities.IsEnemyActive(ghostB, player))
+
+local sap = NewEnemy("sap", 0.4, 0.5, 3)
+local splitChildren = Entities.GetSplitChildren(sap)
+assert(#splitChildren == EnemyConfig.sap.split.count)
+sap.splitGeneration = 1
+assert(#Entities.GetSplitChildren(sap) == 0, "sap must split only once")
+
+local dandelion = NewEnemy("dandelion", 0.3, 0.5, 4)
+dandelion.state, dandelion.stateTimer = "telegraph", 0
+dandelion.attackX, dandelion.attackY = 1, 0
+local emitted = {}
+Entities.UpdateEnemy(dandelion, player, 0.01, function(projectile)
+    table.insert(emitted, projectile)
+end)
+assert(#emitted == EnemyConfig.dandelion.projectile.count)
+for _, projectile in ipairs(emitted) do
+    assert(projectile.style == "seed")
+end
+
+local moss = NewEnemy("toxic_moss", player.x, player.y, 5)
+assert(Entities.CollectEnemyHit(moss, player) ~= nil)
+assert(Entities.CollectEnemyHit(moss, player) == nil, "moss must only hit on entry")
+player.x = 0.9
+assert(Entities.CollectEnemyHit(moss, player) == nil)
+player.x = 0.5
+assert(Entities.CollectEnemyHit(moss, player) ~= nil, "moss must reset after leaving")
+
+local orb = NewEnemy("purple_orb", 0.5, 0.5, 6)
+orb.state, orb.attackSerial = "active", 1
+assert(Entities.CollectEnemyHit(orb, player) ~= nil)
+assert(Entities.CollectEnemyHit(orb, player) == nil, "one AOE pulse may hit once")
+orb.attackSerial = 2
+assert(Entities.CollectEnemyHit(orb, player) ~= nil)
+
+local tree = NewEnemy("tree", 0.5, 0.5, 7)
+tree.state, tree.attackSerial, tree.attackX, tree.attackY, tree.attackArc = "active", 1, 1, 0, 180
+player.x, player.y = 0.62, 0.5
+assert(Entities.CollectEnemyHit(tree, player) ~= nil)
+tree.attackSerial = 2
+player.x = 0.35
+assert(Entities.CollectEnemyHit(tree, player) == nil, "tree's rear must be safe")
+
+local stone = NewEnemy("stone", 0.5, 0.5, 8)
+stone.state, stone.attackSerial = "dash", 1
+player.x, player.y = 0.5, 0.5
+assert(Entities.CollectEnemyHit(stone, player) ~= nil)
+assert(Entities.CollectEnemyHit(stone, player) == nil, "rolling impact may hit once")
+
+local parryGhost = NewEnemy("ghost_a", 0.6, 0.5, 9)
+player.parryTimer, player.parryDirectionX, player.parryDirectionY = 1, 1, 0
+assert(Entities.TryParryEnemy(player, parryGhost, 1))
+assert(parryGhost.state == "stagger")
+
+local fixedMoss = NewEnemy("toxic_moss", 0.5, 0.5, 10)
+local movingSoot = NewEnemy("soot", 0.5, 0.5, 11)
+Entities.ResolveEnemySeparation({ fixedMoss, movingSoot })
+assert(fixedMoss.x == 0.5 and fixedMoss.y == 0.5, "ground hazards must remain fixed")
+
+local splitGame = Game.New()
+Game.StartOrRestart(splitGame)
+Game.ConsumeEvents(splitGame)
+splitGame.state = "battle"
+local splitSap = NewEnemy("sap", splitGame.player.x + 0.12, splitGame.player.y, 12)
+splitSap.hp, splitSap.maxHp, splitSap.state, splitSap.stateTimer = 0.5, 0.5, "dash", 1
+splitGame.enemies = { splitSap }
+assert(Game.TryParry(splitGame))
+Game.Update(splitGame, 0, 0, 0)
+assert(#splitGame.enemies == EnemyConfig.sap.split.count, "defeated sap must create two children")
+for _, child in ipairs(splitGame.enemies) do
+    assert(child.kind == "sap" and child.splitGeneration == 1)
+end
+
+print("PASS test_enemy_behaviors")

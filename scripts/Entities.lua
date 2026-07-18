@@ -24,6 +24,16 @@ local function Normalize(x, y)
     return x / length, y / length
 end
 
+local function Dot(ax, ay, bx, by)
+    return ax * bx + ay * by
+end
+
+local function Rotate(x, y, radians)
+    local cosine = math.cos(radians)
+    local sine = math.sin(radians)
+    return x * cosine - y * sine, x * sine + y * cosine
+end
+
 local function DistanceSquared(a, b)
     local dx = a.x - b.x
     local dy = a.y - b.y
@@ -88,6 +98,7 @@ end
 
 function Entities.NewEnemy(kind, spawn, id)
     local spec = EnemyConfig[kind]
+    assert(spec ~= nil, "Unknown enemy kind: " .. tostring(kind))
     local enemy = {
         id = id,
         kind = kind,
@@ -97,24 +108,36 @@ function Entities.NewEnemy(kind, spawn, id)
         hp = spec.hp,
         maxHp = spec.hp,
         state = "idle",
-        stateTimer = 0.55 + math.random() * 0.45,
+        stateTimer = (spec.attack and spec.attack.interval or 0.8) * (0.55 + math.random() * 0.25),
         vx = 0,
         vy = 0,
         facing = "right",
         dashX = 0,
         dashY = 0,
         attackMode = "dash",
+        attackX = 1,
+        attackY = 0,
+        attackArc = 0,
+        attackSerial = 0,
+        attackHitSerial = -1,
+        contactTimer = 0,
+        mossTouching = false,
+        splitGeneration = spawn.splitGeneration or 0,
         strafeDirection = math.random() < 0.5 and -1 or 1,
         strafeTimer = 0.55 + math.random() * 0.75,
         dead = false,
     }
+    if spawn.hp ~= nil then
+        enemy.hp = spawn.hp
+        enemy.maxHp = spawn.hp
+    end
     if kind == "boss" then
         return Boss.Initialize(enemy)
     end
     return enemy
 end
 
-function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind)
+function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind, style, radius)
     return {
         x = x,
         y = y,
@@ -122,8 +145,9 @@ function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind)
         vy = vy,
         owner = owner,
         sourceKind = sourceKind,
+        style = style or "bolt",
         damage = damage,
-        radius = ProjectileConfig.radius,
+        radius = radius or ProjectileConfig.radius,
         lifetime = ProjectileConfig.lifetime,
         reflected = false,
         pierceRemaining = 0,
@@ -260,39 +284,88 @@ function Entities.HealPlayer(player, amount)
     return player.hp > previousHp
 end
 
-function Entities.UpdateTacticalMovement(enemy, player, dt)
+local function IsCircleTouch(first, second)
+    return DistanceSquared(first, second) <= (first.radius + second.radius) ^ 2
+end
+
+local function IsInsideAttackArc(enemy, player, range, arc)
+    local dx = player.x - enemy.x
+    local dy = player.y - enemy.y
+    local distance = Length(dx, dy)
+    if distance > range + player.radius then
+        return false
+    end
+    if distance <= 0.0001 or arc >= 359 then
+        return true
+    end
+    return Dot(dx / distance, dy / distance, enemy.attackX, enemy.attackY) >= math.cos(math.rad(arc * 0.5))
+end
+
+function Entities.IsEnemyActive(enemy, player)
     local spec = EnemyConfig[enemy.kind]
-    local toPlayerX, toPlayerY = Normalize(player.x - enemy.x, player.y - enemy.y)
-    local distance = Length(player.x - enemy.x, player.y - enemy.y)
-    enemy.strafeTimer = enemy.strafeTimer - dt
-    if enemy.strafeTimer <= 0 then
-        enemy.strafeDirection = -enemy.strafeDirection
-        enemy.strafeTimer = 0.55 + math.random() * 0.75
-    end
+    return spec.alwaysActive or (spec.activationRange > 0 and IsInRange(player, enemy, spec.activationRange))
+end
 
-    local sideX = -toPlayerY * enemy.strafeDirection
-    local sideY = toPlayerX * enemy.strafeDirection
-    local radial = 0
-    if enemy.kind == "melee" then
-        if distance > spec.preferredDistance then
-            radial = 1
-        elseif distance < spec.preferredDistance * 0.72 then
-            radial = -0.4
-        end
+local function MoveMeleeEnemy(enemy, player, spec, dt)
+    local dx, dy = player.x - enemy.x, player.y - enemy.y
+    local distance = Length(dx, dy)
+    local preferredDistance = spec.preferredDistance or spec.activationRange * 0.54
+    if distance > math.max(enemy.radius + player.radius + 0.045, preferredDistance) then
+        MoveEnemy(enemy, dx, dy, spec.moveSpeed, dt)
     else
-        if distance < spec.minimumDistance then
-            radial = -1
-        elseif distance > spec.maximumDistance then
-            radial = 1
-        end
+        enemy.vx, enemy.vy = 0, 0
     end
+end
 
-    MoveEnemy(enemy,
-        toPlayerX * radial + sideX * spec.strafeStrength,
-        toPlayerY * radial + sideY * spec.strafeStrength,
-        spec.moveSpeed,
-        dt
-    )
+local function MoveRangedEnemy(enemy, player, spec, dt)
+    if spec.moveSpeed <= 0 then
+        enemy.vx, enemy.vy = 0, 0
+        return
+    end
+    local dx, dy = player.x - enemy.x, player.y - enemy.y
+    local distance = Length(dx, dy)
+    local direction = 0
+    if distance < spec.minimumDistance then
+        direction = -1
+    elseif distance > spec.maximumDistance then
+        direction = 1
+    end
+    MoveEnemy(enemy, dx * direction, dy * direction, spec.moveSpeed, dt)
+end
+
+local function BeginTelegraph(enemy, player, spec)
+    local attack = spec.attack
+    enemy.attackX, enemy.attackY = Normalize(player.x - enemy.x, player.y - enemy.y)
+    if enemy.attackX == 0 and enemy.attackY == 0 then
+        enemy.attackX = enemy.facing == "left" and -1 or 1
+    end
+    if math.abs(enemy.attackX) > 0.02 then
+        enemy.facing = enemy.attackX < 0 and "left" or "right"
+    end
+    if spec.behavior == "tree_swing" then
+        enemy.attackArc = math.random() < 0.5 and attack.narrowArc or attack.wideArc
+    else
+        enemy.attackArc = attack.arc or 360
+    end
+    enemy.state = "telegraph"
+    enemy.stateTimer = attack.telegraph
+end
+
+local function EmitConfiguredProjectiles(enemy, spec, emitProjectile)
+    local projectile = spec.projectile
+    local count = projectile.count
+    for index = 1, count do
+        local offset = 0
+        if count > 1 then
+            offset = math.rad(projectile.spread) * ((index - 1) / (count - 1) - 0.5)
+        end
+        local directionX, directionY = Rotate(enemy.attackX, enemy.attackY, offset)
+        emitProjectile(Entities.NewProjectile(
+            enemy.x, enemy.y,
+            directionX * projectile.speed, directionY * projectile.speed,
+            "enemy", projectile.damage, enemy.kind, projectile.style, projectile.radius
+        ))
+    end
 end
 
 function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
@@ -301,51 +374,166 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     end
 
     local spec = EnemyConfig[enemy.kind]
-    enemy.stateTimer = enemy.stateTimer - dt
+    local behavior = spec.behavior
+    enemy.contactTimer = math.max(0, enemy.contactTimer - dt)
 
-    if enemy.state == "idle" then
-        Entities.UpdateTacticalMovement(enemy, player, dt)
+    if enemy.state == "stagger" then
+        enemy.stateTimer = enemy.stateTimer - dt
         if enemy.stateTimer <= 0 then
-            enemy.state = "telegraph"
-            enemy.stateTimer = spec.telegraphDuration
-            if enemy.kind == "boss" then
-                enemy.attackMode = enemy.attackMode == "dash" and "volley" or "dash"
-            end
+            enemy.state = "idle"
+            enemy.stateTimer = (spec.attack and spec.attack.interval or 0.75) * 0.55
         end
         return
     end
 
-    if enemy.state == "telegraph" and enemy.stateTimer <= 0 then
-        if enemy.kind == "ranged" or (enemy.kind == "boss" and enemy.attackMode == "volley") then
-            local dx, dy = Normalize(player.x - enemy.x, player.y - enemy.y)
-            emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, dx * spec.projectileSpeed, dy * spec.projectileSpeed, "enemy", 1, enemy.kind))
-            if enemy.kind == "boss" then
-                emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx - dy * 0.35) * spec.projectileSpeed, (dy + dx * 0.35) * spec.projectileSpeed, "enemy", 1, enemy.kind))
-                emitProjectile(Entities.NewProjectile(enemy.x, enemy.y, (dx + dy * 0.35) * spec.projectileSpeed, (dy - dx * 0.35) * spec.projectileSpeed, "enemy", 1, enemy.kind))
-            end
-            enemy.state = "recovery"
-            enemy.stateTimer = spec.recoveryDuration
+    if behavior == "ground_hazard" then
+        enemy.vx, enemy.vy = 0, 0
+        return
+    end
+
+    if behavior == "contact_chase" then
+        if Entities.IsEnemyActive(enemy, player) then
+            MoveEnemy(enemy, player.x - enemy.x, player.y - enemy.y, spec.moveSpeed, dt)
         else
-            enemy.dashX, enemy.dashY = Normalize(player.x - enemy.x, player.y - enemy.y)
+            enemy.vx, enemy.vy = 0, 0
+        end
+        return
+    end
+
+    if enemy.state == "idle" then
+        if not Entities.IsEnemyActive(enemy, player) then
+            enemy.vx, enemy.vy = 0, 0
+            return
+        end
+
+        if behavior == "ranged_single" or behavior == "ranged_fan" then
+            MoveRangedEnemy(enemy, player, spec, dt)
+        elseif behavior ~= "rolling" then
+            MoveMeleeEnemy(enemy, player, spec, dt)
+        end
+
+        enemy.stateTimer = enemy.stateTimer - dt
+        if enemy.stateTimer <= 0 then
+            BeginTelegraph(enemy, player, spec)
+        end
+        return
+    end
+
+    if enemy.state == "telegraph" then
+        enemy.stateTimer = enemy.stateTimer - dt
+        if enemy.stateTimer > 0 then
+            return
+        end
+
+        if behavior == "ranged_single" or behavior == "ranged_fan" then
+            EmitConfiguredProjectiles(enemy, spec, emitProjectile)
+            enemy.state = "recovery"
+            enemy.stateTimer = spec.attack.recovery
+        elseif behavior == "tree_swing" or behavior == "aoe_pulse" then
+            enemy.attackSerial = enemy.attackSerial + 1
+            enemy.state = "active"
+            enemy.stateTimer = spec.attack.active
+        else
+            enemy.dashX, enemy.dashY = enemy.attackX, enemy.attackY
+            enemy.attackSerial = enemy.attackSerial + 1
             enemy.state = "dash"
-            enemy.stateTimer = spec.dashDuration
+            enemy.stateTimer = spec.attack.active
         end
         return
     end
 
     if enemy.state == "dash" then
-        MoveEnemy(enemy, enemy.dashX, enemy.dashY, spec.dashSpeed, dt)
+        MoveEnemy(enemy, enemy.dashX, enemy.dashY, spec.attack.dashSpeed, dt)
+        enemy.stateTimer = enemy.stateTimer - dt
         if enemy.stateTimer <= 0 then
             enemy.state = "recovery"
-            enemy.stateTimer = spec.recoveryDuration
+            enemy.stateTimer = spec.attack.recovery
         end
         return
     end
 
-    if enemy.state == "recovery" and enemy.stateTimer <= 0 then
-        enemy.state = "idle"
-        enemy.stateTimer = 0.45 + math.random() * 0.55
+    if enemy.state == "active" then
+        enemy.stateTimer = enemy.stateTimer - dt
+        if enemy.stateTimer <= 0 then
+            enemy.state = "recovery"
+            enemy.stateTimer = spec.attack.recovery
+        end
+        return
     end
+
+    if enemy.state == "recovery" then
+        enemy.stateTimer = enemy.stateTimer - dt
+        if enemy.stateTimer <= 0 then
+            enemy.state = "idle"
+            enemy.stateTimer = spec.attack.interval * (0.8 + math.random() * 0.25)
+        end
+    end
+end
+
+function Entities.GetSplitChildren(enemy)
+    local spec = EnemyConfig[enemy.kind]
+    if spec.split == nil or enemy.splitGeneration >= 1 then
+        return {}
+    end
+
+    local children = {}
+    for index = 1, spec.split.count do
+        local angle = (index - 1) * math.pi * 2 / spec.split.count
+        table.insert(children, {
+            x = Clamp(enemy.x + math.cos(angle) * spec.split.offset, RoomConfig.minX, RoomConfig.maxX),
+            y = Clamp(enemy.y + math.sin(angle) * spec.split.offset, RoomConfig.minY, RoomConfig.maxY),
+            hp = spec.hp * spec.split.childHpRatio,
+            splitGeneration = enemy.splitGeneration + 1,
+        })
+    end
+    return children
+end
+
+function Entities.CollectEnemyHit(enemy, player)
+    if enemy.dead then
+        return nil
+    end
+
+    local spec = EnemyConfig[enemy.kind]
+    local behavior = spec.behavior
+    local touching = IsCircleTouch(enemy, player)
+
+    if behavior == "ground_hazard" then
+        local entered = touching and not enemy.mossTouching
+        enemy.mossTouching = touching
+        if entered then
+            return { amount = spec.touchDamage, sourceKind = enemy.kind }
+        end
+        return nil
+    end
+
+    if behavior == "contact_chase" then
+        if touching and Entities.IsEnemyActive(enemy, player) and enemy.contactTimer <= 0 then
+            enemy.contactTimer = spec.contactCooldown
+            return { amount = spec.touchDamage, sourceKind = enemy.kind }
+        end
+        return nil
+    end
+
+    if enemy.state == "dash" and touching and enemy.attackHitSerial ~= enemy.attackSerial then
+        enemy.attackHitSerial = enemy.attackSerial
+        return { amount = spec.touchDamage, sourceKind = enemy.kind }
+    end
+
+    if enemy.state == "active" and behavior == "tree_swing"
+        and enemy.attackHitSerial ~= enemy.attackSerial
+        and IsInsideAttackArc(enemy, player, spec.attack.range, enemy.attackArc) then
+        enemy.attackHitSerial = enemy.attackSerial
+        return { amount = spec.touchDamage, sourceKind = enemy.kind }
+    end
+
+    if enemy.state == "active" and behavior == "aoe_pulse"
+        and enemy.attackHitSerial ~= enemy.attackSerial
+        and IsInRange(player, enemy, spec.attack.range + player.radius) then
+        enemy.attackHitSerial = enemy.attackSerial
+        return { amount = spec.touchDamage, sourceKind = enemy.kind }
+    end
+    return nil
 end
 
 function Entities.ResolveEnemySeparation(enemies)
@@ -360,17 +548,25 @@ function Entities.ResolveEnemySeparation(enemies)
                     local distance = Length(dx, dy)
                     local minimum = first.radius + second.radius + 0.018
                     if distance < minimum then
+                        local nx, ny
                         if distance <= 0.0001 then
-                            dx = first.id < second.id and 1 or -1
-                            dy = 0
-                            distance = 1
+                            nx = first.id < second.id and 1 or -1
+                            ny = 0
+                            distance = 0
+                        else
+                            nx, ny = dx / distance, dy / distance
                         end
-                        local push = (minimum - distance) * 0.5
-                        local nx, ny = dx / distance, dy / distance
-                        first.x = Clamp(first.x - nx * push, RoomConfig.minX, RoomConfig.maxX)
-                        first.y = Clamp(first.y - ny * push, RoomConfig.minY, RoomConfig.maxY)
-                        second.x = Clamp(second.x + nx * push, RoomConfig.minX, RoomConfig.maxX)
-                        second.y = Clamp(second.y + ny * push, RoomConfig.minY, RoomConfig.maxY)
+                        local overlap = minimum - distance
+                        local firstFixed = EnemyConfig[first.kind].immovable
+                        local secondFixed = EnemyConfig[second.kind].immovable
+                        if not (firstFixed and secondFixed) then
+                            local firstPush = firstFixed and 0 or (secondFixed and overlap or overlap * 0.5)
+                            local secondPush = secondFixed and 0 or (firstFixed and overlap or overlap * 0.5)
+                            first.x = Clamp(first.x - nx * firstPush, RoomConfig.minX, RoomConfig.maxX)
+                            first.y = Clamp(first.y - ny * firstPush, RoomConfig.minY, RoomConfig.maxY)
+                            second.x = Clamp(second.x + nx * secondPush, RoomConfig.minX, RoomConfig.maxX)
+                            second.y = Clamp(second.y + ny * secondPush, RoomConfig.minY, RoomConfig.maxY)
+                        end
                     end
                 end
             end
@@ -388,8 +584,25 @@ function Entities.UpdateProjectile(projectile, dt)
     end
 end
 
+local function EnemyCanBeParried(enemy, player)
+    local spec = EnemyConfig[enemy.kind]
+    if spec.behavior == "melee_lunge" or spec.behavior == "rolling" then
+        return enemy.state == "dash"
+    end
+    if spec.behavior == "tree_swing" then
+        return enemy.state == "active"
+    end
+    if spec.behavior == "contact_chase" then
+        return enemy.state ~= "stagger" and Entities.IsEnemyActive(enemy, player)
+    end
+    if spec.behavior == "ground_hazard" then
+        return true
+    end
+    return spec.behavior == "aoe_pulse" and enemy.state == "telegraph"
+end
+
 function Entities.TryParryEnemy(player, enemy, damage)
-    if enemy.kind == "boss" or not Entities.IsParrying(player) or enemy.dead or enemy.state ~= "dash" then
+    if enemy.kind == "boss" or not Entities.IsParrying(player) or enemy.dead or not EnemyCanBeParried(enemy, player) then
         return false
     end
 
@@ -400,14 +613,25 @@ function Entities.TryParryEnemy(player, enemy, damage)
 
     local appliedDamage = math.min(enemy.hp, damage)
     enemy.hp = enemy.hp - appliedDamage
-    enemy.state = "recovery"
-    enemy.stateTimer = EnemyConfig[enemy.kind].recoveryDuration + 0.3
+    local spec = EnemyConfig[enemy.kind]
+    if spec.behavior == "contact_chase" then
+        enemy.state = "stagger"
+        enemy.stateTimer = spec.parryStagger
+    elseif spec.behavior == "ground_hazard" then
+        enemy.state = "idle"
+        enemy.stateTimer = 0
+    else
+        enemy.state = "recovery"
+        enemy.stateTimer = spec.attack.recovery + 0.3
+    end
     local knockback = PlayerConfig.meleeKnockback + player.abilities.repulse * 0.12
     local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
     local directionY = player.parryDirectionY or 0
     directionX, directionY = Normalize(directionX, directionY)
-    enemy.x = Clamp(enemy.x + directionX * knockback, RoomConfig.minX, RoomConfig.maxX)
-    enemy.y = Clamp(enemy.y + directionY * knockback, RoomConfig.minY, RoomConfig.maxY)
+    if spec.behavior ~= "ground_hazard" then
+        enemy.x = Clamp(enemy.x + directionX * knockback, RoomConfig.minX, RoomConfig.maxX)
+        enemy.y = Clamp(enemy.y + directionY * knockback, RoomConfig.minY, RoomConfig.maxY)
+    end
     if enemy.hp <= 0 then
         enemy.dead = true
     end
@@ -445,8 +669,7 @@ function Entities.TryParryProjectile(player, projectile, damageMultiplier, perfe
 end
 
 function Entities.EnemyTouchesPlayer(enemy, player)
-    return enemy.state == "dash" and not enemy.dead
-        and DistanceSquared(enemy, player) <= (enemy.radius + player.radius) ^ 2
+    return not enemy.dead and IsCircleTouch(enemy, player)
 end
 
 function Entities.ProjectileHitsPlayer(projectile, player)

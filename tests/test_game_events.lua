@@ -59,11 +59,11 @@ local directional = Game.New()
 Game.StartOrRestart(directional)
 Game.ConsumeEvents(directional)
 directional.state = "battle"
-local upperEnemy = Entities.NewEnemy("melee", {
+local upperEnemy = Entities.NewEnemy("soot", {
     x = directional.player.x,
     y = directional.player.y - 0.12,
 }, 101)
-local lowerEnemy = Entities.NewEnemy("melee", {
+local lowerEnemy = Entities.NewEnemy("soot", {
     x = directional.player.x,
     y = directional.player.y + 0.12,
 }, 102)
@@ -82,7 +82,7 @@ local movementLock = Game.New()
 Game.StartOrRestart(movementLock)
 Game.ConsumeEvents(movementLock)
 movementLock.state = "battle"
-movementLock.enemies = { Entities.NewEnemy("melee", { x = 0.1, y = 0.1 }, 103) }
+movementLock.enemies = { Entities.NewEnemy("soot", { x = 0.1, y = 0.1 }, 103) }
 movementLock.enemies[1].stateTimer = 99
 local lockedX, lockedY = movementLock.player.x, movementLock.player.y
 assert(Game.TryParry(movementLock, movementLock.player.x + 1, movementLock.player.y))
@@ -94,7 +94,7 @@ local buffered = Game.New()
 Game.StartOrRestart(buffered)
 Game.ConsumeEvents(buffered)
 buffered.state = "battle"
-buffered.enemies = { Entities.NewEnemy("melee", { x = 0.1, y = 0.1 }, 104) }
+buffered.enemies = { Entities.NewEnemy("soot", { x = 0.1, y = 0.1 }, 104) }
 buffered.enemies[1].stateTimer = 99
 buffered.player.parryCooldown = PlayerConfig.parryInputBuffer - 0.01
 assert(Game.TryParry(buffered, buffered.player.x, buffered.player.y - 1),
@@ -131,7 +131,7 @@ Game.Update(battle, RoomConfig.introDuration + 0.01, 0, 0)
 assert(HasEvent(Game.ConsumeEvents(battle), "battle_start"))
 
 battle.state = "battle"
-battle.enemies = { Entities.NewEnemy("ranged", { x = 0.2, y = 0.2 }, 1001) }
+battle.enemies = { Entities.NewEnemy("mushroom", { x = 0.2, y = 0.2 }, 1001) }
 battle.enemies[1].state = "telegraph"
 battle.enemies[1].stateTimer = 0
 battle.player.x, battle.player.y = 0.8, 0.8
@@ -155,7 +155,7 @@ local parry = Game.New()
 Game.StartOrRestart(parry)
 Game.ConsumeEvents(parry)
 parry.state = "battle"
-parry.enemies = { Entities.NewEnemy("melee", { x = parry.player.x + 0.12, y = parry.player.y }, 2001) }
+parry.enemies = { Entities.NewEnemy("soot", { x = parry.player.x + 0.12, y = parry.player.y }, 2001) }
 parry.enemies[1].hp = 0.5
 parry.enemies[1].state = "dash"
 parry.enemies[1].stateTimer = 0.5
@@ -167,17 +167,17 @@ assert(HasEvent(events, "perfect_parry"))
 assert(HasEvent(events, "enemy_defeat"))
 assert(HasEvent(events, "room_clear"))
 assert(FindEvent(events, "perfect_parry").data.damage > 0)
-assert(FindEvent(events, "enemy_defeat").data.kind == "melee")
+assert(FindEvent(events, "enemy_defeat").data.kind == "soot")
 assert(parry.gauge.value == GaugeConfig.perfectGain, "killing an enemy must preserve gauge progress")
 
 local reflect = Game.New()
 Game.StartOrRestart(reflect)
 Game.ConsumeEvents(reflect)
 reflect.state = "battle"
-reflect.enemies = { Entities.NewEnemy("melee", { x = 0.2, y = 0.2 }, 3001) }
+reflect.enemies = { Entities.NewEnemy("soot", { x = 0.2, y = 0.2 }, 3001) }
 reflect.enemies[1].stateTimer = 99
 reflect.player.facing = "right"
-reflect.projectiles = { Entities.NewProjectile(reflect.player.x + 0.04, reflect.player.y, -0.1, 0, "enemy", 1, "ranged") }
+reflect.projectiles = { Entities.NewProjectile(reflect.player.x + 0.04, reflect.player.y, -0.1, 0, "enemy", 1, "mushroom") }
 assert(Game.TryParry(reflect, reflect.player.x + 1, reflect.player.y))
 reflect.player.parryElapsed = PlayerConfig.perfectParryWindow + 0.01
 Game.ConsumeEvents(reflect)
@@ -185,7 +185,7 @@ Game.Update(reflect, 0, 0, 0)
 events = Game.ConsumeEvents(reflect)
 assert(HasEvent(events, "parry_success"))
 assert(HasEvent(events, "projectile_reflect"))
-assert(FindEvent(events, "projectile_reflect").data.sourceKind == "ranged")
+assert(FindEvent(events, "projectile_reflect").data.sourceKind == "mushroom")
 assert(reflect.projectiles[1].vx > 0 and math.abs(reflect.projectiles[1].vy) < 0.0001,
     "a reflected projectile must travel along the clicked guard direction")
 
@@ -194,7 +194,7 @@ Game.StartOrRestart(perfectReflect)
 Game.ConsumeEvents(perfectReflect)
 perfectReflect.state = "battle"
 perfectReflect.projectiles = {
-    Entities.NewProjectile(perfectReflect.player.x + 0.04, perfectReflect.player.y, -0.1, 0, "enemy", 1, "ranged"),
+    Entities.NewProjectile(perfectReflect.player.x + 0.04, perfectReflect.player.y, -0.1, 0, "enemy", 1, "mushroom"),
 }
 assert(Game.TryParry(perfectReflect, perfectReflect.player.x + 1, perfectReflect.player.y))
 Game.Update(perfectReflect, 0, 0, 0)
@@ -210,15 +210,15 @@ chain.state = "battle"
 for _, definition in ipairs(UpgradeConfig.definitions) do
     chain.player.abilities[definition.id] = definition.maxStacks
 end
-local firstTarget = Entities.NewEnemy("melee", { x = 0.35, y = 0.5 }, 3101)
-local secondTarget = Entities.NewEnemy("melee", { x = 0.55, y = 0.5 }, 3102)
-local thirdTarget = Entities.NewEnemy("melee", { x = 0.75, y = 0.5 }, 3103)
+local firstTarget = Entities.NewEnemy("soot", { x = 0.35, y = 0.5 }, 3101)
+local secondTarget = Entities.NewEnemy("soot", { x = 0.55, y = 0.5 }, 3102)
+local thirdTarget = Entities.NewEnemy("soot", { x = 0.75, y = 0.5 }, 3103)
 for _, enemy in ipairs({ firstTarget, secondTarget, thirdTarget }) do
     enemy.hp = 1
     enemy.stateTimer = 99
 end
 chain.enemies = { firstTarget, secondTarget, thirdTarget }
-local chainedProjectile = Entities.NewProjectile(firstTarget.x, firstTarget.y, 0.2, 0, "player", 2, "ranged")
+local chainedProjectile = Entities.NewProjectile(firstTarget.x, firstTarget.y, 0.2, 0, "player", 2, "mushroom")
 chainedProjectile.chainsRemaining = 1
 chainedProjectile.pierceRemaining = 1
 chain.projectiles = { chainedProjectile }
@@ -254,7 +254,7 @@ comboGame.state = "battle"
 local function PerformPerfectComboParry(id)
     comboGame.player.parryTimer = 0
     comboGame.player.parryCooldown = 0
-    local enemy = Entities.NewEnemy("melee", { x = comboGame.player.x + 0.12, y = comboGame.player.y }, id)
+    local enemy = Entities.NewEnemy("soot", { x = comboGame.player.x + 0.12, y = comboGame.player.y }, id)
     enemy.hp = 10
     enemy.state, enemy.stateTimer = "dash", 0.5
     comboGame.enemies = { enemy }
@@ -293,7 +293,7 @@ local hit = Game.New()
 Game.StartOrRestart(hit)
 Game.ConsumeEvents(hit)
 hit.state = "battle"
-hit.enemies = { Entities.NewEnemy("melee", { x = 0.5, y = 0.5 }, 3501) }
+hit.enemies = { Entities.NewEnemy("soot", { x = 0.5, y = 0.5 }, 3501) }
 hit.enemies[1].stateTimer = 99
 hit.projectiles = { Entities.NewProjectile(0.5, 0.5, 0, 0, "player", 0.1) }
 Game.Update(hit, 0, 0, 0)
@@ -313,7 +313,7 @@ local sharedGauge = Game.New()
 Game.StartOrRestart(sharedGauge)
 Game.ConsumeEvents(sharedGauge)
 sharedGauge.state = "battle"
-sharedGauge.enemies = { Entities.NewEnemy("melee", { x = sharedGauge.player.x + 0.12, y = sharedGauge.player.y }, 3551) }
+sharedGauge.enemies = { Entities.NewEnemy("soot", { x = sharedGauge.player.x + 0.12, y = sharedGauge.player.y }, 3551) }
 sharedGauge.enemies[1].state = "dash"
 sharedGauge.enemies[1].stateTimer = 0.5
 assert(Game.TryParry(sharedGauge))
@@ -323,7 +323,7 @@ assert(sharedGauge.gauge.value == GaugeConfig.perfectGain, "melee parries must f
 sharedGauge.player.parryTimer = 0
 sharedGauge.player.parryCooldown = 0
 sharedGauge.projectiles = {
-    Entities.NewProjectile(sharedGauge.player.x + 0.04, sharedGauge.player.y, -0.1, 0, "enemy", 1, "ranged"),
+    Entities.NewProjectile(sharedGauge.player.x + 0.04, sharedGauge.player.y, -0.1, 0, "enemy", 1, "mushroom"),
 }
 assert(Game.TryParry(sharedGauge))
 sharedGauge.player.parryElapsed = PlayerConfig.perfectParryWindow + 0.01
@@ -337,7 +337,7 @@ Game.ConsumeEvents(gauge)
 gauge.state = "battle"
 assert(gauge.gauge ~= nil and gauge.gauges == nil, "the game must expose exactly one gauge")
 gauge.gauge.value = gauge.gauge.threshold - GaugeConfig.perfectGain
-gauge.enemies = { Entities.NewEnemy("melee", { x = gauge.player.x + 0.12, y = gauge.player.y }, 3601) }
+gauge.enemies = { Entities.NewEnemy("soot", { x = gauge.player.x + 0.12, y = gauge.player.y }, 3601) }
 gauge.enemies[1].state = "dash"
 gauge.enemies[1].stateTimer = 0.5
 assert(Game.TryParry(gauge))
@@ -413,7 +413,7 @@ local clearProjectile = Game.New()
 Game.StartOrRestart(clearProjectile)
 Game.ConsumeEvents(clearProjectile)
 clearProjectile.state = "battle"
-clearProjectile.enemies = { Entities.NewEnemy("melee", { x = 0.5, y = 0.5 }, 5001) }
+clearProjectile.enemies = { Entities.NewEnemy("soot", { x = 0.5, y = 0.5 }, 5001) }
 clearProjectile.enemies[1].hp = 0.1
 clearProjectile.enemies[1].stateTimer = 99
 clearProjectile.projectiles = { Entities.NewProjectile(0.5, 0.5, 0.2, 0, "player", 1) }
