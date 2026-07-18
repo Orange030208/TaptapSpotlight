@@ -89,6 +89,7 @@ local function GetSpriteKey(boss)
     if boss.state == "defeat" then return "defeat" end
     if boss.dead then return "defeat" end
     if boss.state == "phase_transition" then return "phase_transition" end
+    if boss.state == "airborne" then return "phase_transition" end
     if boss.state == "recovery" then return "recovery" end
     if boss.state == "telegraph" or boss.state == "active" then
         return boss.attack or (boss.isMoving and "move" or "idle")
@@ -119,7 +120,8 @@ local function GetSpriteMotion(boss, time)
 
     if boss.state == "telegraph" then
         local spec = BossConfig.attacks[boss.attack]
-        local progress = Clamp(1 - boss.stateTimer / math.max(0.001, spec.telegraph), 0, 1)
+        local telegraphDuration = boss.attack == "feathers" and spec.landingTelegraph or spec.telegraph
+        local progress = Clamp(1 - boss.stateTimer / math.max(0.001, telegraphDuration), 0, 1)
         if boss.attack == "sweep" then
             scaleX = 1 + progress * 0.08
             scaleY = 1 - progress * 0.04
@@ -147,15 +149,15 @@ local function GetSpriteMotion(boss, time)
             scaleX = 1.17
             scaleY = 0.88
             offsetX = boss.vx < 0 and -4 or 4
+        elseif boss.attack == "feathers" then
+            scaleX = 1.22
+            scaleY = 0.72
+            offsetY = -30
+            glow = 0.8
         elseif boss.attack == "quake" then
             scaleX = 1.08
             scaleY = 0.92
             offsetY = 3
-        elseif boss.attack == "feathers" then
-            local pulse = boss.featherPulse or 1
-            glow = 0.55 + 0.45 * math.sin(time * 30 + pulse)
-            scaleX = 1 + glow * 0.05
-            scaleY = 1 + glow * 0.05
         end
     elseif boss.state == "recovery" then
         local recovery = Clamp(boss.stateTimer / math.max(0.001, BossConfig.recoveryDuration), 0, 1)
@@ -170,6 +172,8 @@ local function GetSpriteMotion(boss, time)
         offsetY = -progress * 8
         glow = progress
         alpha = 0.85 + progress * 0.15
+    elseif boss.state == "airborne" then
+        return 1.0, 1.0, 0, -80, 0, 0, 0
     elseif boss.state == "purifying" then
         local progress = Clamp(boss.purificationProgress or 0, 0, 1)
         scaleX = 1 - progress * 0.32
@@ -304,6 +308,34 @@ local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug,
 end
 
 local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
+    if boss.attack == "feathers" then
+        local landing = boss.feathersPhase == "landing"
+        if not landing or (boss.state ~= "telegraph" and boss.state ~= "active") then
+            return
+        end
+        local spec = BossConfig.attacks.feathers
+        local x, y = WorldPoint(worldToScreen, width, height, boss.landingX, boss.landingY)
+        local edgeX = WorldPoint(worldToScreen, width, height, boss.landingX + spec.landingRadius, boss.landingY)
+        local _, edgeY = WorldPoint(worldToScreen, width, height, boss.landingX, boss.landingY + spec.landingRadius)
+        local radius = math.max(math.abs(edgeX - x), math.abs(edgeY - y))
+        local progress = boss.state == "telegraph"
+            and Clamp(1 - boss.stateTimer / math.max(0.001, spec.landingTelegraph), 0, 1) or 1
+        local alpha = boss.state == "telegraph" and (debug and 74 or 52) or (debug and 110 or 78)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius)
+        Fill(ctx, debug and { 255, 72, 88 } or { 255, 112, 74 }, alpha)
+        nvgFill(ctx)
+        nvgStrokeWidth(ctx, debug and 2.5 or 1.8)
+        Stroke(ctx, { 255, 224, 128 }, math.min(255, alpha + 100))
+        nvgStroke(ctx)
+        if progress > 0 then
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x, y, radius * progress)
+            Fill(ctx, { 255, 78, 72 }, math.min(165, alpha + 70))
+            nvgFill(ctx)
+        end
+        return
+    end
     if boss.state ~= "telegraph" and boss.state ~= "active" then return end
     local spec = BossConfig.attacks[boss.attack]
     local progress = boss.state == "telegraph" and Clamp(1 - boss.stateTimer / math.max(0.001, spec.telegraph), 0, 1) or 1
@@ -335,9 +367,6 @@ local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
         end
     elseif boss.attack == "quake" then
         DrawSector(ctx, width, height, boss, BossConfig.attacks.quake.range, 270, false, worldToScreen, alpha, debug, progress)
-    elseif boss.attack == "feathers" then
-        local reverse = boss.state == "telegraph" or boss.featherPulse <= 4
-        DrawSector(ctx, width, height, boss, BossConfig.attacks.feathers.range, BossConfig.attacks.feathers.arc, reverse, worldToScreen, alpha, debug, progress)
     end
 end
 
@@ -404,6 +433,9 @@ end
 
 function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    if boss.state == "airborne" then
+        return
+    end
     if bossSpriteLoaded and DrawBossSprite(ctx, x, y, boss, time, scale) then
         return
     end
@@ -510,7 +542,8 @@ function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
 end
 
 function BossRenderer.DrawMechanismTarget(ctx, width, height, boss, player, time, worldToScreen)
-    if boss == nil or player == nil or boss.phase ~= 2 or boss.mechanismTransition > 0 then return end
+    if boss == nil or player == nil or boss.phase ~= 2
+        or boss.state == "phase_transition" or boss.mechanismTransition > 0 then return end
     if boss.mechanism == "fog" then
         local targetX, targetY = Boss.GetMechanismTarget(boss, player)
         local x, y, scale = WorldPoint(worldToScreen, width, height, targetX, targetY)
@@ -532,7 +565,8 @@ function BossRenderer.DrawMechanismTarget(ctx, width, height, boss, player, time
 end
 
 function BossRenderer.DrawFog(ctx, width, height, boss, player, worldToScreen)
-    if boss == nil or player == nil or boss.phase ~= 2 or boss.mechanism ~= "fog" then return end
+    if boss == nil or player == nil or boss.phase ~= 2
+        or boss.state == "phase_transition" or boss.mechanism ~= "fog" then return end
     local alphaSteps = { 230, 155, 80, 0 }
     local alpha = alphaSteps[Clamp(boss.mechanismProgress + 1, 1, 4)]
     if alpha <= 0 then return end

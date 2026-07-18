@@ -955,6 +955,9 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
     local directionAngle = Atan2(directionY, directionX)
     local telegraphColor = enemy.kind == "blue_swarm" and { 70, 225, 255 } or { 255, 230, 120 }
     local behavior = spec.behavior or ""
+    if behavior == "ranged_single" or behavior == "ranged_fan" then
+        return
+    end
     local attackRange = attack.range or spec.attackRange or enemy.radius * 2
     if behavior == "melee_arc" or behavior == "tree_swing" then
         attackRange = attackRange + enemy.radius + PlayerConfig.radius
@@ -983,20 +986,6 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
         local dashWidthX, dashWidthY = GetWorldRadius(width, height, math.max(enemy.radius + 0.012, PlayerConfig.radius))
         DrawDashAttackRegion(ctx, x, y, dashRadiusX, dashRadiusY, dashWidthX, dashWidthY, directionAngle,
             telegraphColor, progress, pulse, scale)
-    elseif behavior == "ranged_fan" then
-        if spec.projectile ~= nil and spec.projectile.pattern == "radial_random" then
-            DrawCircleAttackRegion(ctx, x, y, radiusX, radiusY, { 202, 174, 235 }, progress, pulse, scale)
-        else
-            local spread = math.rad(spec.projectile and spec.projectile.spread or 30)
-            DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, directionAngle - spread * 0.5, spread,
-                { 202, 174, 235 }, progress, pulse, scale)
-        end
-    elseif behavior == "ranged_single" and player ~= nil then
-        local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
-        local playerAngle = Atan2(playerY - y, playerX - x)
-        local spread = math.rad(12)
-        DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, playerAngle - spread * 0.5, spread,
-            { 255, 220, 115 }, progress, pulse, scale)
     end
 end
 
@@ -1305,14 +1294,6 @@ local function DrawSpriteMushroom(ctx, x, y, enemy, time, scale)
     local drawY = -displayHeight + 2 * scale
     local scaleX = 1 + math.sin(time * 2.6 + enemy.id * 0.41) * 0.012
     local scaleY = 1 - math.sin(time * 2.6 + enemy.id * 0.41) * 0.012
-    local attack = EnemyConfig.mushroom.attack
-
-    if enemy.state == "telegraph" and attack.telegraph > 0 then
-        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
-        local squash = math.sin(progress * math.pi)
-        scaleX = scaleX + squash * 0.075
-        scaleY = scaleY - squash * 0.09
-    end
 
     local pivotY = drawY + displayHeight
     nvgSave(ctx)
@@ -1338,15 +1319,6 @@ local function DrawSpriteDandelion(ctx, x, y, enemy, time, scale)
     local drawY = -displayHeight + 2 * scale
     local shakeX, shakeY, rotation = 0, 0, 0
 
-    if enemy.state == "telegraph" then
-        local attack = EnemyConfig.dandelion.attack
-        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
-        local jitter = math.sin(time * 54 + enemy.id * 1.37) * progress
-        shakeX = jitter * 1.8 * scale
-        shakeY = math.cos(time * 47 + enemy.id * 0.61) * progress * 0.55 * scale
-        rotation = jitter * 0.055
-    end
-
     local pivotY = drawY + displayHeight
     nvgSave(ctx)
     nvgTranslate(ctx, x + shakeX, y + shakeY)
@@ -1370,15 +1342,6 @@ local function DrawSpritePurpleOrb(ctx, x, y, enemy, time, scale)
     local drawX = -displayWidth * 0.5
     local drawY = -displayHeight + 6 * scale
     local shakeX, shakeY, rotation = 0, 0, 0
-
-    if enemy.state == "telegraph" then
-        local attack = EnemyConfig.purple_orb.attack
-        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
-        local jitter = math.sin(time * 68 + enemy.id * 1.71) * progress
-        shakeX = jitter * 1.5 * scale
-        shakeY = math.cos(time * 59 + enemy.id * 0.83) * progress * 0.7 * scale
-        rotation = jitter * 0.045
-    end
 
     nvgSave(ctx)
     nvgTranslate(ctx, x + shakeX, y + shakeY)
