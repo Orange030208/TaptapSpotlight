@@ -253,6 +253,13 @@ local function UpdateIdleMovement(boss, player, dt)
 end
 
 function Boss.Update(boss, player, dt)
+    if boss.state == "defeat" then
+        boss.stateTimer = boss.stateTimer - dt
+        if boss.stateTimer <= 0 then
+            boss.dead = true
+        end
+        return
+    end
     if boss.dead or boss.purified then return end
     boss.phaseChanged = false
     boss.mechanismChanged = false

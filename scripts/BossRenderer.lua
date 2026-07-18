@@ -5,11 +5,21 @@ local Boss = require "Boss"
 
 local BossRenderer = {}
 
-local BOSS_SPRITE_PATH = "image/boss_hui_an.png"
-local bossImageHandle = 0
-local bossImageWidth = 1
-local bossImageHeight = 1
-local bossSpriteLoaded = false
+local BOSS_SPRITES = {
+    fallback = "image/boss_hui_an.png",
+    idle = "image/boss_idle_pose_20260718202028.png",
+    move = "image/boss_move_pose_20260718202033.png",
+    sweep = "image/boss_sweep_pose_20260718202056.png",
+    skewer = "image/boss_skewer_pose_20260718202030.png",
+    charge = "image/boss_charge_pose_20260718202031.png",
+    quake = "image/boss_quake_pose_20260718202028.png",
+    feathers = "image/boss_feathers_pose_20260718202025.png",
+    phase_transition = "image/boss_phase_transition_pose_20260718202057.png",
+    recovery = "image/boss_recovery_pose_20260718202029.png",
+    purifying = "image/boss_purifying_pose_20260718202133.png",
+    defeat = "image/boss_defeat_pose_20260718202132.png",
+}
+local bossImages = {}
 
 local function Clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
@@ -29,37 +39,72 @@ end
 
 function BossRenderer.LoadAssets(ctx)
     BossRenderer.UnloadAssets(ctx)
-    bossImageHandle = nvgCreateImage(ctx, BOSS_SPRITE_PATH, 0)
-    if bossImageHandle == nil or bossImageHandle <= 0 then
-        bossImageHandle = 0
-        bossSpriteLoaded = false
-        print("WARNING: Failed to load Boss sprite: " .. BOSS_SPRITE_PATH .. "; using vector fallback")
-        return false
+    local loadedCount = 0
+    for name, path in pairs(BOSS_SPRITES) do
+        local image = {
+            handle = nvgCreateImage(ctx, path, 0),
+            width = 1,
+            height = 1,
+            loaded = false,
+        }
+        if image.handle ~= nil and image.handle > 0 then
+            image.width, image.height = nvgImageSize(ctx, image.handle)
+            image.loaded = image.width > 0 and image.height > 0
+        end
+        if image.loaded then
+            loadedCount = loadedCount + 1
+            print("Loaded Boss pose [" .. name .. "]: " .. path)
+        else
+            if image.handle ~= nil and image.handle > 0 then
+                nvgDeleteImage(ctx, image.handle)
+            end
+            image.handle = 0
+            print("WARNING: Failed to load Boss pose [" .. name .. "]: " .. path)
+        end
+        bossImages[name] = image
     end
-
-    bossImageWidth, bossImageHeight = nvgImageSize(ctx, bossImageHandle)
-    if bossImageWidth <= 0 or bossImageHeight <= 0 then
-        nvgDeleteImage(ctx, bossImageHandle)
-        bossImageHandle = 0
-        bossImageWidth, bossImageHeight = 1, 1
-        bossSpriteLoaded = false
-        print("WARNING: Boss sprite has invalid dimensions; using vector fallback")
-        return false
+    local fallback = bossImages.fallback
+    bossSpriteLoaded = fallback ~= nil and fallback.loaded
+    if not bossSpriteLoaded then
+        print("WARNING: Boss fallback sprite unavailable; using vector fallback")
     end
-
-    bossSpriteLoaded = true
-    print("Loaded Boss sprite: " .. BOSS_SPRITE_PATH .. " ("
-        .. tostring(bossImageWidth) .. "x" .. tostring(bossImageHeight) .. ")")
-    return true
+    return loadedCount > 0
 end
 
 function BossRenderer.UnloadAssets(ctx)
-    if bossImageHandle ~= nil and bossImageHandle > 0 then
-        nvgDeleteImage(ctx, bossImageHandle)
+    for name, image in pairs(bossImages) do
+        if image.handle ~= nil and image.handle > 0 then
+            nvgDeleteImage(ctx, image.handle)
+        end
+        image.handle = 0
+        image.width, image.height = 1, 1
+        image.loaded = false
+        bossImages[name] = nil
     end
-    bossImageHandle = 0
-    bossImageWidth, bossImageHeight = 1, 1
     bossSpriteLoaded = false
+end
+
+local function GetSpriteKey(boss)
+    if boss.state == "purifying" then return "purifying" end
+    if boss.dead then return "defeat" end
+    if boss.state == "phase_transition" then return "phase_transition" end
+    if boss.state == "recovery" then return "recovery" end
+    if boss.state == "telegraph" or boss.state == "active" then
+        return boss.attack or (boss.isMoving and "move" or "idle")
+    end
+    if boss.isMoving or math.abs(boss.vx or 0) + math.abs(boss.vy or 0) > 0.01 then
+        return "move"
+    end
+    return "idle"
+end
+
+local function GetBossImage(boss)
+    local key = GetSpriteKey(boss)
+    local image = bossImages[key]
+    if image ~= nil and image.loaded then return image end
+    local fallback = bossImages.fallback
+    if fallback ~= nil and fallback.loaded then return fallback end
+    return nil
 end
 
 local function GetSpriteMotion(boss, time)
@@ -69,29 +114,30 @@ local function GetSpriteMotion(boss, time)
     local alpha = 1
     local glow = 0
     local phase = boss.phase == 2 and 1 or 0
+    local spriteKey = GetSpriteKey(boss)
 
     if boss.state == "telegraph" then
         local spec = BossConfig.attacks[boss.attack]
         local progress = Clamp(1 - boss.stateTimer / math.max(0.001, spec.telegraph), 0, 1)
         if boss.attack == "sweep" then
-            scaleX = 1 + progress * 0.16
-            scaleY = 1 - progress * 0.08
-            rotation = -progress * (boss.facing == "left" and -0.10 or 0.10)
+            scaleX = 1 + progress * 0.08
+            scaleY = 1 - progress * 0.04
+            rotation = -progress * (boss.facing == "left" and -0.06 or 0.06)
         elseif boss.attack == "skewer" then
-            scaleX = 1 + progress * 0.22
-            scaleY = 1 - progress * 0.10
-            rotation = progress * (boss.facing == "left" and -0.06 or 0.06)
+            scaleX = 1 + progress * 0.10
+            scaleY = 1 - progress * 0.05
+            rotation = progress * (boss.facing == "left" and -0.04 or 0.04)
         elseif boss.attack == "charge" then
-            scaleX = 1 - progress * 0.13
-            scaleY = 1 + progress * 0.17
+            scaleX = 1 - progress * 0.10
+            scaleY = 1 + progress * 0.10
             offsetX = (boss.facing == "left" and 1 or -1) * progress * 5
         elseif boss.attack == "quake" then
-            scaleX = 1 + progress * 0.11
-            scaleY = 1 - progress * 0.13
+            scaleX = 1 + progress * 0.08
+            scaleY = 1 - progress * 0.08
             offsetY = progress * 4
         elseif boss.attack == "feathers" then
-            scaleX = 1 + progress * 0.08
-            scaleY = 1 + progress * 0.08
+            scaleX = 1 + progress * 0.06
+            scaleY = 1 + progress * 0.06
             offsetY = -progress * 4
             glow = progress
         end
@@ -125,33 +171,51 @@ local function GetSpriteMotion(boss, time)
         alpha = 0.85 + progress * 0.15
     elseif boss.state == "purifying" then
         local progress = Clamp(boss.purificationProgress or 0, 0, 1)
-        scaleX = 1 - progress * 0.45
-        scaleY = 1 - progress * 0.45
+        scaleX = 1 - progress * 0.32
+        scaleY = 1 - progress * 0.32
         offsetY = -progress * 12
         glow = progress
         alpha = 1 - progress * 0.35
+    elseif spriteKey == "defeat" then
+        local progress = Clamp(1 - boss.stateTimer / 0.9, 0, 1)
+        scaleX = 1 - progress * 0.22
+        scaleY = 1 - progress * 0.30
+        offsetY = -progress * 16
+        rotation = progress * (boss.facing == "left" and -0.14 or 0.14)
+        glow = 0.35 * (1 - progress)
+        alpha = 1 - progress
     end
 
     local bob = math.sin(time * (boss.state == "active" and 7 or 4) + (boss.id or 0))
-    offsetY = offsetY + bob * (boss.state == "idle" and 2.5 or 1.2)
+    if spriteKey == "idle" then
+        offsetY = offsetY + bob * 2.5
+    elseif spriteKey == "move" then
+        offsetY = offsetY + math.sin(time * 10 + (boss.id or 0)) * 1.4
+    elseif boss.state ~= "defeat" then
+        offsetY = offsetY + bob * 1.2
+    end
     if phase == 1 then glow = math.max(glow, 0.35 + 0.2 * math.sin(time * 5)) end
     return scaleX, scaleY, offsetX, offsetY, rotation, alpha, glow
 end
 
 local function DrawBossSprite(ctx, x, y, boss, time, scale)
     local scaleX, scaleY, offsetX, offsetY, rotation, alpha, glow = GetSpriteMotion(boss, time)
+    local image = GetBossImage(boss)
+    if image == nil then return false end
     local displayHeight = 138 * scale
-    local displayWidth = displayHeight * bossImageWidth / bossImageHeight
+    local displayWidth = displayHeight * image.width / image.height
     local drawX = -displayWidth * 0.5
     local drawY = -displayHeight
     local flip = boss.facing == "left" and -1 or 1
 
     if glow > 0.01 then
         local radius = math.max(displayWidth, displayHeight) * (0.62 + glow * 0.18)
+        local glowColor = boss.state == "purifying" and nvgRGBA(218, 245, 220, math.floor(70 + glow * 110))
+            or nvgRGBA(132, 214, 255, math.floor(70 + glow * 100))
         nvgBeginPath(ctx)
         nvgCircle(ctx, x + offsetX, y - displayHeight * 0.52 + offsetY, radius)
         nvgFillPaint(ctx, nvgRadialGradient(ctx, x + offsetX, y - displayHeight * 0.52 + offsetY,
-            radius * 0.16, radius, nvgRGBA(132, 214, 255, math.floor(70 + glow * 100)), nvgRGBA(38, 20, 70, 0)))
+            radius * 0.16, radius, glowColor, nvgRGBA(38, 20, 70, 0)))
         nvgFill(ctx)
     end
 
@@ -162,9 +226,10 @@ local function DrawBossSprite(ctx, x, y, boss, time, scale)
     nvgBeginPath(ctx)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
     nvgFillPaint(ctx, nvgImagePatternTinted(ctx, drawX, drawY, displayWidth, displayHeight, 0,
-        bossImageHandle, nvgRGBA(255, 255, 255, math.floor(alpha * 255))))
+        image.handle, nvgRGBA(255, 255, 255, math.floor(alpha * 255))))
     nvgFill(ctx)
     nvgRestore(ctx)
+    return true
 end
 
 local function BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
@@ -338,8 +403,7 @@ end
 
 function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
-    if bossSpriteLoaded then
-        DrawBossSprite(ctx, x, y, boss, time, scale)
+    if bossSpriteLoaded and DrawBossSprite(ctx, x, y, boss, time, scale) then
         return
     end
 
