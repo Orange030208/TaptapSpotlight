@@ -443,13 +443,17 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     end
 
     if enemy.knockbackTimer > 0 then
-        local step = math.min(dt, enemy.knockbackTimer)
-        local speedScale = enemy.knockbackTimer / PlayerConfig.meleeKnockbackDuration
+        local duration = PlayerConfig.meleeKnockbackDuration
+        local remainingBefore = enemy.knockbackTimer
+        local step = math.min(dt, remainingBefore)
+        local remainingAfter = remainingBefore - step
+        local averageSpeedScale = (remainingBefore + remainingAfter) * 0.5 / duration
         local previousX, previousY = enemy.x, enemy.y
-        enemy.x = Clamp(enemy.x + enemy.knockbackVx * speedScale * step, RoomConfig.minX, RoomConfig.maxX)
-        enemy.y = Clamp(enemy.y + enemy.knockbackVy * speedScale * step, RoomConfig.minY, RoomConfig.maxY)
-        enemy.knockbackTimer = math.max(0, enemy.knockbackTimer - dt)
-        enemy.vx, enemy.vy = enemy.knockbackVx * speedScale, enemy.knockbackVy * speedScale
+        enemy.x = Clamp(enemy.x + enemy.knockbackVx * averageSpeedScale * step, RoomConfig.minX, RoomConfig.maxX)
+        enemy.y = Clamp(enemy.y + enemy.knockbackVy * averageSpeedScale * step, RoomConfig.minY, RoomConfig.maxY)
+        enemy.knockbackTimer = remainingAfter
+        local endSpeedScale = remainingAfter / duration
+        enemy.vx, enemy.vy = enemy.knockbackVx * endSpeedScale, enemy.knockbackVy * endSpeedScale
         if enemy.knockbackTimer <= 0 or (enemy.x == previousX and enemy.y == previousY) then
             enemy.knockbackVx, enemy.knockbackVy = 0, 0
             enemy.knockbackTimer = 0
