@@ -57,7 +57,7 @@ return {
         attackRangeMeters = 30, attackRange = MetersToWorld(30),
         -- A fast, immediate melee charge: contact during the roll is the only damage window.
         moveSpeed = 0.26, preferredDistance = MetersToWorld(4.5), touchDamage = 1,
-        attack = { interval = 0.92, telegraph = 0, active = 0.72, recovery = 0.24, dashSpeed = 1.45, arc = 360 },
+        attack = { interval = 0.92, telegraph = 0.32, active = 0.72, recovery = 0.24, dashSpeed = 1.45, arc = 360 },
         visual = Visual({ 93, 100, 121 }, { 159, 169, 190 }, { 39, 42, 57 }),
     },
     mushroom = {

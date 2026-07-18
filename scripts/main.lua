@@ -27,10 +27,6 @@ local healthPanel = nil
 ---@type ProgressBar|nil
 local healthProgressBar = nil
 ---@type Widget|nil
-local roomLabel = nil
----@type Widget|nil
-local roomProgressLabel = nil
----@type Widget|nil
 local comboPanel = nil
 ---@type Widget|nil
 local comboLabel = nil
@@ -42,8 +38,6 @@ local buffLabel = nil
 ---@type ProgressBar|nil
 local gaugeProgressBar = nil
 ---@type Widget|nil
-local gaugeStatusLabel = nil
----@type Widget|nil
 local messagePanel = nil
 ---@type Widget|nil
 local messageLabel = nil
@@ -53,6 +47,12 @@ local bossPanel = nil
 local bossNameLabel = nil
 ---@type Widget|nil
 local bossObjectiveLabel = nil
+---@type Widget|nil
+local roomLabel = nil
+---@type Widget|nil
+local roomProgressLabel = nil
+---@type Widget|nil
+local gaugeStatusLabel = nil
 ---@type ProgressBar|nil
 local bossProgressBar = nil
 ---@type Widget|nil
@@ -523,6 +523,8 @@ local function CreateHud()
         max = 1,
         width = "100%",
         height = 14,
+        flexGrow = 1,
+        flexBasis = 0,
         showLabel = false,
         borderRadius = 7,
         borderWidth = 1,
@@ -535,69 +537,27 @@ local function CreateHud()
         },
         transition = "value 0.18s easeOut",
     }
-    roomLabel = UI.Label {
-        text = "尚未开始",
-        fontSize = 14,
-        fontWeight = "bold",
-        fontColor = COLORS.cream,
-    }
-    roomProgressLabel = UI.Label {
-        text = "探索 0/7",
-        fontSize = 10,
-        fontColor = COLORS.muted,
-        textAlign = "right",
-    }
     healthPanel = UI.Panel {
         width = "40%",
         minWidth = 150,
         maxWidth = 282,
-        padding = { 10, 13, 11, 13 },
-        gap = 7,
-        borderRadius = 15,
-        borderWidth = 1,
-        borderLeftWidth = 3,
-        borderColor = { 239, 190, 105, 105 },
-        borderLeftColor = COLORS.coral,
-        backgroundGradient = {
-            type = "linear",
-            direction = "to-bottom-right",
-            from = COLORS.panelTop,
-            to = COLORS.panelBottom,
-        },
-        boxShadow = {
-            { x = 0, y = 6, blur = 18, spread = 0, color = { 0, 0, 0, 125 } },
-            { x = 0, y = 1, blur = 2, spread = 0, color = { 255, 219, 164, 24 }, inset = true },
-        },
+        flexDirection = "row",
+        alignItems = "center",
+        gap = 8,
         pointerEvents = "none",
         children = {
             UI.Panel {
-                width = "100%",
-                flexDirection = "row",
-                alignItems = "center",
-                gap = 7,
-                children = {
-                    UI.Panel {
-                        width = 16,
-                        height = 16,
-                        backgroundImage = "image/ui/heart.png",
-                        imageTint = COLORS.coral,
-                        pointerEvents = "none",
-                    },
-                    UI.Label {
-                        text = "生命律动",
-                        fontSize = 12,
-                        fontWeight = "bold",
-                        letterSpacing = 1,
-                        fontColor = COLORS.cream,
-                    },
-                },
+                width = 20,
+                height = 20,
+                flexShrink = 0,
+                backgroundImage = "image/ui/heart.png",
+                imageTint = COLORS.coral,
+                pointerEvents = "none",
             },
-            healthProgressBar,
             UI.Panel {
-                width = "100%",
-                flexDirection = "row",
-                alignItems = "baseline",
-                children = { roomLabel, UI.Spacer(), roomProgressLabel },
+                flexGrow = 1,
+                flexBasis = 0,
+                children = { healthProgressBar },
             },
         },
     }
@@ -673,19 +633,13 @@ local function CreateHud()
         children = { bossNameLabel, bossObjectiveLabel, bossProgressBar },
     }
 
-    gaugeStatusLabel = UI.Label {
-        text = "等待弹反",
-        fontSize = 10,
-        fontColor = COLORS.muted,
-        textAlign = "right",
-    }
     gaugeProgressBar = UI.ProgressBar {
         value = 0,
         max = 1,
         width = "100%",
-        height = 12,
+        height = 10,
         showLabel = false,
-        borderRadius = 6,
+        borderRadius = 5,
         borderWidth = 1,
         borderColor = { 255, 196, 112, 110 },
         backgroundColor = { 8, 9, 20, 225 },
@@ -697,44 +651,11 @@ local function CreateHud()
         transition = "value 0.16s easeOut",
     }
     local gaugePanel = UI.Panel {
-        width = "62%",
-        minWidth = 260,
-        maxWidth = 560,
-        padding = { 9, 14, 11, 14 },
-        gap = 7,
-        borderRadius = 16,
-        borderWidth = { 1, 1, 3, 1 },
-        borderColor = { 225, 164, 91, 130 },
-        backgroundGradient = {
-            type = "linear", direction = "to-bottom",
-            from = { 38, 27, 41, 235 }, to = { 16, 16, 31, 245 },
-        },
-        shadowBlur = 18, shadowOffsetY = 7, shadowColor = { 0, 0, 0, 135 },
+        width = "40%",
+        minWidth = 150,
+        maxWidth = 282,
         pointerEvents = "none",
-        children = {
-            UI.Panel {
-                width = "100%", flexDirection = "row", alignItems = "baseline",
-                children = {
-                    UI.Panel {
-                        width = 15,
-                        height = 15,
-                        backgroundImage = "image/ui/diamond-card.png",
-                        imageTint = COLORS.gold,
-                        pointerEvents = "none",
-                    },
-                    UI.Label {
-                        text = "弹反共鸣",
-                        fontSize = 12,
-                        fontWeight = "bold",
-                        letterSpacing = 1,
-                        fontColor = COLORS.gold,
-                    },
-                    UI.Spacer(),
-                    gaugeStatusLabel,
-                },
-            },
-            gaugeProgressBar,
-        },
+        children = { gaugeProgressBar },
     }
 
     local insightPanel = UI.Panel {
@@ -789,7 +710,8 @@ local function CreateHud()
         children = {
             UI.Panel {
                 position = "absolute", top = 14, left = 16,
-                width = "100%", pointerEvents = "box-none", children = { healthPanel },
+                width = "100%", gap = 6, pointerEvents = "box-none",
+                children = { healthPanel, gaugePanel },
             },
             UI.Panel {
                 position = "absolute", top = 14, right = 16,
@@ -803,10 +725,6 @@ local function CreateHud()
             UI.Panel {
                 position = "absolute", top = 108, left = 0, right = 0,
                 alignItems = "center", pointerEvents = "none", children = { messagePanel },
-            },
-            UI.Panel {
-                position = "absolute", bottom = 14, left = 0, right = 0,
-                alignItems = "center", pointerEvents = "none", children = { gaugePanel },
             },
         },
     }
@@ -1117,12 +1035,6 @@ local function UpdateHud()
     healthProgressBar:SetValue(hud.healthRatio)
     healthPanel:SetStyle({
         scale = 1 + 0.035 * hurtPulse,
-        borderColor = {
-            239,
-            math.floor(190 + 38 * hurtPulse),
-            math.floor(105 + 40 * hurtPulse),
-            math.floor(105 + 95 * hurtPulse),
-        },
     })
     if hud.healthRatio <= 0.34 then
         healthProgressBar:SetStyle({
@@ -1133,8 +1045,6 @@ local function UpdateHud()
             fillGradient = { direction = "to-right", from = { 225, 72, 92, 255 }, to = { 255, 177, 100, 255 } },
         })
     end
-    roomLabel:SetText(hud.room)
-    roomProgressLabel:SetText(hud.roomProgress)
     local combo = hud.combo
     local comboColor = combo.color
     comboLabel:SetText("连击 x" .. tostring(combo.count))
@@ -1154,13 +1064,6 @@ local function UpdateHud()
     messagePanel:SetVisible(hud.message ~= "")
     messageLabel:SetText(hud.message)
     gaugeProgressBar:SetValue(hud.gaugeRatio)
-    if hud.gaugeRatio <= 0 then
-        gaugeStatusLabel:SetText("等待弹反")
-    elseif hud.gaugeRatio >= 0.7 then
-        gaugeStatusLabel:SetText("回响渐强")
-    else
-        gaugeStatusLabel:SetText("共鸣聚集中")
-    end
     local boss = hud.boss
     bossPanel:SetVisible(boss ~= nil)
     if boss ~= nil then

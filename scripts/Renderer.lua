@@ -860,19 +860,24 @@ local function EnemyColor(kind)
     return { 255, 145, 74 }
 end
 
-local function BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
+local function BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
     nvgBeginPath(ctx)
     nvgMoveTo(ctx, centerX, centerY)
     for step = 0, 28 do
         local angle = startAngle + arcRadians * step / 28
-        nvgLineTo(ctx, centerX + math.cos(angle) * radius, centerY + math.sin(angle) * radius)
+        nvgLineTo(ctx, centerX + math.cos(angle) * radiusX, centerY + math.sin(angle) * radiusY)
     end
     nvgClosePath(ctx)
 end
 
-local function DrawCircleAttackRegion(ctx, centerX, centerY, radius, color, progress, pulse, scale)
+local function GetWorldRadius(width, height, worldRadius)
+    local arena = Renderer.GetArena(width, height)
+    return (arena.right - arena.left) * worldRadius, (arena.bottom - arena.top) * worldRadius
+end
+
+local function DrawCircleAttackRegion(ctx, centerX, centerY, radiusX, radiusY, color, progress, pulse, scale)
     nvgBeginPath(ctx)
-    nvgCircle(ctx, centerX, centerY, radius)
+    nvgEllipse(ctx, centerX, centerY, radiusX, radiusY)
     Color(ctx, color, 42)
     nvgFill(ctx)
     nvgStrokeWidth(ctx, 2.4 * scale)
@@ -881,14 +886,14 @@ local function DrawCircleAttackRegion(ctx, centerX, centerY, radius, color, prog
 
     if progress > 0 then
         nvgBeginPath(ctx)
-        nvgCircle(ctx, centerX, centerY, radius * progress)
+        nvgEllipse(ctx, centerX, centerY, radiusX * progress, radiusY * progress)
         Color(ctx, color, 105)
         nvgFill(ctx)
     end
 end
 
-local function DrawSectorAttackRegion(ctx, centerX, centerY, radius, startAngle, arcRadians, color, progress, pulse, scale)
-    BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
+local function DrawSectorAttackRegion(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians, color, progress, pulse, scale)
+    BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
     Color(ctx, color, 38)
     nvgFill(ctx)
     nvgStrokeWidth(ctx, 2.2 * scale)
@@ -896,7 +901,35 @@ local function DrawSectorAttackRegion(ctx, centerX, centerY, radius, startAngle,
     nvgStroke(ctx)
 
     if progress > 0 then
-        BuildSectorPath(ctx, centerX, centerY, radius * progress, startAngle, arcRadians)
+        BuildSectorPath(ctx, centerX, centerY, radiusX * progress, radiusY * progress, startAngle, arcRadians)
+        Color(ctx, color, 110)
+        nvgFill(ctx)
+    end
+end
+
+local function DrawDashAttackRegion(ctx, centerX, centerY, radiusX, radiusY, widthX, widthY, directionAngle, color, progress, pulse, scale)
+    local sideX = math.cos(directionAngle + math.pi * 0.5) * widthX
+    local sideY = math.sin(directionAngle + math.pi * 0.5) * widthY
+    local endX = math.cos(directionAngle) * radiusX
+    local endY = math.sin(directionAngle) * radiusY
+
+    local function BuildDashPath(distance)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, centerX - sideX, centerY - sideY)
+        nvgLineTo(ctx, centerX + sideX, centerY + sideY)
+        nvgLineTo(ctx, centerX + endX * distance + sideX, centerY + endY * distance + sideY)
+        nvgLineTo(ctx, centerX + endX * distance - sideX, centerY + endY * distance - sideY)
+        nvgClosePath(ctx)
+    end
+
+    BuildDashPath(1)
+    Color(ctx, color, 42)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2.4 * scale)
+    StrokeColor(ctx, color, pulse)
+    nvgStroke(ctx)
+    if progress > 0 then
+        BuildDashPath(progress)
         Color(ctx, color, 110)
         nvgFill(ctx)
     end
@@ -920,42 +953,47 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
     local telegraphColor = enemy.kind == "blue_swarm" and { 70, 225, 255 } or { 255, 230, 120 }
     local behavior = spec.behavior or ""
     local attackRange = attack.range or spec.attackRange or enemy.radius * 2
-    local radius = (attackRange * 180 + 6) * scale
+    if behavior == "melee_arc" or behavior == "tree_swing" then
+        attackRange = attackRange + enemy.radius + PlayerConfig.radius
+    elseif behavior == "aoe_pulse" then
+        attackRange = attackRange + PlayerConfig.radius
+    end
+    local radiusX, radiusY = GetWorldRadius(width, height, attackRange)
+    radiusX = math.max(radiusX, 8 * scale)
+    radiusY = math.max(radiusY, 8 * scale)
 
     if behavior == "aoe_pulse" then
-        DrawCircleAttackRegion(ctx, x, y, radius, telegraphColor, progress, pulse, scale)
+        DrawCircleAttackRegion(ctx, x, y, radiusX, radiusY, telegraphColor, progress, pulse, scale)
     elseif behavior == "tree_swing" then
         local arc = math.rad(enemy.attackArc or attack.arc or 60)
-        DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - arc * 0.5, arc,
+        DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, directionAngle - arc * 0.5, arc,
             { 222, 150, 255 }, progress, pulse, scale)
-        DrawSectorAttackRegion(ctx, x, y, radius, directionAngle + math.pi - arc * 0.5, arc,
+        DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, directionAngle + math.pi - arc * 0.5, arc,
             { 222, 150, 255 }, progress, pulse, scale)
-    elseif behavior == "melee_arc" or behavior == "melee_lunge" then
+    elseif behavior == "melee_arc" then
         local arc = math.rad(enemy.attackArc or attack.arc or 70)
-        DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - arc * 0.5, arc,
+        DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, directionAngle - arc * 0.5, arc,
+            telegraphColor, progress, pulse, scale)
+    elseif behavior == "melee_lunge" or behavior == "rolling" then
+        local dashLength = math.max(attackRange, (attack.active or 0) * (attack.dashSpeed or 0))
+        local dashRadiusX, dashRadiusY = GetWorldRadius(width, height, dashLength)
+        local dashWidthX, dashWidthY = GetWorldRadius(width, height, math.max(enemy.radius + 0.012, PlayerConfig.radius))
+        DrawDashAttackRegion(ctx, x, y, dashRadiusX, dashRadiusY, dashWidthX, dashWidthY, directionAngle,
             telegraphColor, progress, pulse, scale)
     elseif behavior == "ranged_fan" then
         if spec.projectile ~= nil and spec.projectile.pattern == "radial_random" then
-            DrawCircleAttackRegion(ctx, x, y, radius, { 202, 174, 235 }, progress, pulse, scale)
+            DrawCircleAttackRegion(ctx, x, y, radiusX, radiusY, { 202, 174, 235 }, progress, pulse, scale)
         else
             local spread = math.rad(spec.projectile and spec.projectile.spread or 30)
-            DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - spread * 0.5, spread,
+            DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, directionAngle - spread * 0.5, spread,
                 { 202, 174, 235 }, progress, pulse, scale)
         end
     elseif behavior == "ranged_single" and player ~= nil then
         local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
         local playerAngle = Atan2(playerY - y, playerX - x)
         local spread = math.rad(12)
-        DrawSectorAttackRegion(ctx, x, y, radius, playerAngle - spread * 0.5, spread,
+        DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, playerAngle - spread * 0.5, spread,
             { 255, 220, 115 }, progress, pulse, scale)
-    elseif player ~= nil then
-        local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
-        nvgBeginPath(ctx)
-        nvgMoveTo(ctx, x, y)
-        nvgLineTo(ctx, playerX, playerY)
-        nvgStrokeWidth(ctx, 2 * scale)
-        StrokeColor(ctx, telegraphColor, pulse)
-        nvgStroke(ctx)
     end
 end
 

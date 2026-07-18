@@ -20,12 +20,12 @@ local function WorldPoint(worldToScreen, width, height, x, y)
     return worldToScreen(width, height, x, y)
 end
 
-local function BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
+local function BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
     nvgBeginPath(ctx)
     nvgMoveTo(ctx, centerX, centerY)
     for step = 0, 28 do
         local angle = startAngle + arcRadians * step / 28
-        nvgLineTo(ctx, centerX + math.cos(angle) * radius, centerY + math.sin(angle) * radius)
+        nvgLineTo(ctx, centerX + math.cos(angle) * radiusX, centerY + math.sin(angle) * radiusY)
     end
     nvgClosePath(ctx)
 end
@@ -35,11 +35,12 @@ local function DrawSector(ctx, width, height, boss, range, arc, reverse, worldTo
     if reverse then facingAngle = facingAngle + math.pi end
     local half = math.rad(arc * 0.5)
     local centerX, centerY = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
-    local radius = range * (worldToScreen(width, height, boss.x + 1, boss.y) - centerX)
+    local radiusX = range * (worldToScreen(width, height, boss.x + 1, boss.y) - centerX)
+    local radiusY = range * (worldToScreen(width, height, boss.x, boss.y + 1) - centerY)
     local startAngle = facingAngle - half
     local arcRadians = math.rad(arc)
 
-    BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
+    BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
     Fill(ctx, debug and { 255, 80, 95 } or { 255, 126, 92 }, alpha)
     nvgFill(ctx)
     nvgStrokeWidth(ctx, debug and 2 or 1.4)
@@ -47,7 +48,7 @@ local function DrawSector(ctx, width, height, boss, range, arc, reverse, worldTo
     nvgStroke(ctx)
 
     if progress > 0 then
-        BuildSectorPath(ctx, centerX, centerY, radius * progress, startAngle, arcRadians)
+        BuildSectorPath(ctx, centerX, centerY, radiusX * progress, radiusY * progress, startAngle, arcRadians)
         Fill(ctx, debug and { 255, 80, 95 } or { 255, 126, 92 }, math.min(150, alpha + 70))
         nvgFill(ctx)
     end
@@ -57,6 +58,8 @@ local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug,
     local spec = BossConfig.attacks.skewer
     local left, top = WorldPoint(worldToScreen, width, height, boss.x - spec.length, boss.y - spec.halfWidth)
     local right, bottom = WorldPoint(worldToScreen, width, height, boss.x + spec.length, boss.y + spec.halfWidth)
+    if left > right then left, right = right, left end
+    if top > bottom then top, bottom = bottom, top end
     nvgBeginPath(ctx)
     nvgRoundedRect(ctx, left, top, right - left, bottom - top, 3)
     Fill(ctx, debug and { 255, 80, 95 } or { 225, 102, 148 }, alpha)
