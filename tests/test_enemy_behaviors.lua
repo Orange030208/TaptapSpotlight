@@ -61,6 +61,25 @@ for _, projectile in ipairs(emitted) do
     assert(projectile.style == "seed")
 end
 
+player.x, player.y = 0.5, 0.5
+local mushroom = NewEnemy("mushroom", 0.3, 0.5, 13)
+mushroom.stateTimer = 0
+local mushroomShotTimes = {}
+local elapsed = 0
+for _ = 1, 180 do
+    Entities.UpdateEnemy(mushroom, player, 0.01, function(projectile)
+        table.insert(mushroomShotTimes, elapsed)
+        assert(projectile.style == "spore")
+        assert(projectile.damage == 1)
+    end)
+    elapsed = elapsed + 0.01
+end
+assert(#mushroomShotTimes >= 3, "mushroom must repeatedly fire spores")
+for index = 2, #mushroomShotTimes do
+    local cadence = mushroomShotTimes[index] - mushroomShotTimes[index - 1]
+    assert(math.abs(cadence - 0.5) <= 0.011, "mushroom spore cadence must be 0.5 seconds")
+end
+
 local moss = NewEnemy("toxic_moss", player.x, player.y, 5)
 assert(Entities.CollectEnemyHit(moss, player) ~= nil)
 assert(Entities.CollectEnemyHit(moss, player) == nil, "moss must only hit on entry")

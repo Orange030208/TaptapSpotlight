@@ -74,9 +74,9 @@ return {
     },
     mushroom = {
         behavior = "ranged_single", hp = 2, radius = 0.04,
-        attackRangeMeters = 15, attackRange = MetersToWorld(15),
-        moveSpeed = 0.12, touchDamage = 1, minimumDistance = 0.2, maximumDistance = 0.43,
-        attack = { interval = 0.98, telegraph = 0.34, recovery = 0.42 },
+        attackRangeMeters = 8, attackRange = MetersToWorld(8),
+        moveSpeed = 0.1, touchDamage = 1, minimumDistance = 0.2, maximumDistance = 0.43,
+        attack = { interval = 0.36, repeatInterval = 0.5, telegraph = 0.07, recovery = 0.07 },
         projectile = { count = 1, speed = 0.48, style = "spore", radius = 0.016, damage = 1 },
         visual = Visual({ 69, 47, 83 }, { 139, 99, 154 }, { 28, 18, 39 }),
     },

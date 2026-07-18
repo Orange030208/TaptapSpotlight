@@ -7,7 +7,9 @@ local Renderer = {}
 local SOOT_SPRITE_PATH = "image/soot_monster.png"
 local LUMINOUS_WRAITH_SPRITE_PATH = "image/luminous_wraith_solid_alpha_20260718134330.png"
 local STONE_SPRITE_PATH = "image/stone_monster_rolling_20260718145411.png"
+local MUSHROOM_SPRITE_PATH = "image/dark_spore_mushroom_20260718151718.png"
 local SPAWN_ROOM_GUIDE_SPRITE_PATH = "image/spawn_room_wasd_floor_guide_20260718145203.png"
+local SPAWN_ROOM_PARRY_GUIDE_SPRITE_PATH = "image/spawn_room_left_click_parry_chalk_20260718151041.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
@@ -26,9 +28,15 @@ local luminousWraithImageHeight = 1
 local stoneImageHandle = 0
 local stoneImageWidth = 1
 local stoneImageHeight = 1
+local mushroomImageHandle = 0
+local mushroomImageWidth = 1
+local mushroomImageHeight = 1
 local spawnRoomGuideImageHandle = 0
 local spawnRoomGuideImageWidth = 1
 local spawnRoomGuideImageHeight = 1
+local spawnRoomParryGuideImageHandle = 0
+local spawnRoomParryGuideImageWidth = 1
+local spawnRoomParryGuideImageHeight = 1
 ---@type SpineInstance|nil
 local playerSpine = nil
 ---@type string|nil
@@ -123,6 +131,23 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
+    local mushroomLoaded = true
+    mushroomImageHandle = nvgCreateImage(ctx, MUSHROOM_SPRITE_PATH, 0)
+    if mushroomImageHandle == nil or mushroomImageHandle <= 0 then
+        mushroomImageHandle = 0
+        mushroomLoaded = false
+        print("WARNING: Failed to load mushroom sprite: " .. MUSHROOM_SPRITE_PATH .. "; using vector fallback")
+    else
+        mushroomImageWidth, mushroomImageHeight = nvgImageSize(ctx, mushroomImageHandle)
+        if mushroomImageWidth <= 0 or mushroomImageHeight <= 0 then
+            nvgDeleteImage(ctx, mushroomImageHandle)
+            mushroomImageHandle = 0
+            mushroomImageWidth, mushroomImageHeight = 1, 1
+            mushroomLoaded = false
+            print("WARNING: Mushroom sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
     local spawnRoomGuideLoaded = true
     spawnRoomGuideImageHandle = nvgCreateImage(ctx, SPAWN_ROOM_GUIDE_SPRITE_PATH, 0)
     if spawnRoomGuideImageHandle == nil or spawnRoomGuideImageHandle <= 0 then
@@ -140,7 +165,25 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and spawnRoomGuideLoaded
+    local spawnRoomParryGuideLoaded = true
+    spawnRoomParryGuideImageHandle = nvgCreateImage(ctx, SPAWN_ROOM_PARRY_GUIDE_SPRITE_PATH, 0)
+    if spawnRoomParryGuideImageHandle == nil or spawnRoomParryGuideImageHandle <= 0 then
+        spawnRoomParryGuideImageHandle = 0
+        spawnRoomParryGuideLoaded = false
+        print("WARNING: Failed to load birth room parry guide: " .. SPAWN_ROOM_PARRY_GUIDE_SPRITE_PATH)
+    else
+        spawnRoomParryGuideImageWidth, spawnRoomParryGuideImageHeight = nvgImageSize(ctx, spawnRoomParryGuideImageHandle)
+        if spawnRoomParryGuideImageWidth <= 0 or spawnRoomParryGuideImageHeight <= 0 then
+            nvgDeleteImage(ctx, spawnRoomParryGuideImageHandle)
+            spawnRoomParryGuideImageHandle = 0
+            spawnRoomParryGuideImageWidth, spawnRoomParryGuideImageHeight = 1, 1
+            spawnRoomParryGuideLoaded = false
+            print("WARNING: Birth room parry guide has invalid dimensions")
+        end
+    end
+
+    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and mushroomLoaded and spawnRoomGuideLoaded
+        and spawnRoomParryGuideLoaded
 end
 
 function Renderer.UnloadAssets(ctx)
@@ -172,11 +215,21 @@ function Renderer.UnloadAssets(ctx)
     end
     stoneImageHandle = 0
     stoneImageWidth, stoneImageHeight = 1, 1
+    if mushroomImageHandle ~= nil and mushroomImageHandle > 0 then
+        nvgDeleteImage(ctx, mushroomImageHandle)
+    end
+    mushroomImageHandle = 0
+    mushroomImageWidth, mushroomImageHeight = 1, 1
     if spawnRoomGuideImageHandle ~= nil and spawnRoomGuideImageHandle > 0 then
         nvgDeleteImage(ctx, spawnRoomGuideImageHandle)
     end
     spawnRoomGuideImageHandle = 0
     spawnRoomGuideImageWidth, spawnRoomGuideImageHeight = 1, 1
+    if spawnRoomParryGuideImageHandle ~= nil and spawnRoomParryGuideImageHandle > 0 then
+        nvgDeleteImage(ctx, spawnRoomParryGuideImageHandle)
+    end
+    spawnRoomParryGuideImageHandle = 0
+    spawnRoomParryGuideImageWidth, spawnRoomParryGuideImageHeight = 1, 1
 end
 
 local function Lerp(a, b, t)
@@ -798,6 +851,39 @@ local function DrawSpriteStone(ctx, x, y, enemy, time, scale)
     nvgRestore(ctx)
 end
 
+local function GetMushroomSpriteHeight(scale)
+    return 38 * scale
+end
+
+local function DrawSpriteMushroom(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetMushroomSpriteHeight(scale)
+    local displayWidth = displayHeight * mushroomImageWidth / mushroomImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 2 * scale
+    local scaleX = 1 + math.sin(time * 2.6 + enemy.id * 0.41) * 0.012
+    local scaleY = 1 - math.sin(time * 2.6 + enemy.id * 0.41) * 0.012
+    local attack = EnemyConfig.mushroom.attack
+
+    if enemy.state == "telegraph" and attack.telegraph > 0 then
+        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
+        local squash = math.sin(progress * math.pi)
+        scaleX = scaleX + squash * 0.075
+        scaleY = scaleY - squash * 0.09
+    end
+
+    local pivotY = drawY + displayHeight
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y)
+    nvgTranslate(ctx, 0, pivotY)
+    nvgScale(ctx, scaleX, scaleY)
+    nvgTranslate(ctx, 0, -pivotY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, mushroomImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
 local function DrawBlueSwarm(ctx, x, y, size, scale, time, color, secondary)
     local centerY = y - size * 0.58
     for index = 1, 12 do
@@ -1021,7 +1107,11 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
             DrawStone(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
         end
     elseif enemy.kind == "mushroom" then
-        DrawMushroom(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        if mushroomImageHandle ~= nil and mushroomImageHandle > 0 then
+            DrawSpriteMushroom(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawMushroom(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        end
     elseif enemy.kind == "dandelion" then
         DrawDandelion(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
     elseif enemy.kind == "purple_orb" then
@@ -1042,6 +1132,8 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         healthY = y - GetLuminousWraithSpriteHeight(scale) - 2 * scale
     elseif enemy.kind == "stone" and stoneImageHandle ~= nil and stoneImageHandle > 0 then
         healthY = y - GetStoneSpriteHeight(scale) - 4 * scale
+    elseif enemy.kind == "mushroom" and mushroomImageHandle ~= nil and mushroomImageHandle > 0 then
+        healthY = y - GetMushroomSpriteHeight(scale) - 4 * scale
     end
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
     nvgBeginPath(ctx)
@@ -1125,7 +1217,7 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
 
     if projectile.style == "spore" and not projectile.reflected then
         local sporeGlow = nvgRadialGradient(ctx, x, y, radius * 0.2, radius * 2.5,
-            nvgRGBA(color[1], color[2], color[3], 150), nvgRGBA(color[1], color[2], color[3], 0))
+            nvgRGBA(255, 255, 255, 170), nvgRGBA(255, 255, 255, 0))
         nvgBeginPath(ctx)
         nvgCircle(ctx, x, y, radius * 2.5)
         nvgFillPaint(ctx, sporeGlow)
@@ -1180,6 +1272,36 @@ local function DrawSpawnRoomGuide(ctx, width, height, game)
     nvgRect(ctx, guideX, guideY, guideWidth, guideHeight)
     nvgFillPaint(ctx, nvgImagePatternTinted(ctx, guideX, guideY, guideWidth, guideHeight, 0,
         spawnRoomGuideImageHandle, nvgRGBA(255, 246, 221, math.floor(214 * guideAlpha * pulse))))
+    nvgFill(ctx)
+end
+
+local function DrawSpawnRoomParryGuide(ctx, width, height, game)
+    if game.room == nil or not game.room.isBirthRoom or spawnRoomParryGuideImageHandle <= 0 then
+        return
+    end
+
+    local guideAlpha = Clamp(game.spawnParryGuideAlpha or 0, 0, 1)
+    if guideAlpha <= 0 then
+        return
+    end
+
+    local centerX, centerY, scale = Renderer.WorldToScreen(width, height, 0.5, 0.47)
+    local guideHeight = 162 * scale
+    local guideWidth = guideHeight * spawnRoomParryGuideImageWidth / spawnRoomParryGuideImageHeight
+    local guideX = centerX - guideWidth * 0.5
+    local guideY = centerY - guideHeight * 0.5
+    local pulse = 0.9 + 0.1 * math.sin(game.time * 3.0)
+
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, guideWidth * 0.46)
+    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, guideWidth * 0.12, guideWidth * 0.52,
+        nvgRGBA(96, 216, 230, math.floor(36 * guideAlpha * pulse)), nvgRGBA(70, 52, 96, 0)))
+    nvgFill(ctx)
+
+    nvgBeginPath(ctx)
+    nvgRect(ctx, guideX, guideY, guideWidth, guideHeight)
+    nvgFillPaint(ctx, nvgImagePatternTinted(ctx, guideX, guideY, guideWidth, guideHeight, 0,
+        spawnRoomParryGuideImageHandle, nvgRGBA(235, 250, 250, math.floor(225 * guideAlpha * pulse))))
     nvgFill(ctx)
 end
 
@@ -1581,6 +1703,7 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     nvgTranslate(ctx, offsetX, offsetY)
     DrawArena(ctx, width, height, game)
     DrawSpawnRoomGuide(ctx, width, height, game)
+    DrawSpawnRoomParryGuide(ctx, width, height, game)
     if game.state == "intro" then
         DrawSpawnMarkers(ctx, width, height, game)
     end

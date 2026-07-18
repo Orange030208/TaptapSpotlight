@@ -26,7 +26,9 @@ assert(imagePaths[1] == "Characters/player.png")
 assert(imagePaths[2] == "image/soot_monster.png")
 assert(imagePaths[3] == "image/luminous_wraith_solid_alpha_20260718134330.png")
 assert(imagePaths[4] == "image/stone_monster_rolling_20260718145411.png")
-assert(imagePaths[5] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
+assert(imagePaths[5] == "image/dark_spore_mushroom_20260718151718.png")
+assert(imagePaths[6] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
+assert(imagePaths[7] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
 
 Renderer.UnloadAssets({})
 
@@ -74,9 +76,19 @@ game.enemies = { stone }
 Renderer.Draw({}, game, 960, 540, nil)
 assert(#rotationCalls > 0, "rolling stone sprite must rotate during its charge")
 
+local mushroom = {
+    kind = "mushroom", id = 3, x = 0.5, y = 0.5,
+    vx = 0, vy = 0, facing = "right", state = "telegraph", stateTimer = 0.035,
+    hp = 2, maxHp = 2, radius = 0.04,
+}
+local scaleCount = #scaleCalls
+game.enemies = { mushroom }
+Renderer.Draw({}, game, 960, 540, nil)
+assert(#scaleCalls > scaleCount, "mushroom sprite must squash during its spore attack")
+
 local birthRoomGame = {
     time = 0, state = "clear", transition = nil, room = { isBirthRoom = true, connections = {} }, map = nil,
-    enemies = {}, chests = {}, particles = {}, player = nil, spawnGuideAlpha = 1,
+    enemies = {}, chests = {}, particles = {}, player = nil, spawnGuideAlpha = 1, spawnParryGuideAlpha = 1,
     projectiles = {
         { owner = "player", x = 0.5, y = 0.5, vx = 0.1, vy = 0, radius = 0.01, reflected = false },
     },

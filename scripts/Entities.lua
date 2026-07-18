@@ -69,6 +69,25 @@ local function MoveEnemy(enemy, moveX, moveY, speed, dt)
     end
 end
 
+local function GetInitialAttackTimer(spec)
+    local attack = spec.attack
+    if attack == nil then
+        return 0.8
+    end
+    if attack.repeatInterval ~= nil then
+        return math.max(0, attack.repeatInterval - (attack.telegraph or 0))
+    end
+    return attack.interval * (0.55 + math.random() * 0.25)
+end
+
+local function GetRecoveryAttackTimer(spec)
+    local attack = spec.attack
+    if attack.repeatInterval ~= nil then
+        return math.max(0, attack.repeatInterval - (attack.telegraph or 0) - (attack.recovery or 0))
+    end
+    return attack.interval * (0.8 + math.random() * 0.25)
+end
+
 function Entities.NewPlayer()
     local crystals = {}
     for _, definition in ipairs(CrystalConfig.definitions) do
@@ -110,7 +129,7 @@ function Entities.NewEnemy(kind, spawn, id)
         hp = spec.hp,
         maxHp = spec.hp,
         state = "idle",
-        stateTimer = (spec.attack and spec.attack.interval or 0.8) * (0.55 + math.random() * 0.25),
+        stateTimer = GetInitialAttackTimer(spec),
         vx = 0,
         vy = 0,
         facing = "right",
@@ -478,7 +497,7 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
         enemy.stateTimer = enemy.stateTimer - dt
         if enemy.stateTimer <= 0 then
             enemy.state = "idle"
-            enemy.stateTimer = spec.attack.interval * (0.8 + math.random() * 0.25)
+            enemy.stateTimer = GetRecoveryAttackTimer(spec)
         end
     end
 end

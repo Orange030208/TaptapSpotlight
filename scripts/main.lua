@@ -1335,7 +1335,9 @@ function HandleMouseButtonDown(eventType, eventData)
     if CrystalRenderer.IsPointerOverStatusIcon(game, logicalWidth, logicalHeight, screenX, screenY) then
         return
     end
-    if game.state ~= "battle" then
+    local isBirthTutorial = game.state == "clear" and game.room ~= nil and game.room.isBirthRoom
+        and not game.roomCleared
+    if game.state ~= "battle" and not isBirthTutorial then
         return
     end
 
