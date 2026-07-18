@@ -387,9 +387,66 @@ local function DrawThornRegion(ctx, width, height, thorn, worldToScreen, debug)
     nvgStroke(ctx)
 end
 
+local function DrawBossAttackEffect(ctx, width, height, boss, time, worldToScreen)
+    if boss == nil or boss.state ~= "active" or boss.attack == nil then return end
+    local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    local progress = Clamp(boss.attackTimer / math.max(0.001, BossConfig.attacks[boss.attack].active), 0, 1)
+    local pulse = 0.5 + 0.5 * math.sin(time * 24)
+    local facingX = boss.facing == "left" and -1 or 1
+    if boss.attack == "sweep" then
+        local length = 34 * scale
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x + facingX * 8 * scale, y - 32 * scale)
+        nvgBezierTo(ctx, x + facingX * 22 * scale, y - 18 * scale, x + facingX * length, y - 4 * scale, x + facingX * length, y + 18 * scale)
+        nvgStrokeWidth(ctx, (3 + pulse * 2) * scale)
+        Stroke(ctx, { 255, 174, 126 }, 170)
+        nvgStroke(ctx)
+    elseif boss.attack == "skewer" then
+        for _, direction in ipairs({ -1, 1 }) do
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, x + direction * 8 * scale, y)
+            nvgLineTo(ctx, x + direction * (26 + progress * 20) * scale, y + (direction * 5) * scale)
+            nvgStrokeWidth(ctx, 3 * scale)
+            Stroke(ctx, { 255, 132, 170 }, 180)
+            nvgStroke(ctx)
+        end
+    elseif boss.attack == "charge" then
+        local direction = boss.vx < 0 and -1 or 1
+        for index = 1, 3 do
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, x - direction * (index * 10 + 8) * scale, y + index * 2 * scale)
+            nvgLineTo(ctx, x - direction * (index * 22 + 18) * scale, y + index * 4 * scale)
+            nvgStrokeWidth(ctx, (4 - index) * scale)
+            Stroke(ctx, { 255, 134, 132 }, 95 - index * 16)
+            nvgStroke(ctx)
+        end
+    elseif boss.attack == "quake" then
+        local radius = (24 + progress * 48 + pulse * 4) * scale
+        nvgBeginPath(ctx)
+        nvgEllipse(ctx, x, y + 3 * scale, radius, radius * 0.34)
+        nvgStrokeWidth(ctx, 3 * scale)
+        Stroke(ctx, { 224, 126, 193 }, 160)
+        nvgStroke(ctx)
+    elseif boss.attack == "feathers" then
+        local pulseIndex = boss.featherPulse or 1
+        local reverse = pulseIndex <= 4 and -1 or 1
+        for index = 1, 4 do
+            local featherX = x + facingX * reverse * (12 + index * 9) * scale
+            local featherY = y - (12 - index * 5) * scale
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, featherX, featherY)
+            nvgLineTo(ctx, featherX + facingX * reverse * 9 * scale, featherY - 3 * scale)
+            nvgStrokeWidth(ctx, 2.2 * scale)
+            Stroke(ctx, { 147, 226, 255 }, 120)
+            nvgStroke(ctx)
+        end
+    end
+end
+
 function BossRenderer.DrawGround(ctx, width, height, boss, player, time, worldToScreen, debug)
     if boss == nil then return end
     DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
+    DrawBossAttackEffect(ctx, width, height, boss, time, worldToScreen)
     DrawThornRegion(ctx, width, height, boss.thorn, worldToScreen, debug)
 
     if boss.thorn ~= nil then
@@ -541,7 +598,51 @@ function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     nvgRestore(ctx)
 end
 
+local function DrawBossMechanismEffect(ctx, width, height, boss, player, time, worldToScreen)
+    if boss == nil or boss.phase ~= 2 then return end
+    local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    if boss.state == "phase_transition" then
+        local progress = Clamp(1 - boss.stateTimer / BossConfig.phaseTransitionDuration, 0, 1)
+        for index = 1, 3 do
+            local radius = (34 + progress * 70 + index * 14) * scale
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x, y - 50 * scale, radius)
+            nvgStrokeWidth(ctx, (2.4 - index * 0.4) * scale)
+            Stroke(ctx, { 88, 220, 214 }, math.floor((150 - index * 28) * (1 - progress)))
+            nvgStroke(ctx)
+        end
+    elseif boss.mechanism == "fog" then
+        local progress = Clamp(boss.mechanismProgress / math.max(1, BossConfig.mechanisms.fog.required), 0, 1)
+        for index = 1, 4 do
+            local radius = (28 + index * 13 + progress * 30) * scale
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x + math.sin(time * 1.4 + index) * 8 * scale, y - 48 * scale, radius)
+            nvgStrokeWidth(ctx, 2 * scale)
+            Stroke(ctx, { 74, 116, 148 }, 38)
+            nvgStroke(ctx)
+        end
+    elseif boss.mechanism == "thorns" and boss.thorn ~= nil then
+        local thornX, thornY = WorldPoint(worldToScreen, width, height, boss.thorn.x, boss.thorn.y)
+        local pulse = 0.7 + 0.3 * math.sin(time * 9)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x, y - 28 * scale)
+        nvgLineTo(ctx, thornX, thornY)
+        nvgStrokeWidth(ctx, 2 * scale)
+        Stroke(ctx, { 226, 74, 153 }, math.floor(90 * pulse))
+        nvgStroke(ctx)
+    elseif boss.mechanism == "metal" then
+        local progress = Clamp(boss.metalProgress / math.max(1, BossConfig.mechanisms.metal.required), 0, 1)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x, y - 52 * scale)
+        nvgLineTo(ctx, x - 26 * scale - progress * 18 * scale, y - 70 * scale)
+        nvgStrokeWidth(ctx, 5 * scale)
+        Stroke(ctx, { 226, 90, 126 }, 180)
+        nvgStroke(ctx)
+    end
+end
+
 function BossRenderer.DrawMechanismTarget(ctx, width, height, boss, player, time, worldToScreen)
+    DrawBossMechanismEffect(ctx, width, height, boss, player, time, worldToScreen)
     if boss == nil or player == nil or boss.phase ~= 2
         or boss.state == "phase_transition" or boss.mechanismTransition > 0 then return end
     if boss.mechanism == "fog" then

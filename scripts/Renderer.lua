@@ -2118,11 +2118,25 @@ local function DrawGuardStreak(ctx, width, height, feedback, game)
     end
 
     local fontSize = profile.textSize * (0.68 + 0.32 * popEase)
-    local headOffsetX = display.kind == "perfect" and 30 or 0
+    local iconSize = 46 * (0.78 + 0.22 * popEase)
+    local hasPerfectIcon = display.kind == "perfect"
+        and perfectStreakLightningImageHandle ~= nil and perfectStreakLightningImageHandle > 0
+    local headOffsetX = hasPerfectIcon and 35 or 0
     local textX = anchorX + headOffsetX
     local sway = math.sin((feedback.time or 0) * 8.5) * (display.kind == "perfect" and 2.5 or 1.2)
     local lift = math.sin(popProgress * math.pi) * 5
     local textY = anchorY - lift
+
+    if hasPerfectIcon then
+        local iconX = anchorX - 28 + sway
+        local iconY = textY - iconSize * 0.5
+        nvgBeginPath(ctx)
+        nvgRect(ctx, iconX - iconSize * 0.5, iconY - iconSize * 0.5, iconSize, iconSize)
+        nvgFillPaint(ctx, nvgImagePatternTinted(ctx,
+            iconX - iconSize * 0.5, iconY - iconSize * 0.5, iconSize, iconSize, 0,
+            perfectStreakLightningImageHandle, nvgRGBA(255, 255, 255, alpha)))
+        nvgFill(ctx)
+    end
 
     nvgFontFace(ctx, "sans")
     nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
