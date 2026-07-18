@@ -1775,7 +1775,7 @@ local function DrawPerfectStreak(ctx, width, height, feedback)
     local visibleCount = math.min(display.count, 10)
     local centerX = width * 0.5
     local centerY = Clamp(height * 0.31, 156, 230)
-    local alpha = math.floor(255 * math.min(1, remaining * 2.5))
+    local alpha = math.floor(255 * remaining)
 
     local glow = nvgRadialGradient(ctx, centerX, centerY, iconSize * 0.22, iconSize * 2.35,
         nvgRGBA(255, 230, 130, math.floor(alpha * 0.25)), nvgRGBA(255, 195, 85, 0))
@@ -1788,8 +1788,8 @@ local function DrawPerfectStreak(ctx, width, height, feedback)
     local focusScale = 1 + (1 - focusProgress) * 0.42
     for index = 1, visibleCount do
         local slot = index - (visibleCount + 1) * 0.5
-        local x = centerX + slot * iconSize * 0.56
-        local y = centerY + slot * slot * iconSize * 0.026
+        local x = centerX + slot * iconSize * 0.72
+        local y = centerY + slot * slot * iconSize * 0.065
         local isFocus = index == display.focusIndex
         local jitter = isFocus and (1 - focusProgress) * 4.2 or 0
         local jitterX = jitter * math.sin((feedback.time or 0) * 155 + index * 2.7)
