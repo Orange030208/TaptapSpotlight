@@ -8,6 +8,7 @@ local SOOT_SPRITE_PATH = "image/soot_monster.png"
 local BLUE_SWARM_SPRITE_PATH = "image/blue_swarm.png"
 local SHADOW_WRAITH_SPRITE_PATH = "image/shadow_wraith.png"
 local HARD_SLIME_SPRITE_PATH = "image/hard_slime.png"
+local TREE_WRAITH_SPRITE_PATH = "image/tree_wraith.png"
 local STONE_SPRITE_PATH = "image/stone_golem.png"
 local MUSHROOM_SPRITE_PATH = "image/spore_mushroom.png"
 local DANDELION_SPRITE_PATH = "image/dark_dandelion.png"
@@ -37,6 +38,7 @@ local shadowWraithImageHeight = 1
 local hardSlimeImageHandle = 0
 local hardSlimeImageWidth = 1
 local hardSlimeImageHeight = 1
+local treeWraithImage = { handle = 0, width = 1, height = 1 }
 local stoneImageHandle = 0
 local stoneImageWidth = 1
 local stoneImageHeight = 1
@@ -173,6 +175,23 @@ function Renderer.LoadAssets(ctx)
             hardSlimeImageWidth, hardSlimeImageHeight = 1, 1
             hardSlimeLoaded = false
             print("WARNING: Hard slime sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
+    local treeWraithLoaded = true
+    treeWraithImage.handle = nvgCreateImage(ctx, TREE_WRAITH_SPRITE_PATH, 0)
+    if treeWraithImage.handle == nil or treeWraithImage.handle <= 0 then
+        treeWraithImage.handle = 0
+        treeWraithLoaded = false
+        print("WARNING: Failed to load tree wraith sprite: " .. TREE_WRAITH_SPRITE_PATH .. "; using vector fallback")
+    else
+        treeWraithImage.width, treeWraithImage.height = nvgImageSize(ctx, treeWraithImage.handle)
+        if treeWraithImage.width <= 0 or treeWraithImage.height <= 0 then
+            nvgDeleteImage(ctx, treeWraithImage.handle)
+            treeWraithImage.handle = 0
+            treeWraithImage.width, treeWraithImage.height = 1, 1
+            treeWraithLoaded = false
+            print("WARNING: Tree wraith sprite has invalid dimensions; using vector fallback")
         end
     end
 
@@ -348,7 +367,7 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    return playerLoaded and sootLoaded and blueSwarmLoaded and shadowWraithLoaded and hardSlimeLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and projectileSporeLoaded and projectileSeedLoaded and spawnRoomGuideLoaded
+    return playerLoaded and sootLoaded and blueSwarmLoaded and shadowWraithLoaded and hardSlimeLoaded and treeWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and projectileSporeLoaded and projectileSeedLoaded and spawnRoomGuideLoaded
         and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded
 end
 
@@ -386,6 +405,11 @@ function Renderer.UnloadAssets(ctx)
     end
     hardSlimeImageHandle = 0
     hardSlimeImageWidth, hardSlimeImageHeight = 1, 1
+    if treeWraithImage.handle ~= nil and treeWraithImage.handle > 0 then
+        nvgDeleteImage(ctx, treeWraithImage.handle)
+    end
+    treeWraithImage.handle = 0
+    treeWraithImage.width, treeWraithImage.height = 1, 1
     if stoneImageHandle ~= nil and stoneImageHandle > 0 then
         nvgDeleteImage(ctx, stoneImageHandle)
     end
@@ -856,15 +880,18 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
 
     if behavior == "tree_swing" or behavior == "melee_arc" then
         local arc = math.rad(enemy.attackArc or spec.attack.arc or spec.attack.narrowArc or 360)
-        local startAngle = Atan2(directionY, directionX) - arc * 0.5
-        for index = 0, 5 do
-            local angle = startAngle + arc * index / 5
-            nvgBeginPath(ctx)
-            nvgMoveTo(ctx, x, y)
-            nvgLineTo(ctx, x + math.cos(angle) * radius * 1.8, y + math.sin(angle) * radius * 1.8)
-            nvgStrokeWidth(ctx, 1.2 * scale)
-            StrokeColor(ctx, { 222, 150, 255 }, math.floor(pulse * 0.72))
-            nvgStroke(ctx)
+        local directionSigns = behavior == "tree_swing" and { -1, 1 } or { 1 }
+        for _, direction in ipairs(directionSigns) do
+            local startAngle = Atan2(directionY * direction, directionX * direction) - arc * 0.5
+            for index = 0, 5 do
+                local angle = startAngle + arc * index / 5
+                nvgBeginPath(ctx)
+                nvgMoveTo(ctx, x, y)
+                nvgLineTo(ctx, x + math.cos(angle) * radius * 1.8, y + math.sin(angle) * radius * 1.8)
+                nvgStrokeWidth(ctx, 1.2 * scale)
+                StrokeColor(ctx, { 222, 150, 255 }, math.floor(pulse * 0.72))
+                nvgStroke(ctx)
+            end
         end
     elseif behavior == "ranged_fan" then
         local count = spec.projectile.count
@@ -1098,6 +1125,74 @@ local function DrawSpriteHardSlime(ctx, x, y, enemy, time, scale)
     nvgBeginPath(ctx)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
     nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, hardSlimeImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
+local function GetTreeWraithSpriteHeight(scale)
+    return 62 * scale
+end
+
+local function DrawTreeRootSlam(ctx, x, y, enemy, time, scale)
+    if enemy.state ~= "telegraph" and enemy.state ~= "active" then
+        return
+    end
+
+    local attack = EnemyConfig.tree.attack
+    local progress = enemy.state == "active" and 1
+        or 1 - Clamp(enemy.stateTimer / math.max(0.001, attack.telegraph), 0, 1)
+    local sourceY = y - 43 * scale
+    local groundY = y + 3 * scale
+    local reach = 34 * scale
+
+    for _, direction in ipairs({ -1, 1 }) do
+        local directionX = (enemy.attackX or 1) * direction
+        local directionY = (enemy.attackY or 0) * direction
+        local impactX = x + directionX * reach
+        local impactY = groundY + directionY * reach * 0.2
+        local tipY = sourceY + (impactY - sourceY) * progress
+
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x + directionX * 4 * scale, sourceY)
+        nvgBezierTo(ctx,
+            x + directionX * 15 * scale, sourceY + 12 * scale,
+            impactX - directionX * 9 * scale, tipY - 15 * scale,
+            impactX, tipY)
+        nvgStrokeWidth(ctx, math.max(2, 6 * scale))
+        StrokeColor(ctx, { 8, 7, 14 }, math.floor(135 + progress * 110))
+        nvgStroke(ctx)
+
+        if enemy.state == "active" then
+            nvgBeginPath(ctx)
+            nvgEllipse(ctx, impactX, impactY, 13 * scale, 4 * scale)
+            nvgFillPaint(ctx, nvgRadialGradient(ctx, impactX, impactY, scale, 15 * scale,
+                nvgRGBA(26, 18, 40, 190), nvgRGBA(8, 7, 14, 0)))
+            nvgFill(ctx)
+        end
+    end
+end
+
+local function DrawSpriteTreeWraith(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetTreeWraithSpriteHeight(scale)
+    local displayWidth = displayHeight * treeWraithImage.width / treeWraithImage.height
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 4 * scale
+    local sway = math.sin(time * 3.4 + enemy.id * 0.61)
+    local scaleX = 1 + sway * 0.018
+    local scaleY = 1 - sway * 0.014
+
+    if enemy.state == "telegraph" then
+        local progress = 1 - Clamp(enemy.stateTimer / EnemyConfig.tree.attack.telegraph, 0, 1)
+        scaleX = scaleX + progress * 0.06
+        scaleY = scaleY - progress * 0.04
+    end
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y)
+    nvgScale(ctx, scaleX, scaleY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, treeWraithImage.handle, 1.0))
     nvgFill(ctx)
     nvgRestore(ctx)
 end
@@ -1451,7 +1546,12 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
             DrawBlueSwarm(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
         end
     elseif enemy.kind == "tree" then
-        DrawTree(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary)
+        DrawTreeRootSlam(ctx, x, y + pulse, enemy, time, scale)
+        if treeWraithImage.handle ~= nil and treeWraithImage.handle > 0 then
+            DrawSpriteTreeWraith(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawTree(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary)
+        end
     elseif enemy.kind == "sap" then
         if hardSlimeImageHandle ~= nil and hardSlimeImageHandle > 0 then
             DrawSpriteHardSlime(ctx, x, y + pulse, enemy, time, scale)
@@ -1512,6 +1612,8 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         healthY = y - GetShadowWraithSpriteHeight(scale) - 2 * scale
     elseif enemy.kind == "sap" and hardSlimeImageHandle ~= nil and hardSlimeImageHandle > 0 then
         healthY = y - GetHardSlimeSpriteHeight(scale) - 4 * scale
+    elseif enemy.kind == "tree" and treeWraithImage.handle ~= nil and treeWraithImage.handle > 0 then
+        healthY = y - GetTreeWraithSpriteHeight(scale) - 3 * scale
     elseif enemy.kind == "stone" and stoneImageHandle ~= nil and stoneImageHandle > 0 then
         healthY = y - GetStoneSpriteHeight(scale) - 4 * scale
     elseif enemy.kind == "mushroom" and mushroomImageHandle ~= nil and mushroomImageHandle > 0 then

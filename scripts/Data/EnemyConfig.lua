@@ -32,12 +32,9 @@ return {
     },
     tree = {
         behavior = "tree_swing", hp = 3, radius = 0.055,
-        attackRangeMeters = 8, attackRange = MetersToWorld(8),
-        moveSpeed = 0.11, touchDamage = 1,
-        attack = {
-            interval = 2.4, telegraph = 0.7, active = 0.18, recovery = 0.8,
-            range = MetersToWorld(4.6), narrowArc = 70, wideArc = 180,
-        },
+        attackRangeMeters = 3, attackRange = MetersToWorld(3),
+        moveSpeed = 0.11, touchDamage = 2,
+        attack = { interval = 1.5, repeatInterval = 1.5, telegraph = 0.55, active = 0.08, recovery = 0.22, range = MetersToWorld(3), arc = 60 },
         visual = Visual({ 29, 31, 39 }, { 75, 65, 86 }, { 7, 9, 16 }),
     },
     sap = {
