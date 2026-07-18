@@ -1,5 +1,7 @@
-local Config = require "Config"
+local GaugeConfig = require "Data.GaugeConfig"
+local PlayerConfig = require "Data.PlayerConfig"
 local Feedback = require "Feedback"
+local BossRenderer = require "BossRenderer"
 
 local Renderer = {}
 local playerImageHandle = 0
@@ -399,7 +401,7 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     local healthWidth = enemy.kind == "boss" and size * 1.32 or size * 1.06
     local healthHeight = enemy.kind == "boss" and 5 * scale or 3.5 * scale
     local healthY = y - size * (enemy.kind == "boss" and 1.36 or 1.18)
-    local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp or enemy.hp))
+    local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
 
     nvgBeginPath(ctx)
     nvgRoundedRect(ctx, x - healthWidth * 0.5, healthY, healthWidth, healthHeight, healthHeight * 0.5)
@@ -467,8 +469,8 @@ local function DrawParryCone(ctx, width, height, player)
     nvgMoveTo(ctx, x, y)
     for step = 0, 12 do
         local angle = facingAngle - halfAngle + (halfAngle * 2 * step / 12)
-        local worldX = player.x + math.cos(angle) * Config.Player.parryRange
-        local worldY = player.y + math.sin(angle) * Config.Player.parryRange
+        local worldX = player.x + math.cos(angle) * PlayerConfig.parryRange
+        local worldY = player.y + math.sin(angle) * PlayerConfig.parryRange
         local pointX, pointY = Renderer.WorldToScreen(width, height, worldX, worldY)
         nvgLineTo(ctx, pointX, pointY)
     end
@@ -482,7 +484,7 @@ end
 
 local function DrawGauge(ctx, x, y, width, height, gauge, definition)
     local ratio = Clamp(gauge.value / gauge.threshold, 0, 1)
-    local pulse = gauge.pulse or 0
+    local pulse = gauge.pulse
     local fillWidth = math.max(0, (width - 4) * ratio)
     local label = definition.label .. "  " .. string.format("%d/%d", math.floor(gauge.value + 0.001), gauge.threshold)
 
@@ -511,27 +513,17 @@ local function DrawGauge(ctx, x, y, width, height, gauge, definition)
     end
 end
 
-local function DrawGauges(ctx, width, height, game)
+local function DrawGaugeBar(ctx, width, height, game)
     if game.state == "menu" or game.state == "dead" or game.state == "victory" then
         return
     end
 
+    local gauge = game.gauge
     local barHeight = Clamp(height * 0.017, 8, 12)
-    local gap = Clamp(width * 0.022, 12, 24)
-    local horizontal = width >= 620
-    local barWidth = horizontal and math.min(320, width * 0.31) or math.min(340, width * 0.78)
-    local startX = horizontal and (width - barWidth * 2 - gap) * 0.5 or (width - barWidth) * 0.5
-    local startY = horizontal and height * 0.895 or height * 0.835
-
-    for index, kind in ipairs(Config.Gauge.order) do
-        local gauge = game.gauges[kind]
-        local definition = Config.Gauge.kinds[kind]
-        if gauge ~= nil and definition ~= nil then
-            local x = horizontal and (startX + (index - 1) * (barWidth + gap)) or startX
-            local y = horizontal and startY or (startY + (index - 1) * (barHeight + 30))
-            DrawGauge(ctx, x, y, barWidth, barHeight, gauge, definition)
-        end
-    end
+    local barWidth = math.min(520, width * 0.78)
+    local x = (width - barWidth) * 0.5
+    local y = height * 0.895
+    DrawGauge(ctx, x, y, barWidth, barHeight, gauge, GaugeConfig)
 end
 
 local function DrawParticles(ctx, width, height, particles)
@@ -612,8 +604,9 @@ local function DrawOverlay(ctx, width, height, game)
     nvgFillColor(ctx, nvgRGBA(8, 8, 20, 155))
     nvgFill(ctx)
 
-    local title = game.state == "menu" and "弹反之室" or (game.state == "victory" and "成功逃离" or "本局失败")
-    local subtitle = game.state == "menu" and "WASD 移动  •  空格招架  •  回车开始" or "按 R 回到第一间房"
+    local title = game.state == "menu" and "弹反之室" or (game.state == "victory" and "诅咒消散" or "本局失败")
+    local subtitle = game.state == "menu" and "WASD 移动  •  空格招架  •  回车开始"
+        or (game.state == "victory" and "晦暗低鸣已获净化 · 按 R 重新开始" or "按 R 回到第一间房")
     nvgFontFace(ctx, "sans")
     nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFontSize(ctx, math.min(52, width * 0.065))
@@ -643,7 +636,11 @@ local function DrawMessage(ctx, width, height, game)
     nvgFontSize(ctx, math.min(24, width * 0.032))
     nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFillColor(ctx, nvgRGBA(244, 241, 255, 245))
-    nvgText(ctx, width * 0.5, height * 0.11, game.message, nil)
+    local hasBoss = false
+    for _, enemy in ipairs(game.enemies) do
+        if enemy.kind == "boss" then hasBoss = true; break end
+    end
+    nvgText(ctx, width * 0.5, height * (hasBoss and 0.17 or 0.11), game.message, nil)
 end
 
 local function IsRoomMapped(game, roomId)
@@ -765,6 +762,12 @@ function Renderer.Draw(ctx, game, width, height, feedback)
         DrawSpawnMarkers(ctx, width, height, game)
     end
 
+    local boss = nil
+    for _, enemy in ipairs(game.enemies) do
+        if enemy.kind == "boss" then boss = enemy; break end
+    end
+    BossRenderer.DrawGround(ctx, width, height, boss, game.player, game.time, Renderer.WorldToScreen, game.debug)
+
     local drawables = {}
     for _, chest in ipairs(game.chests) do table.insert(drawables, { kind = "chest", value = chest, y = chest.y }) end
     for _, projectile in ipairs(game.projectiles) do table.insert(drawables, { kind = "projectile", value = projectile, y = projectile.y }) end
@@ -778,7 +781,11 @@ function Renderer.Draw(ctx, game, width, height, feedback)
         elseif drawable.kind == "projectile" then
             DrawProjectile(ctx, width, height, drawable.value)
         elseif drawable.kind == "enemy" then
-            DrawEnemy(ctx, width, height, drawable.value, game.player, game.time)
+            if drawable.value.kind == "boss" then
+                BossRenderer.DrawBoss(ctx, width, height, drawable.value, game.time, Renderer.WorldToScreen)
+            else
+                DrawEnemy(ctx, width, height, drawable.value, game.player, game.time)
+            end
         else
             DrawPlayer(ctx, width, height, drawable.value, game.time)
         end
@@ -788,13 +795,16 @@ function Renderer.Draw(ctx, game, width, height, feedback)
         DrawParryCone(ctx, width, height, game.player)
     end
     DrawParticles(ctx, width, height, game.particles)
+    BossRenderer.DrawMechanismTarget(ctx, width, height, boss, game.player, game.time, Renderer.WorldToScreen)
     DrawFeedbackWorld(ctx, width, height, feedback)
     DrawDebug(ctx, width, height, game)
     nvgRestore(ctx)
 
+    BossRenderer.DrawFog(ctx, width, height, boss, game.player, Renderer.WorldToScreen)
+
     DrawFeedbackFlash(ctx, width, height, feedback)
     DrawChestPauseDim(ctx, width, height, game)
-    DrawGauges(ctx, width, height, game)
+    DrawGaugeBar(ctx, width, height, game)
     DrawMinimap(ctx, width, height, game)
     DrawMessage(ctx, width, height, game)
     DrawOverlay(ctx, width, height, game)

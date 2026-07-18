@@ -5,19 +5,9 @@ return {
     normalGain = 1,
     perfectGain = 2,
 
-    order = { "melee", "ranged" },
-    kinds = {
-        melee = {
-            label = "冲锋量表",
-            threshold = 10,
-            color = { 255, 112, 138 },
-        },
-        ranged = {
-            label = "弹幕量表",
-            threshold = 10,
-            color = { 177, 130, 255 },
-        },
-    },
+    label = "弹反量表",
+    threshold = 10,
+    color = { 255, 166, 92 },
 
     buffs = {
         {

@@ -1,4 +1,10 @@
-local Config = require "Config"
+local ChestConfig = require "Data.ChestConfig"
+local EnemyConfig = require "Data.EnemyConfig"
+local PlayerConfig = require "Data.PlayerConfig"
+local ProjectileConfig = require "Data.ProjectileConfig"
+local RoomConfig = require "Data.RoomConfig"
+local UpgradeConfig = require "Data.UpgradeConfig"
+local Boss = require "Boss"
 
 local Entities = {}
 
@@ -44,8 +50,8 @@ local function MoveEnemy(enemy, moveX, moveY, speed, dt)
     local directionX, directionY = Normalize(moveX, moveY)
     enemy.vx = directionX * speed
     enemy.vy = directionY * speed
-    enemy.x = Clamp(enemy.x + enemy.vx * dt, Config.Room.minX, Config.Room.maxX)
-    enemy.y = Clamp(enemy.y + enemy.vy * dt, Config.Room.minY, Config.Room.maxY)
+    enemy.x = Clamp(enemy.x + enemy.vx * dt, RoomConfig.minX, RoomConfig.maxX)
+    enemy.y = Clamp(enemy.y + enemy.vy * dt, RoomConfig.minY, RoomConfig.maxY)
     if math.abs(directionX) > 0.02 then
         enemy.facing = directionX < 0 and "left" or "right"
     end
@@ -53,28 +59,29 @@ end
 
 function Entities.NewPlayer()
     local abilities = {}
-    for _, definition in ipairs(Config.Upgrades.definitions) do
+    for _, definition in ipairs(UpgradeConfig.definitions) do
         abilities[definition.id] = 0
     end
 
     return {
         x = 0.5,
         y = 0.72,
-        hp = Config.Player.maxHp,
-        radius = Config.Player.radius,
+        hp = PlayerConfig.maxHp,
+        radius = PlayerConfig.radius,
         facing = "right",
         parryTimer = 0,
         parryElapsed = 0,
         parryCooldown = 0,
+        parrySerial = 0,
         invulnerabilityTimer = 0,
-        parryHalfAngleCos = Config.Player.parryHalfAngleCos,
+        parryHalfAngleCos = PlayerConfig.parryHalfAngleCos,
         abilities = abilities,
     }
 end
 
 function Entities.NewEnemy(kind, spawn, id)
-    local spec = Config.Enemy[kind]
-    return {
+    local spec = EnemyConfig[kind]
+    local enemy = {
         id = id,
         kind = kind,
         x = spawn.x,
@@ -94,6 +101,10 @@ function Entities.NewEnemy(kind, spawn, id)
         strafeTimer = 0.55 + math.random() * 0.75,
         dead = false,
     }
+    if kind == "boss" then
+        return Boss.Initialize(enemy)
+    end
+    return enemy
 end
 
 function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind)
@@ -104,9 +115,9 @@ function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind)
         vy = vy,
         owner = owner,
         sourceKind = sourceKind,
-        damage = damage or 1,
-        radius = Config.Projectile.radius,
-        lifetime = Config.Projectile.lifetime,
+        damage = damage,
+        radius = ProjectileConfig.radius,
+        lifetime = ProjectileConfig.lifetime,
         reflected = false,
         pierceRemaining = 0,
         hitEnemies = {},
@@ -127,9 +138,9 @@ end
 
 function Entities.UpdatePlayer(player, dt, moveX, moveY, speedMultiplier)
     local directionX, directionY = Normalize(moveX, moveY)
-    local speed = Config.Player.speed * (speedMultiplier or 1)
-    player.x = Clamp(player.x + directionX * speed * dt, Config.Room.minX, Config.Room.maxX)
-    player.y = Clamp(player.y + directionY * speed * dt, Config.Room.minY, Config.Room.maxY)
+    local speed = PlayerConfig.speed * speedMultiplier
+    player.x = Clamp(player.x + directionX * speed * dt, RoomConfig.minX, RoomConfig.maxX)
+    player.y = Clamp(player.y + directionY * speed * dt, RoomConfig.minY, RoomConfig.maxY)
 
     if math.abs(directionX) > 0.05 then
         player.facing = directionX < 0 and "left" or "right"
@@ -152,9 +163,10 @@ function Entities.BeginParry(player)
         return false
     end
 
-    player.parryTimer = Config.Player.parryWindow
+    player.parryTimer = PlayerConfig.parryWindow
     player.parryElapsed = 0
-    player.parryCooldown = Config.Player.parryCooldown - player.abilities.quick_hands * 0.06
+    player.parrySerial = (player.parrySerial or 0) + 1
+    player.parryCooldown = PlayerConfig.parryCooldown - player.abilities.quick_hands * 0.06
     player.parryCooldown = math.max(0.2, player.parryCooldown)
     return true
 end
@@ -164,27 +176,27 @@ function Entities.IsParrying(player)
 end
 
 function Entities.IsPerfectParry(player)
-    return player.parryTimer > 0 and player.parryElapsed <= Config.Player.perfectParryWindow
+    return player.parryTimer > 0 and player.parryElapsed <= PlayerConfig.perfectParryWindow
 end
 
-function Entities.DamagePlayer(player, amount)
+function Entities.DamagePlayer(player, amount, invulnerabilityDuration)
     if player.invulnerabilityTimer > 0 then
         return false
     end
 
     player.hp = math.max(0, player.hp - amount)
-    player.invulnerabilityTimer = Config.Player.invulnerabilityDuration
+    player.invulnerabilityTimer = invulnerabilityDuration or PlayerConfig.invulnerabilityDuration
     return true
 end
 
 function Entities.HealPlayer(player, amount)
     local previousHp = player.hp
-    player.hp = math.min(Config.Player.maxHp, player.hp + amount)
+    player.hp = math.min(PlayerConfig.maxHp, player.hp + amount)
     return player.hp > previousHp
 end
 
 function Entities.UpdateTacticalMovement(enemy, player, dt)
-    local spec = Config.Enemy[enemy.kind]
+    local spec = EnemyConfig[enemy.kind]
     local toPlayerX, toPlayerY = Normalize(player.x - enemy.x, player.y - enemy.y)
     local distance = Length(player.x - enemy.x, player.y - enemy.y)
     enemy.strafeTimer = enemy.strafeTimer - dt
@@ -223,7 +235,7 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
         return
     end
 
-    local spec = Config.Enemy[enemy.kind]
+    local spec = EnemyConfig[enemy.kind]
     enemy.stateTimer = enemy.stateTimer - dt
 
     if enemy.state == "idle" then
@@ -290,10 +302,10 @@ function Entities.ResolveEnemySeparation(enemies)
                         end
                         local push = (minimum - distance) * 0.5
                         local nx, ny = dx / distance, dy / distance
-                        first.x = Clamp(first.x - nx * push, Config.Room.minX, Config.Room.maxX)
-                        first.y = Clamp(first.y - ny * push, Config.Room.minY, Config.Room.maxY)
-                        second.x = Clamp(second.x + nx * push, Config.Room.minX, Config.Room.maxX)
-                        second.y = Clamp(second.y + ny * push, Config.Room.minY, Config.Room.maxY)
+                        first.x = Clamp(first.x - nx * push, RoomConfig.minX, RoomConfig.maxX)
+                        first.y = Clamp(first.y - ny * push, RoomConfig.minY, RoomConfig.maxY)
+                        second.x = Clamp(second.x + nx * push, RoomConfig.minX, RoomConfig.maxX)
+                        second.y = Clamp(second.y + ny * push, RoomConfig.minY, RoomConfig.maxY)
                     end
                 end
             end
@@ -311,23 +323,22 @@ function Entities.UpdateProjectile(projectile, dt)
 end
 
 function Entities.TryParryEnemy(player, enemy, damage)
-    if not Entities.IsParrying(player) or enemy.dead or enemy.state ~= "dash" then
+    if enemy.kind == "boss" or not Entities.IsParrying(player) or enemy.dead or enemy.state ~= "dash" then
         return false
     end
 
-    local range = Config.Player.parryRange + player.radius + enemy.radius
+    local range = PlayerConfig.parryRange + player.radius + enemy.radius
     if not IsInRange(player, enemy, range) or not IsInsideParryCone(player, enemy) then
         return false
     end
 
-    damage = damage or Config.Gauge.normalDamage
     local appliedDamage = math.min(enemy.hp, damage)
     enemy.hp = enemy.hp - appliedDamage
     enemy.state = "recovery"
-    enemy.stateTimer = Config.Enemy[enemy.kind].recoveryDuration + 0.3
-    local knockback = Config.Player.meleeKnockback + player.abilities.repulse * 0.12
+    enemy.stateTimer = EnemyConfig[enemy.kind].recoveryDuration + 0.3
+    local knockback = PlayerConfig.meleeKnockback + player.abilities.repulse * 0.12
     local facingX = player.facing == "left" and -1 or 1
-    enemy.x = Clamp(enemy.x + facingX * knockback, Config.Room.minX, Config.Room.maxX)
+    enemy.x = Clamp(enemy.x + facingX * knockback, RoomConfig.minX, RoomConfig.maxX)
     if enemy.hp <= 0 then
         enemy.dead = true
     end
@@ -339,22 +350,22 @@ function Entities.TryParryProjectile(player, projectile, damageMultiplier)
         return false
     end
 
-    local range = Config.Player.parryRange + player.radius + projectile.radius
+    local range = PlayerConfig.parryRange + player.radius + projectile.radius
     if not IsInRange(player, projectile, range) or not IsInsideParryCone(player, projectile) then
         return false
     end
 
     local facingX = player.facing == "left" and -1 or 1
     local normalizedX, normalizedY = Normalize(facingX, projectile.vy * 0.55)
-    local speed = Length(projectile.vx, projectile.vy) * Config.Projectile.reflectedSpeedMultiplier
+    local speed = Length(projectile.vx, projectile.vy) * ProjectileConfig.reflectedSpeedMultiplier
     projectile.vx = normalizedX * speed
     projectile.vy = normalizedY * speed
     projectile.owner = "player"
     projectile.reflected = true
-    projectile.damage = (projectile.damage + player.abilities.heavy_return) * (damageMultiplier or 1)
+    projectile.damage = (projectile.damage + player.abilities.heavy_return) * damageMultiplier
     projectile.pierceRemaining = player.abilities.piercing_echo
     projectile.hitEnemies = {}
-    projectile.lifetime = Config.Projectile.lifetime
+    projectile.lifetime = ProjectileConfig.lifetime
     return true
 end
 
@@ -384,7 +395,7 @@ function Entities.RegisterProjectileHit(projectile, enemy)
 end
 
 function Entities.ApplyUpgrade(player, definition)
-    local current = player.abilities[definition.id] or 0
+    local current = player.abilities[definition.id]
     if current >= definition.maxStacks then
         return false
     end
@@ -398,11 +409,16 @@ function Entities.ApplyUpgrade(player, definition)
 end
 
 function Entities.PlayerCanPickupChest(player, chest)
-    return not chest.dead and DistanceSquared(player, chest) <= Config.Chests.pickupRadius * Config.Chests.pickupRadius
+    return not chest.dead and DistanceSquared(player, chest) <= ChestConfig.pickupRadius * ChestConfig.pickupRadius
 end
 
 function Entities.GetDistanceSquared(a, b)
     return DistanceSquared(a, b)
+end
+
+function Entities.CanParryTarget(player, target, extraRange)
+    local range = PlayerConfig.parryRange + player.radius + (target.radius or 0) + (extraRange or 0)
+    return IsInRange(player, target, range) and IsInsideParryCone(player, target)
 end
 
 return Entities

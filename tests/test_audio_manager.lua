@@ -93,6 +93,7 @@ assert(createdSources[1].frequency > 40000)
 assert(not AudioManager.Play("parry_start"), "cue cooldown should suppress immediate repeats")
 AudioManager.Update(1.0)
 assert(AudioManager.Play("parry_start"))
+assert(AudioManager.Play("boss_phase_changed"), "boss phase change should reuse the battle cue")
 
 local before = #createdSources
 AudioManager.ProcessEvents({ { name = "player_hurt" }, { name = "missing_cue" } })

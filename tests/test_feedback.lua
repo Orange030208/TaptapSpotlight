@@ -52,6 +52,19 @@ Feedback.ProcessEvents(feedback, {
 })
 assert(#feedback.impacts == 1)
 assert(#feedback.floatingTexts == 1)
-assert(feedback.floatingTexts[1].text == "处决")
+assert(feedback.floatingTexts[1].text == "净化")
+
+local defense = Feedback.New()
+Feedback.ProcessEvents(defense, {
+    { name = "perfect_parry", data = { x = 0.5, y = 0.5, damage = 0, defenseOnly = true } },
+})
+assert(defense.floatingTexts[1].text == "完美", "defensive parries must not display zero damage")
+
+local phase = Feedback.New()
+Feedback.ProcessEvents(phase, {
+    { name = "boss_phase_changed", data = { x = 0.5, y = 0.5, phase = 2 } },
+    { name = "boss_mechanism_completed", data = { mechanism = "fog" } },
+})
+assert(#phase.impacts == 1 and phase.flash ~= nil and phase.shake ~= nil)
 
 print("PASS test_feedback")

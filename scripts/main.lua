@@ -2,7 +2,7 @@
 
 local UI = require("urhox-libs/UI")
 local AudioManager = require "AudioManager"
-local Config = require "Config"
+local GameConfig = require "Data.GameConfig"
 local Feedback = require "Feedback"
 local Game = require "Game"
 local Renderer = require "Renderer"
@@ -29,6 +29,14 @@ local parryLabel = nil
 local buffLabel = nil
 ---@type Widget|nil
 local abilityLabel = nil
+---@type Widget|nil
+local bossPanel = nil
+---@type Widget|nil
+local bossNameLabel = nil
+---@type Widget|nil
+local bossObjectiveLabel = nil
+---@type ProgressBar|nil
+local bossProgressBar = nil
 ---@type Widget|nil
 local chestPanel = nil
 local chestTitleLabels = {}
@@ -365,6 +373,28 @@ local function CreateHud()
         whiteSpace = "normal",
         fontColor = { 197, 175, 255, 235 },
     }
+    bossNameLabel = UI.Label {
+        text = "晦暗低鸣", width = "100%", fontSize = 15, fontWeight = "bold",
+        textAlign = "center", fontColor = { 238, 221, 203, 255 },
+    }
+    bossObjectiveLabel = UI.Label {
+        text = "第一阶段 · 黑影", width = "100%", fontSize = 11,
+        textAlign = "center", fontColor = { 201, 190, 214, 235 },
+    }
+    bossProgressBar = UI.ProgressBar {
+        value = 100, max = 100, width = "100%", height = 8, borderRadius = 4,
+        fillGradient = {
+            direction = "to-right", from = { 105, 42, 66, 255 }, to = { 220, 98, 104, 255 },
+        },
+        transition = "value 0.16s easeOut",
+    }
+    bossPanel = UI.Panel {
+        visible = false, width = "44%", maxWidth = 430, minWidth = 250,
+        padding = { 7, 12, 8, 12 }, gap = 4, borderRadius = 4,
+        borderWidth = 1, borderColor = { 126, 105, 132, 145 },
+        backgroundColor = { 13, 12, 20, 205 }, pointerEvents = "none",
+        children = { bossNameLabel, bossObjectiveLabel, bossProgressBar },
+    }
 
     chestPanel = UI.Panel {
         visible = false,
@@ -458,6 +488,10 @@ local function CreateHud()
                         gap = 3,
                         pointerEvents = "none",
                         children = { parryLabel, buffLabel, abilityLabel },
+                    },
+                    UI.Panel {
+                        position = "absolute", top = 42, left = 0, right = 0,
+                        alignItems = "center", pointerEvents = "none", children = { bossPanel },
                     },
                     UI.Label {
                         text = "WASD 移动   空格招架   量表充满后获得短时增益",
@@ -562,11 +596,32 @@ local function UpdateHud()
     parryLabel:SetText(hud.parry)
     buffLabel:SetText("临时增益\n" .. hud.buffs)
     abilityLabel:SetText("构筑\n" .. hud.upgrades)
+    local boss = hud.boss
+    bossPanel:SetVisible(boss ~= nil)
+    if boss ~= nil then
+        bossNameLabel:SetText(boss.name)
+        if boss.phase == 1 then
+            bossObjectiveLabel:SetText("第一阶段 · 黑影")
+            bossProgressBar:SetMax(100)
+            bossProgressBar:SetStyle({
+                fillGradient = { direction = "to-right", from = { 105, 42, 66, 255 }, to = { 220, 98, 104, 255 } },
+            })
+            bossProgressBar:SetValue(boss.healthRatio * 100)
+        else
+            local target = math.max(1, boss.target or 1)
+            bossObjectiveLabel:SetText("第二阶段 · " .. (boss.targetName or "净化"))
+            bossProgressBar:SetMax(target)
+            bossProgressBar:SetStyle({
+                fillGradient = { direction = "to-right", from = { 33, 139, 142, 255 }, to = { 231, 183, 91, 255 } },
+            })
+            bossProgressBar:SetValue(boss.current or 0)
+        end
+    end
     RefreshChestPanel()
 end
 
 function Start()
-    graphics.windowTitle = Config.Title
+    graphics.windowTitle = GameConfig.Title
     math.randomseed(os.time())
     AudioManager.Initialize()
     RefreshCanvasMetrics()

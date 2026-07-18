@@ -14,6 +14,7 @@ local MAX_ACTIVE_VOICES = 20
 local CUES = {
     run_start = { file = "run_start.ogg", gain = 0.52, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.08 },
     battle_start = { file = "battle_start.ogg", gain = 0.42, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.12 },
+    boss_phase_changed = { file = "battle_start.ogg", gain = 0.58, pitchMin = 0.82, pitchMax = 0.86, cooldown = 0.40 },
     parry_start = { file = "parry_start.ogg", gain = 0.28, pitchMin = 1.08, pitchMax = 1.14, cooldown = 0.08 },
     parry_success = { file = "parry_success.ogg", gain = 0.66, pitchMin = 1.00, pitchMax = 1.08, cooldown = 0.04 },
     perfect_parry = { file = "perfect_parry.ogg", gain = 0.78, pitchMin = 1.02, pitchMax = 1.06, cooldown = 0.05 },

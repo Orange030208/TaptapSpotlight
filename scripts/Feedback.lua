@@ -1,4 +1,4 @@
-local Config = require "Data.FeedbackConfig"
+local FeedbackConfig = require "Data.FeedbackConfig"
 
 local Feedback = {}
 
@@ -37,9 +37,9 @@ local function AddFloatingText(state, profile, data, text)
         x = data.x,
         y = data.y,
         text = text,
-        life = Config.floatingText.duration,
-        maxLife = Config.floatingText.duration,
-        rise = Config.floatingText.rise,
+        life = FeedbackConfig.floatingText.duration,
+        maxLife = FeedbackConfig.floatingText.duration,
+        rise = FeedbackConfig.floatingText.rise,
         size = profile.textSize,
         color = CopyColor(profile.textColor),
     })
@@ -85,7 +85,7 @@ local function ApplyWorldProfile(state, profile, data, text)
 end
 
 local function FormatDamage(data)
-    if type(data) ~= "table" or type(data.damage) ~= "number" then
+    if type(data) ~= "table" or data.defenseOnly or type(data.damage) ~= "number" then
         return nil
     end
     return string.format("%.1f", data.damage)
@@ -109,14 +109,18 @@ function Feedback.ProcessEvents(state, events)
         local name = event.name
         local data = event.data
         if name == "parry_success" then
-            ApplyWorldProfile(state, Config.normalParry, data, nil)
+            ApplyWorldProfile(state, FeedbackConfig.normalParry, data, nil)
         elseif name == "perfect_parry" then
             local damage = FormatDamage(data)
-            ApplyWorldProfile(state, Config.perfectParry, data, damage ~= nil and ("完美 " .. damage) or "完美")
+            ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, damage ~= nil and ("完美 " .. damage) or "完美")
         elseif name == "player_hurt" then
-            ApplyScreenProfile(state, Config.playerHurt)
+            ApplyScreenProfile(state, FeedbackConfig.playerHurt)
         elseif name == "boss_defeat" then
-            ApplyWorldProfile(state, Config.bossDefeat, data, "处决")
+            ApplyWorldProfile(state, FeedbackConfig.bossDefeat, data, "净化")
+        elseif name == "boss_phase_changed" then
+            ApplyWorldProfile(state, FeedbackConfig.bossPhase, data, "诅咒显形")
+        elseif name == "boss_mechanism_completed" then
+            ApplyScreenProfile(state, FeedbackConfig.mechanismComplete)
         end
     end
 end

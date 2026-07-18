@@ -1,10 +1,14 @@
 package.path = "./scripts/?.lua;./scripts/?/init.lua;" .. package.path
 
-local Config = require "Config"
+local GaugeConfig = require "Data.GaugeConfig"
+local BossConfig = require "Data.BossConfig"
+local PlayerConfig = require "Data.PlayerConfig"
+local RoomConfig = require "Data.RoomConfig"
+local UpgradeConfig = require "Data.UpgradeConfig"
 local Entities = require "Entities"
 local Game = require "Game"
 
-for _, definition in ipairs(Config.Upgrades.definitions) do
+for _, definition in ipairs(UpgradeConfig.definitions) do
     assert(type(definition.icon) == "string" and definition.icon ~= "", "every upgrade needs an icon")
 end
 
@@ -29,7 +33,9 @@ end
 local game = Game.New()
 assert(#Game.ConsumeEvents(game) == 0)
 
+game.stateBeforeChest = "stale"
 Game.StartOrRestart(game)
+assert(game.stateBeforeChest == nil, "starting a run must clear transient chest state")
 local events = Game.ConsumeEvents(game)
 assert(HasEvent(events, "run_start"))
 assert(#Game.ConsumeEvents(game) == 0, "consuming events must clear the queue")
@@ -43,15 +49,16 @@ assert(type(parryStart.data) == "table" and type(parryStart.data.x) == "number")
 
 game.state = "chest_select"
 game.stateBeforeChest = "battle"
-game.chestOptions = { Config.Upgrades.definitions[1] }
+game.chestOptions = { UpgradeConfig.definitions[1] }
 assert(Game.SelectUpgrade(game, 1))
+assert(game.state == "battle" and game.stateBeforeChest == nil)
 events = Game.ConsumeEvents(game)
 assert(HasEvent(events, "upgrade_select"))
 
 local battle = Game.New()
 Game.StartOrRestart(battle)
 Game.ConsumeEvents(battle)
-Game.Update(battle, Config.Room.introDuration + 0.01, 0, 0)
+Game.Update(battle, RoomConfig.introDuration + 0.01, 0, 0)
 assert(HasEvent(Game.ConsumeEvents(battle), "battle_start"))
 
 battle.state = "battle"
@@ -92,6 +99,7 @@ assert(HasEvent(events, "enemy_defeat"))
 assert(HasEvent(events, "room_clear"))
 assert(FindEvent(events, "perfect_parry").data.damage > 0)
 assert(FindEvent(events, "enemy_defeat").data.kind == "melee")
+assert(parry.gauge.value == GaugeConfig.perfectGain, "killing an enemy must preserve gauge progress")
 
 local reflect = Game.New()
 Game.StartOrRestart(reflect)
@@ -102,7 +110,7 @@ reflect.enemies[1].stateTimer = 99
 reflect.player.facing = "right"
 reflect.projectiles = { Entities.NewProjectile(reflect.player.x + 0.04, reflect.player.y, -0.1, 0, "enemy", 1, "ranged") }
 assert(Game.TryParry(reflect))
-reflect.player.parryElapsed = Config.Player.perfectParryWindow + 0.01
+reflect.player.parryElapsed = PlayerConfig.perfectParryWindow + 0.01
 Game.ConsumeEvents(reflect)
 Game.Update(reflect, 0, 0, 0)
 events = Game.ConsumeEvents(reflect)
@@ -127,14 +135,37 @@ Game.StartOrRestart(frozen)
 Game.ConsumeEvents(frozen)
 frozen.state = "battle"
 assert(Game.TryParry(frozen))
-Game.Update(frozen, 0, 0, 0, Config.Player.parryWindow + 0.01)
+Game.Update(frozen, 0, 0, 0, PlayerConfig.parryWindow + 0.01)
 assert(not Entities.IsParrying(frozen.player), "hit stop must not extend the parry window")
+
+local sharedGauge = Game.New()
+Game.StartOrRestart(sharedGauge)
+Game.ConsumeEvents(sharedGauge)
+sharedGauge.state = "battle"
+sharedGauge.enemies = { Entities.NewEnemy("melee", { x = sharedGauge.player.x + 0.12, y = sharedGauge.player.y }, 3551) }
+sharedGauge.enemies[1].state = "dash"
+sharedGauge.enemies[1].stateTimer = 0.5
+assert(Game.TryParry(sharedGauge))
+Game.Update(sharedGauge, 0, 0, 0)
+assert(sharedGauge.gauge.value == GaugeConfig.perfectGain, "melee parries must fill the shared gauge")
+
+sharedGauge.player.parryTimer = 0
+sharedGauge.player.parryCooldown = 0
+sharedGauge.projectiles = {
+    Entities.NewProjectile(sharedGauge.player.x + 0.04, sharedGauge.player.y, -0.1, 0, "enemy", 1, "ranged"),
+}
+assert(Game.TryParry(sharedGauge))
+sharedGauge.player.parryElapsed = PlayerConfig.perfectParryWindow + 0.01
+Game.Update(sharedGauge, 0, 0, 0)
+assert(sharedGauge.gauge.value == GaugeConfig.perfectGain + GaugeConfig.normalGain,
+    "ranged reflections must continue filling the same gauge")
 
 local gauge = Game.New()
 Game.StartOrRestart(gauge)
 Game.ConsumeEvents(gauge)
 gauge.state = "battle"
-gauge.gauges.melee.value = gauge.gauges.melee.threshold - Config.Gauge.perfectGain
+assert(gauge.gauge ~= nil and gauge.gauges == nil, "the game must expose exactly one gauge")
+gauge.gauge.value = gauge.gauge.threshold - GaugeConfig.perfectGain
 gauge.enemies = { Entities.NewEnemy("melee", { x = gauge.player.x + 0.12, y = gauge.player.y }, 3601) }
 gauge.enemies[1].state = "dash"
 gauge.enemies[1].stateTimer = 0.5
@@ -144,6 +175,9 @@ Game.Update(gauge, 0, 0, 0)
 events = Game.ConsumeEvents(gauge)
 assert(HasEvent(events, "gauge_full"))
 assert(HasEvent(events, "buff_gain"))
+local gaugeFull = FindEvent(events, "gauge_full")
+assert(type(gaugeFull.data.buffId) == "string")
+assert(gaugeFull.data.kind == nil, "the unified gauge event must not expose the removed per-kind contract")
 Game.Update(gauge, 8.0, 0, 0)
 assert(HasEvent(Game.ConsumeEvents(gauge), "buff_end"))
 
@@ -164,7 +198,7 @@ regeneration.roomCleared = true
 regeneration.enemies = {}
 regeneration.chests = {}
 regeneration.player.hp = 1
-local vitalityEcho = Config.Gauge.buffs[1]
+local vitalityEcho = GaugeConfig.buffs[1]
 regeneration.activeBuffs = {
     [vitalityEcho.id] = { definition = vitalityEcho, remaining = vitalityEcho.duration },
 }
@@ -177,7 +211,7 @@ Game.ConsumeEvents(transition)
 transition.state = "clear"
 transition.roomCleared = true
 transition.player.x = 0.5
-transition.player.y = Config.Room.minY
+transition.player.y = RoomConfig.minY
 Game.Update(transition, 0, 0, 0)
 assert(HasEvent(Game.ConsumeEvents(transition), "room_transition"))
 
@@ -188,15 +222,21 @@ boss.currentRoomId = "warden"
 boss.room = boss.map.rooms.warden
 boss.state = "battle"
 boss.enemies = { Entities.NewEnemy("boss", { x = boss.player.x + 0.14, y = boss.player.y }, 4001) }
-boss.enemies[1].hp = 0.5
-boss.enemies[1].state = "dash"
+boss.enemies[1].hp = boss.enemies[1].maxHp * BossConfig.phaseThreshold + 0.1
+boss.enemies[1].state = "active"
+boss.enemies[1].attack = "sweep"
 boss.enemies[1].stateTimer = 0.5
+boss.enemies[1].facing = "left"
+boss.player.facing = "right"
 assert(Game.TryParry(boss))
 Game.ConsumeEvents(boss)
 Game.Update(boss, 0, 0, 0)
 events = Game.ConsumeEvents(boss)
-assert(HasEvent(events, "boss_defeat"))
-assert(HasEvent(events, "victory"))
+assert(HasEvent(events, "boss_phase_changed"))
+assert(not HasEvent(events, "boss_defeat") and not HasEvent(events, "victory"))
+assert(boss.enemies[1].phase == 2 and not boss.enemies[1].dead)
+local bossHud = Game.GetHud(boss).boss
+assert(bossHud ~= nil and bossHud.phase == 2 and bossHud.targetName == "诅咒显形")
 
 local clearProjectile = Game.New()
 Game.StartOrRestart(clearProjectile)
@@ -221,13 +261,14 @@ victoryProjectile.currentRoomId = "warden"
 victoryProjectile.room = victoryProjectile.map.rooms.warden
 victoryProjectile.state = "battle"
 victoryProjectile.enemies = { Entities.NewEnemy("boss", { x = 0.5, y = 0.5 }, 5002) }
-victoryProjectile.enemies[1].hp = 0.1
-victoryProjectile.enemies[1].stateTimer = 99
+victoryProjectile.enemies[1].phase = 2
+victoryProjectile.enemies[1].state = "purifying"
+victoryProjectile.enemies[1].stateTimer = 0.01
 victoryProjectile.projectiles = { Entities.NewProjectile(0.5, 0.5, 0.2, 0, "player", 1) }
 victoryProjectile.projectiles[1].pierceRemaining = 1
-Game.Update(victoryProjectile, 0, 0, 0)
+Game.Update(victoryProjectile, 0.02, 0, 0)
 assert(victoryProjectile.state == "victory")
-assert(#victoryProjectile.projectiles == 1, "piercing projectile must survive the final boss hit")
+assert(#victoryProjectile.projectiles == 1, "piercing projectile must survive purification victory")
 local victoryProjectileX = victoryProjectile.projectiles[1].x
 Game.Update(victoryProjectile, 0.1, 0, 0)
 assert(victoryProjectile.projectiles[1].x > victoryProjectileX, "projectile must keep moving after victory")
