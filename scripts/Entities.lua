@@ -38,8 +38,10 @@ local function IsInsideParryCone(player, target)
         return true
     end
 
-    local facingX = player.facing == "left" and -1 or 1
-    return (dx / distance) * facingX >= player.parryHalfAngleCos
+    local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
+    local directionY = player.parryDirectionY or 0
+    directionX, directionY = Normalize(directionX, directionY)
+    return (dx / distance) * directionX + (dy / distance) * directionY >= player.parryHalfAngleCos
 end
 
 local function IsInRange(player, target, range)
@@ -73,6 +75,11 @@ function Entities.NewPlayer()
         parryElapsed = 0,
         parryCooldown = 0,
         parrySerial = 0,
+        parryDirectionX = 1,
+        parryDirectionY = 0,
+        parryBuffered = false,
+        bufferedParryDirectionX = 1,
+        bufferedParryDirectionY = 0,
         invulnerabilityTimer = 0,
         parryHalfAngleCos = PlayerConfig.parryHalfAngleCos,
         abilities = abilities,
@@ -120,6 +127,11 @@ function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind)
         lifetime = ProjectileConfig.lifetime,
         reflected = false,
         pierceRemaining = 0,
+        chainsRemaining = 0,
+        turnFromX = 0,
+        turnFromY = 0,
+        turnTimer = 0,
+        turnDuration = 0,
         hitEnemies = {},
         dead = false,
     }
@@ -137,7 +149,10 @@ function Entities.NewChest(x, y)
 end
 
 function Entities.UpdatePlayer(player, dt, moveX, moveY, speedMultiplier)
-    local directionX, directionY = Normalize(moveX, moveY)
+    local directionX, directionY = 0, 0
+    if not Entities.IsParrying(player) then
+        directionX, directionY = Normalize(moveX, moveY)
+    end
     local speed = PlayerConfig.speed * speedMultiplier
     player.x = Clamp(player.x + directionX * speed * dt, RoomConfig.minX, RoomConfig.maxX)
     player.y = Clamp(player.y + directionY * speed * dt, RoomConfig.minY, RoomConfig.maxY)
@@ -146,7 +161,7 @@ function Entities.UpdatePlayer(player, dt, moveX, moveY, speedMultiplier)
         player.facing = directionX < 0 and "left" or "right"
     end
 
-    Entities.UpdatePlayerTimers(player, dt)
+    return Entities.UpdatePlayerTimers(player, dt)
 end
 
 function Entities.UpdatePlayerTimers(player, dt)
@@ -156,19 +171,69 @@ function Entities.UpdatePlayerTimers(player, dt)
     player.parryTimer = math.max(0, player.parryTimer - dt)
     player.parryCooldown = math.max(0, player.parryCooldown - dt)
     player.invulnerabilityTimer = math.max(0, player.invulnerabilityTimer - dt)
+    if player.parryBuffered and player.parryCooldown <= 0 then
+        player.parryDirectionX = player.bufferedParryDirectionX
+        player.parryDirectionY = player.bufferedParryDirectionY
+        if math.abs(player.parryDirectionX) > 0.05 then
+            player.facing = player.parryDirectionX < 0 and "left" or "right"
+        end
+        player.parryBuffered = false
+        player.parryTimer = PlayerConfig.parryWindow
+        player.parryElapsed = 0
+        player.parrySerial = (player.parrySerial or 0) + 1
+        player.parryCooldown = PlayerConfig.parryCooldown - player.abilities.quick_hands * 0.06
+        player.parryCooldown = math.max(0.2, player.parryCooldown)
+        return true
+    end
+    return false
 end
 
-function Entities.BeginParry(player)
-    if player.parryCooldown > 0 then
-        return false
+local function GetRequestedParryDirection(player, targetX, targetY)
+    local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
+    local directionY = player.parryDirectionY or 0
+    if targetX ~= nil and targetY ~= nil then
+        local requestedX, requestedY = Normalize(targetX - player.x, targetY - player.y)
+        if requestedX ~= 0 or requestedY ~= 0 then
+            directionX, directionY = requestedX, requestedY
+        end
     end
+    return Normalize(directionX, directionY)
+end
+
+local function ApplyParryDirection(player, directionX, directionY)
+    player.parryDirectionX = directionX
+    player.parryDirectionY = directionY
+    if math.abs(directionX) > 0.05 then
+        player.facing = directionX < 0 and "left" or "right"
+    end
+end
+
+function Entities.BeginParry(player, targetX, targetY)
+    if player.parryCooldown > PlayerConfig.parryInputBuffer then
+        return false, false
+    end
+
+    local directionX, directionY = GetRequestedParryDirection(player, targetX, targetY)
+    if player.parryCooldown > 0 then
+        player.parryBuffered = true
+        player.bufferedParryDirectionX = directionX
+        player.bufferedParryDirectionY = directionY
+        return true, false
+    end
+
+    ApplyParryDirection(player, directionX, directionY)
+    player.parryBuffered = false
 
     player.parryTimer = PlayerConfig.parryWindow
     player.parryElapsed = 0
     player.parrySerial = (player.parrySerial or 0) + 1
     player.parryCooldown = PlayerConfig.parryCooldown - player.abilities.quick_hands * 0.06
     player.parryCooldown = math.max(0.2, player.parryCooldown)
-    return true
+    return true, true
+end
+
+function Entities.RegisterParrySuccess(player)
+    player.parryCooldown = math.min(player.parryCooldown, PlayerConfig.successfulParryCooldown)
 end
 
 function Entities.IsParrying(player)
@@ -317,6 +382,7 @@ function Entities.UpdateProjectile(projectile, dt)
     projectile.x = projectile.x + projectile.vx * dt
     projectile.y = projectile.y + projectile.vy * dt
     projectile.lifetime = projectile.lifetime - dt
+    projectile.turnTimer = math.max(0, (projectile.turnTimer or 0) - dt)
     if projectile.lifetime <= 0 or projectile.x < 0 or projectile.x > 1 or projectile.y < 0 or projectile.y > 1 then
         projectile.dead = true
     end
@@ -337,15 +403,18 @@ function Entities.TryParryEnemy(player, enemy, damage)
     enemy.state = "recovery"
     enemy.stateTimer = EnemyConfig[enemy.kind].recoveryDuration + 0.3
     local knockback = PlayerConfig.meleeKnockback + player.abilities.repulse * 0.12
-    local facingX = player.facing == "left" and -1 or 1
-    enemy.x = Clamp(enemy.x + facingX * knockback, RoomConfig.minX, RoomConfig.maxX)
+    local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
+    local directionY = player.parryDirectionY or 0
+    directionX, directionY = Normalize(directionX, directionY)
+    enemy.x = Clamp(enemy.x + directionX * knockback, RoomConfig.minX, RoomConfig.maxX)
+    enemy.y = Clamp(enemy.y + directionY * knockback, RoomConfig.minY, RoomConfig.maxY)
     if enemy.hp <= 0 then
         enemy.dead = true
     end
     return true, appliedDamage
 end
 
-function Entities.TryParryProjectile(player, projectile, damageMultiplier)
+function Entities.TryParryProjectile(player, projectile, damageMultiplier, perfect)
     if not Entities.IsParrying(player) or projectile.dead or projectile.owner ~= "enemy" then
         return false
     end
@@ -355,15 +424,21 @@ function Entities.TryParryProjectile(player, projectile, damageMultiplier)
         return false
     end
 
-    local facingX = player.facing == "left" and -1 or 1
-    local normalizedX, normalizedY = Normalize(facingX, projectile.vy * 0.55)
+    local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
+    local directionY = player.parryDirectionY or 0
+    local normalizedX, normalizedY = Normalize(directionX, directionY)
     local speed = Length(projectile.vx, projectile.vy) * ProjectileConfig.reflectedSpeedMultiplier
     projectile.vx = normalizedX * speed
     projectile.vy = normalizedY * speed
     projectile.owner = "player"
     projectile.reflected = true
-    projectile.damage = (projectile.damage + player.abilities.heavy_return) * damageMultiplier
+    local baseDamage = projectile.damage
+    if perfect then
+        baseDamage = math.max(baseDamage, ProjectileConfig.perfectReflectedDamage)
+    end
+    projectile.damage = (baseDamage + player.abilities.heavy_return) * damageMultiplier
     projectile.pierceRemaining = player.abilities.piercing_echo
+    projectile.chainsRemaining = perfect and ProjectileConfig.perfectReflectionChains or 0
     projectile.hitEnemies = {}
     projectile.lifetime = ProjectileConfig.lifetime
     return true
@@ -383,15 +458,6 @@ function Entities.ProjectileHitsEnemy(projectile, enemy)
     return projectile.owner == "player" and not projectile.dead and not enemy.dead
         and not projectile.hitEnemies[enemy.id]
         and DistanceSquared(projectile, enemy) <= (projectile.radius + enemy.radius) ^ 2
-end
-
-function Entities.RegisterProjectileHit(projectile, enemy)
-    projectile.hitEnemies[enemy.id] = true
-    if projectile.pierceRemaining > 0 then
-        projectile.pierceRemaining = projectile.pierceRemaining - 1
-    else
-        projectile.dead = true
-    end
 end
 
 function Entities.ApplyUpgrade(player, definition)

@@ -2,6 +2,7 @@ package.path = "./scripts/?.lua;./scripts/?/init.lua;" .. package.path
 
 local BossConfig = require "Data.BossConfig"
 local EnemyConfig = require "Data.EnemyConfig"
+local GaugeConfig = require "Data.GaugeConfig"
 local PlayerConfig = require "Data.PlayerConfig"
 local Boss = require "Boss"
 
@@ -77,7 +78,32 @@ assert(farChoice == "charge", "far choice was " .. tostring(farChoice))
 boss.lastAttack = "charge"
 assert(Boss.SelectAttack(boss, farPlayer, 0.40) ~= "charge")
 
--- Phase one locks at 30%, then boss attacks become defensive-only.
+-- Active boss attacks require the guard cone to face the attacker.
+boss = NewBoss()
+player = NewPlayer(0.62, 0.5, "right")
+player.parryDirectionX, player.parryDirectionY = 1, 0
+SetActive(boss, "sweep")
+assert(Boss.TryParry(boss, player, 1) == nil, "a guard facing away from the boss must fail")
+player.parryDirectionX = -1
+assert(Boss.TryParry(boss, player, 1) ~= nil, "a guard facing the boss must intercept its attack")
+
+-- The first phase is a short mastery check: exactly three perfect parries.
+boss = NewBoss()
+player = NewPlayer(0.62, 0.5, "left")
+local perfectDamage = GaugeConfig.normalDamage * GaugeConfig.perfectDamageMultiplier
+for index = 1, 3 do
+    SetActive(boss, "sweep")
+    assert(Boss.TryParry(boss, player, perfectDamage) ~= nil)
+    if index < 3 then
+        assert(boss.phase == 1, "the boss must remain in phase one before the third perfect parry")
+    end
+end
+assert(boss.phase == 2, "the third perfect parry must enter phase two")
+assert(BossConfig.mechanisms.fog.required == 1)
+assert(BossConfig.mechanisms.thorns.required == 1)
+assert(BossConfig.mechanisms.metal.required == 1)
+
+-- Phase one locks at 50%, then boss attacks become defensive-only.
 boss = NewBoss()
 player = NewPlayer(0.62, 0.5, "left")
 boss.hp = boss.maxHp * BossConfig.phaseThreshold + 0.2
@@ -113,12 +139,13 @@ player.facing = fogX < player.x and "left" or "right"
 assert(Boss.TryParry(boss, player, 1) ~= nil)
 assert(Boss.TryParry(boss, player, 1) == nil, "one parry press must advance at most one target")
 
--- Sequential 3/4/5 mechanism progression.
+-- Sequential one-hit mechanism progression.
 boss.state = "idle"
 boss.stateTimer = 1
 boss.mechanism = "fog"
 boss.fogSide = -1
 boss.mechanismProgress = 0
+boss.mechanismTransition = 0
 boss.lastParrySerial = -1
 player = NewPlayer(0.5, 0.5, "left")
 for index = 1, BossConfig.mechanisms.fog.required do

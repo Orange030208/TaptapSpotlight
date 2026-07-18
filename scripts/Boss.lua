@@ -29,8 +29,10 @@ local function IsInPlayerParry(player, x, y, extraRadius)
     local range = PlayerConfig.parryRange + player.radius + (extraRadius or 0)
     if distance > range then return false end
     if distance <= 0.0001 then return true end
-    local facingX = player.facing == "left" and -1 or 1
-    return (dx / distance) * facingX >= player.parryHalfAngleCos
+    local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
+    local directionY = player.parryDirectionY or 0
+    directionX, directionY = Normalize(directionX, directionY)
+    return (dx / distance) * directionX + (dy / distance) * directionY >= player.parryHalfAngleCos
 end
 
 local function IsInsideArc(boss, target, range, arcDegrees, reverse)
@@ -342,7 +344,10 @@ function Boss.CollectPlayerHits(boss, player)
 end
 
 local function CanParryCurrentAttack(boss, player)
+    -- Boss [B] attack reaches player [P], but the guard must still point back
+    -- toward the attacker: [B] <==== guard cone [P]. A guard facing away fails.
     return IsAttackHitting(boss, player)
+        and IsInPlayerParry(player, boss.x, boss.y, boss.radius)
 end
 
 local function FogCore(boss, player)

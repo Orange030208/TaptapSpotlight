@@ -99,6 +99,13 @@ local before = #createdSources
 AudioManager.ProcessEvents({ { name = "player_hurt" }, { name = "missing_cue" } })
 assert(#createdSources == before + 1, "known events should play and unknown events should be ignored")
 
+before = #createdSources
+AudioManager.ProcessEvents({
+    { name = "combo_tier_up", data = { tier = 3 } },
+    { name = "overdrive_start", data = { tier = 3 } },
+})
+assert(#createdSources == before + 2, "combo stages must reuse their mapped sound cues")
+
 AudioManager.Shutdown()
 assert(disposed)
 

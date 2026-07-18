@@ -33,6 +33,10 @@ local CUES = {
     room_transition = { file = "room_transition.ogg", gain = 0.48, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.18 },
     game_over = { file = "game_over.ogg", gain = 0.64, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.30 },
     victory = { file = "victory.ogg", gain = 0.74, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.30 },
+    combo_tier_1 = { file = "parry_success.ogg", gain = 0.72, pitchMin = 1.16, pitchMax = 1.22, cooldown = 0.14 },
+    combo_tier_2 = { file = "perfect_parry.ogg", gain = 0.84, pitchMin = 1.14, pitchMax = 1.21, cooldown = 0.16 },
+    combo_tier_3 = { file = "gauge_full.ogg", gain = 0.92, pitchMin = 1.10, pitchMax = 1.16, cooldown = 0.22 },
+    overdrive_start = { file = "battle_start.ogg", gain = 0.88, pitchMin = 1.20, pitchMax = 1.26, cooldown = 0.30 },
 }
 
 ---@type Scene|nil
@@ -138,7 +142,12 @@ end
 
 function AudioManager.ProcessEvents(events)
     for _, event in ipairs(events or {}) do
-        AudioManager.Play(event.name)
+        if event.name == "combo_tier_up" then
+            local tier = event.data ~= nil and event.data.tier or 0
+            AudioManager.Play("combo_tier_" .. tostring(tier))
+        else
+            AudioManager.Play(event.name)
+        end
     end
 end
 

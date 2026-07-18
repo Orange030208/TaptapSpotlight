@@ -73,6 +73,13 @@ function Renderer.WorldToScreen(width, height, x, y)
     return Lerp(arena.left, arena.right, x), Lerp(arena.top, arena.bottom, y), scale
 end
 
+function Renderer.ScreenToWorld(width, height, x, y)
+    local arena = Renderer.GetArena(width, height)
+    local arenaWidth = math.max(0.0001, arena.right - arena.left)
+    local arenaHeight = math.max(0.0001, arena.bottom - arena.top)
+    return (x - arena.left) / arenaWidth, (y - arena.top) / arenaHeight
+end
+
 local function DrawBackground(ctx, width, height, time)
     local gradient = nvgLinearGradient(ctx, 0, 0, 0, height,
         nvgRGBA(18, 18, 25, 255), nvgRGBA(31, 24, 35, 255))
@@ -412,15 +419,68 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     nvgFill(ctx)
 end
 
-local function DrawProjectile(ctx, width, height, projectile)
+local function DrawProjectile(ctx, width, height, projectile, combo)
     local x, y, scale = Renderer.WorldToScreen(width, height, projectile.x, projectile.y)
     local color = projectile.owner == "player" and { 125, 238, 255 } or { 255, 135, 205 }
+    if projectile.reflected and combo ~= nil and combo.tier > 0 then
+        local tierColors = {
+            { 105, 225, 221 },
+            { 245, 195, 105 },
+            { 255, 126, 161 },
+        }
+        color = tierColors[math.min(combo.tier, #tierColors)]
+    end
+    local radius = (5 + projectile.radius * 80) * scale
+    local speed = math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy)
+    local directionX, directionY = 0, 0
+    if speed > 0.0001 then
+        directionX, directionY = projectile.vx / speed, projectile.vy / speed
+        local tailLength = radius * (projectile.reflected and 5.4 or 3.2)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x - directionX * tailLength, y - directionY * tailLength)
+        nvgLineTo(ctx, x, y)
+        nvgStrokeWidth(ctx, projectile.reflected and radius * 0.9 or radius * 0.55)
+        StrokeColor(ctx, color, projectile.reflected and 130 or 80)
+        nvgStroke(ctx)
+    end
+
+    if projectile.reflected then
+        local glow = nvgRadialGradient(ctx, x, y, radius * 0.18, radius * 3.3,
+            nvgRGBA(color[1], color[2], color[3], 185), nvgRGBA(color[1], color[2], color[3], 0))
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius * 3.3)
+        nvgFillPaint(ctx, glow)
+        nvgFill(ctx)
+    end
+
+    if projectile.turnTimer ~= nil and projectile.turnTimer > 0 and projectile.turnDuration > 0 and speed > 0.0001 then
+        local turnRatio = Clamp(projectile.turnTimer / projectile.turnDuration, 0, 1)
+        local fromX = projectile.turnFromX or directionX
+        local fromY = projectile.turnFromY or directionY
+        local arcRadius = radius * (3.2 + turnRatio * 1.6)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x - fromX * arcRadius, y - fromY * arcRadius)
+        nvgBezierTo(ctx,
+            x - fromX * arcRadius * 0.18, y - fromY * arcRadius * 0.18,
+            x + directionX * arcRadius * 0.22, y + directionY * arcRadius * 0.22,
+            x + directionX * arcRadius, y + directionY * arcRadius)
+        nvgStrokeWidth(ctx, math.max(1, radius * 0.34))
+        StrokeColor(ctx, color, math.floor(215 * turnRatio))
+        nvgStroke(ctx)
+    end
+
     nvgBeginPath(ctx)
-    nvgCircle(ctx, x, y, (5 + projectile.radius * 80) * scale)
+    nvgCircle(ctx, x, y, radius)
     Color(ctx, color, 255)
     nvgFill(ctx)
+    if projectile.reflected then
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x - directionX * radius * 0.14, y - directionY * radius * 0.14, radius * 0.42)
+        Color(ctx, { 255, 252, 236 }, 245)
+        nvgFill(ctx)
+    end
     nvgBeginPath(ctx)
-    nvgCircle(ctx, x, y, (10 + projectile.radius * 110) * scale)
+    nvgCircle(ctx, x, y, radius * 2.05)
     nvgStrokeWidth(ctx, 1.4 * scale)
     StrokeColor(ctx, color, 100)
     nvgStroke(ctx)
@@ -460,7 +520,9 @@ local function DrawParryCone(ctx, width, height, player)
         return
     end
 
-    local facingAngle = player.facing == "left" and math.pi or 0
+    local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
+    local directionY = player.parryDirectionY or 0
+    local facingAngle = math.atan(directionY, directionX)
     local halfAngle = math.acos(Clamp(player.parryHalfAngleCos, -1, 1))
     local x, y = Renderer.WorldToScreen(width, height, player.x, player.y)
     nvgBeginPath(ctx)
@@ -505,6 +567,25 @@ local function DrawFeedbackWorld(ctx, width, height, feedback)
         nvgCircle(ctx, x, y, radius)
         nvgStrokeWidth(ctx, math.max(1, impact.stroke * scale * (1 - progress * 0.35)))
         StrokeColor(ctx, impact.color, alpha)
+        nvgStroke(ctx)
+    end
+
+    for _, shockwave in ipairs(feedback.shockwaves or {}) do
+        local progress = 1 - Clamp(shockwave.life / math.max(0.001, shockwave.maxLife), 0, 1)
+        local x, y, scale = Renderer.WorldToScreen(width, height, shockwave.x, shockwave.y)
+        local radius = Lerp(shockwave.startRadius, shockwave.endRadius, math.sqrt(progress)) * scale
+        local alpha = math.floor(200 * (1 - progress) * (1 - progress))
+        local glow = nvgRadialGradient(ctx, x, y, radius * 0.20, radius * 1.35,
+            nvgRGBA(shockwave.color[1], shockwave.color[2], shockwave.color[3], math.floor(alpha * 0.38)),
+            nvgRGBA(shockwave.color[1], shockwave.color[2], shockwave.color[3], 0))
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius * 1.35)
+        nvgFillPaint(ctx, glow)
+        nvgFill(ctx)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius)
+        nvgStrokeWidth(ctx, math.max(1, shockwave.stroke * scale * (1 - progress * 0.25)))
+        StrokeColor(ctx, shockwave.color, alpha)
         nvgStroke(ctx)
     end
 
@@ -681,7 +762,7 @@ function Renderer.Draw(ctx, game, width, height, feedback)
         if drawable.kind == "chest" then
             DrawChest(ctx, width, height, drawable.value)
         elseif drawable.kind == "projectile" then
-            DrawProjectile(ctx, width, height, drawable.value)
+            DrawProjectile(ctx, width, height, drawable.value, game.combo)
         elseif drawable.kind == "enemy" then
             if drawable.value.kind == "boss" then
                 BossRenderer.DrawBoss(ctx, width, height, drawable.value, game.time, Renderer.WorldToScreen)

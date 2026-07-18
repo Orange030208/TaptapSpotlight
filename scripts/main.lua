@@ -34,6 +34,12 @@ local parryPanel = nil
 ---@type Widget|nil
 local parryLabel = nil
 ---@type Widget|nil
+local comboPanel = nil
+---@type Widget|nil
+local comboLabel = nil
+---@type Widget|nil
+local overdriveLabel = nil
+---@type Widget|nil
 local buffLabel = nil
 ---@type Widget|nil
 local abilityLabel = nil
@@ -102,6 +108,22 @@ local function ChooseChestOption(index)
     if game ~= nil and Game.SelectUpgrade(game, index) then
         hudTimer = 1.0
     end
+end
+
+local function TryParryAtLogicalPosition(screenX, screenY)
+    if game == nil then
+        return false
+    end
+    local worldX, worldY = Renderer.ScreenToWorld(logicalWidth, logicalHeight, screenX, screenY)
+    return Game.TryParry(game, worldX, worldY)
+end
+
+local function TryParryAtCursor()
+    local mousePosition = input:GetMousePosition()
+    return TryParryAtLogicalPosition(
+        mousePosition.x / devicePixelRatio,
+        mousePosition.y / devicePixelRatio
+    )
 end
 
 local function StartOrRestartRun()
@@ -600,6 +622,39 @@ local function CreateHud()
         pointerEvents = "none",
         children = { parryLabel },
     }
+    comboLabel = UI.Label {
+        text = "连击 x0",
+        width = 88,
+        fontSize = 19,
+        fontWeight = "bold",
+        fontColor = COLORS.muted,
+    }
+    overdriveLabel = UI.Label {
+        text = "蓄势",
+        width = 70,
+        fontSize = 10,
+        textAlign = "right",
+        fontColor = COLORS.muted,
+    }
+    comboPanel = UI.Panel {
+        width = 170,
+        padding = { 7, 10, 7, 10 },
+        borderRadius = 16,
+        borderWidth = 1,
+        borderColor = { 190, 196, 218, 95 },
+        backgroundColor = { 20, 24, 41, 225 },
+        shadowBlur = 12,
+        shadowColor = { 0, 0, 0, 90 },
+        pointerEvents = "none",
+        children = {
+            UI.Panel {
+                width = "100%",
+                flexDirection = "row",
+                alignItems = "baseline",
+                children = { comboLabel, UI.Spacer(), overdriveLabel },
+            },
+        },
+    }
     buffLabel = UI.Label {
         text = "暂无回响",
         width = "100%",
@@ -763,7 +818,7 @@ local function CreateHud()
             UI.Panel {
                 position = "absolute", top = 14, right = 16,
                 width = "100%", alignItems = "flex-end", gap = 8,
-                pointerEvents = "box-none", children = { parryPanel, insightPanel },
+                pointerEvents = "box-none", children = { parryPanel, comboPanel, insightPanel },
             },
             UI.Panel {
                 position = "absolute", top = 30, left = 0, right = 0,
@@ -1009,7 +1064,7 @@ local function CreateHud()
                                                     },
                                                     stateActionButton,
                                                     UI.Label {
-                                                        text = "WASD 移动  ·  空格招架  ·  回车开始",
+                                                        text = "WASD 移动  ·  左键招架  ·  回车开始",
                                                         fontSize = 11,
                                                         fontColor = { 177, 184, 207, 205 },
                                                     },
@@ -1182,6 +1237,21 @@ local function UpdateHud()
         borderColor = hud.parryReady and { 105, 225, 221, 145 } or { 170, 142, 238, 120 },
         backgroundColor = hud.parryReady and { 15, 38, 48, 225 } or { 31, 25, 51, 225 },
     })
+    local combo = hud.combo
+    local comboColor = combo.color
+    comboLabel:SetText("连击 x" .. tostring(combo.count))
+    comboLabel:SetFontColor({ comboColor[1], comboColor[2], comboColor[3], 255 })
+    if combo.overdriveRemaining > 0 then
+        overdriveLabel:SetText(string.format("超载 %.1fs", combo.overdriveRemaining))
+        overdriveLabel:SetFontColor({ 255, 209, 224, 255 })
+    else
+        overdriveLabel:SetText(combo.tier > 0 and combo.tierName or "蓄势")
+        overdriveLabel:SetFontColor({ comboColor[1], comboColor[2], comboColor[3], 220 })
+    end
+    comboPanel:SetStyle({
+        borderColor = { comboColor[1], comboColor[2], comboColor[3], combo.tier > 0 and 165 or 95 },
+        backgroundColor = combo.overdriveRemaining > 0 and { 57, 24, 49, 235 } or { 20, 24, 41, 225 },
+    })
     buffLabel:SetText(hud.buffs == "暂无临时增益" and "暂无回响" or hud.buffs)
     abilityLabel:SetText(hud.upgrades)
     messagePanel:SetVisible(hud.message ~= "")
@@ -1247,6 +1317,7 @@ function Start()
 
     SubscribeToEvent("Update", "HandleUpdate")
     SubscribeToEvent("KeyDown", "HandleKeyDown")
+    SubscribeToEvent("MouseButtonDown", "HandleMouseButtonDown")
     SubscribeToEvent("ScreenMode", "HandleScreenMode")
     SubscribeToEvent(nvgContext, "NanoVGRender", "HandleNanoVGRender")
 end
@@ -1314,13 +1385,29 @@ function HandleKeyDown(eventType, eventData)
         if game.state == "menu" then
             Game.StartOrRestart(game)
         else
-            Game.TryParry(game)
+            TryParryAtCursor()
         end
         return
     end
     if key == KEY_R and (game.state == "dead" or game.state == "victory") then
         Game.StartOrRestart(game)
     end
+end
+
+
+---@param eventType string
+---@param eventData MouseButtonDownEventData
+function HandleMouseButtonDown(eventType, eventData)
+    if game == nil or eventData:GetInt("Button") ~= MOUSEB_LEFT then
+        return
+    end
+    if game.state ~= "battle" then
+        return
+    end
+
+    local screenX = eventData:GetInt("X") / devicePixelRatio
+    local screenY = eventData:GetInt("Y") / devicePixelRatio
+    TryParryAtLogicalPosition(screenX, screenY)
 end
 
 ---@param eventType string
