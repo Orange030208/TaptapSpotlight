@@ -857,75 +857,101 @@ local function EnemyColor(kind)
     return { 255, 145, 74 }
 end
 
+local function BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, centerX, centerY)
+    for step = 0, 28 do
+        local angle = startAngle + arcRadians * step / 28
+        nvgLineTo(ctx, centerX + math.cos(angle) * radius, centerY + math.sin(angle) * radius)
+    end
+    nvgClosePath(ctx)
+end
+
+local function DrawCircleAttackRegion(ctx, centerX, centerY, radius, color, progress, pulse, scale)
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, radius)
+    Color(ctx, color, 42)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2.4 * scale)
+    StrokeColor(ctx, color, pulse)
+    nvgStroke(ctx)
+
+    if progress > 0 then
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, centerX, centerY, radius * progress)
+        Color(ctx, color, 105)
+        nvgFill(ctx)
+    end
+end
+
+local function DrawSectorAttackRegion(ctx, centerX, centerY, radius, startAngle, arcRadians, color, progress, pulse, scale)
+    BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
+    Color(ctx, color, 38)
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 2.2 * scale)
+    StrokeColor(ctx, color, pulse)
+    nvgStroke(ctx)
+
+    if progress > 0 then
+        BuildSectorPath(ctx, centerX, centerY, radius * progress, startAngle, arcRadians)
+        Color(ctx, color, 110)
+        nvgFill(ctx)
+    end
+end
+
 local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
     if enemy.state ~= "telegraph" then
         return
     end
     local x, y, scale = Renderer.WorldToScreen(width, height, enemy.x, enemy.y)
     local spec = EnemyConfig[enemy.kind]
-    local radius = (enemy.radius * 180 + 6) * scale
-    local pulse = 120 + math.floor(100 * math.abs(math.sin(enemy.stateTimer * 13)))
-    local directionX, directionY = enemy.attackX or 1, enemy.attackY or 0
-    local behavior = spec and spec.behavior or ""
-    local telegraphColor = enemy.kind == "blue_swarm" and { 70, 225, 255 } or { 255, 230, 120 }
-
-    if behavior == "aoe_pulse" or behavior == "melee_arc" then
-        radius = (spec.attack.range * 180 + 6) * scale
+    if spec == nil or spec.attack == nil then
+        return
     end
-    nvgBeginPath(ctx)
-    nvgCircle(ctx, x, y, radius)
-    nvgStrokeWidth(ctx, 2 * scale)
-    StrokeColor(ctx, telegraphColor, pulse)
-    nvgStroke(ctx)
 
-    if behavior == "tree_swing" or behavior == "melee_arc" then
-        local arc = math.rad(enemy.attackArc or spec.attack.arc or spec.attack.narrowArc or 360)
-        local directionSigns = behavior == "tree_swing" and { -1, 1 } or { 1 }
-        for _, direction in ipairs(directionSigns) do
-            local startAngle = Atan2(directionY * direction, directionX * direction) - arc * 0.5
-            for index = 0, 5 do
-                local angle = startAngle + arc * index / 5
-                nvgBeginPath(ctx)
-                nvgMoveTo(ctx, x, y)
-                nvgLineTo(ctx, x + math.cos(angle) * radius * 1.8, y + math.sin(angle) * radius * 1.8)
-                nvgStrokeWidth(ctx, 1.2 * scale)
-                StrokeColor(ctx, { 222, 150, 255 }, math.floor(pulse * 0.72))
-                nvgStroke(ctx)
-            end
-        end
+    local attack = spec.attack
+    local progress = Clamp(1 - enemy.stateTimer / math.max(0.001, attack.telegraph), 0, 1)
+    local pulse = 155 + math.floor(85 * math.abs(math.sin(enemy.stateTimer * 13)))
+    local directionX, directionY = enemy.attackX or 1, enemy.attackY or 0
+    local directionAngle = Atan2(directionY, directionX)
+    local telegraphColor = enemy.kind == "blue_swarm" and { 70, 225, 255 } or { 255, 230, 120 }
+    local behavior = spec.behavior or ""
+    local attackRange = attack.range or spec.attackRange or enemy.radius * 2
+    local radius = (attackRange * 180 + 6) * scale
+
+    if behavior == "aoe_pulse" then
+        DrawCircleAttackRegion(ctx, x, y, radius, telegraphColor, progress, pulse, scale)
+    elseif behavior == "tree_swing" then
+        local arc = math.rad(enemy.attackArc or attack.arc or 60)
+        DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - arc * 0.5, arc,
+            { 222, 150, 255 }, progress, pulse, scale)
+        DrawSectorAttackRegion(ctx, x, y, radius, directionAngle + math.pi - arc * 0.5, arc,
+            { 222, 150, 255 }, progress, pulse, scale)
+    elseif behavior == "melee_arc" or behavior == "melee_lunge" then
+        local arc = math.rad(enemy.attackArc or attack.arc or 70)
+        DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - arc * 0.5, arc,
+            telegraphColor, progress, pulse, scale)
     elseif behavior == "ranged_fan" then
-        local count = spec.projectile.count
-        if spec.projectile.pattern == "radial_random" then
-            local offset = enemy.id * 0.37
-            for index = 0, count - 1 do
-                local angle = offset + math.pi * 2 * index / count
-                nvgBeginPath(ctx)
-                nvgMoveTo(ctx, x, y)
-                nvgLineTo(ctx, x + math.cos(angle) * radius * 2.15, y + math.sin(angle) * radius * 2.15)
-                nvgStrokeWidth(ctx, 1.2 * scale)
-                StrokeColor(ctx, { 202, 174, 235 }, math.floor(pulse * 0.66))
-                nvgStroke(ctx)
-            end
+        if attack.projectile ~= nil and attack.projectile.pattern == "radial_random" then
+            DrawCircleAttackRegion(ctx, x, y, radius, { 202, 174, 235 }, progress, pulse, scale)
         else
-            local spread = math.rad(spec.projectile.spread)
-            local startAngle = Atan2(directionY, directionX) - spread * 0.5
-            for index = 0, count - 1 do
-                local angle = startAngle + spread * index / (count - 1)
-                nvgBeginPath(ctx)
-                nvgMoveTo(ctx, x, y)
-                nvgLineTo(ctx, x + math.cos(angle) * radius * 2.5, y + math.sin(angle) * radius * 2.5)
-                nvgStrokeWidth(ctx, 1.4 * scale)
-                StrokeColor(ctx, { 202, 174, 235 }, math.floor(pulse * 0.7))
-                nvgStroke(ctx)
-            end
+            local spread = math.rad(attack.projectile and attack.projectile.spread or 30)
+            DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - spread * 0.5, spread,
+                { 202, 174, 235 }, progress, pulse, scale)
         end
+    elseif behavior == "ranged_single" and player ~= nil then
+        local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
+        local playerAngle = Atan2(playerY - y, playerX - x)
+        local spread = math.rad(12)
+        DrawSectorAttackRegion(ctx, x, y, radius, playerAngle - spread * 0.5, spread,
+            { 255, 220, 115 }, progress, pulse, scale)
     elseif player ~= nil then
         local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
         nvgBeginPath(ctx)
         nvgMoveTo(ctx, x, y)
         nvgLineTo(ctx, playerX, playerY)
-        nvgStrokeWidth(ctx, 1.5 * scale)
-        StrokeColor(ctx, { 255, 220, 115 }, math.floor(pulse * 0.55))
+        nvgStrokeWidth(ctx, 2 * scale)
+        StrokeColor(ctx, telegraphColor, pulse)
         nvgStroke(ctx)
     end
 end

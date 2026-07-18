@@ -26,6 +26,7 @@ local CUES = {
     boss_defeat = { file = "boss_defeat.ogg", gain = 0.72, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.20 },
     chest_open = { file = "chest_open.ogg", gain = 0.62, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.12 },
     crystal_acquired = { file = "upgrade_select.ogg", gain = 0.58, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.10 },
+    crystal_dash_start = { file = "crystal_dash_start.ogg", gain = 0.54, pitchMin = 0.98, pitchMax = 1.03, cooldown = 0.10 },
     gauge_full = { file = "gauge_full.ogg", gain = 0.58, pitchMin = 0.99, pitchMax = 1.03, cooldown = 0.12 },
     buff_gain = { file = "buff_gain.ogg", gain = 0.42, pitchMin = 0.99, pitchMax = 1.03, cooldown = 0.12 },
     buff_end = { file = "buff_end.ogg", gain = 0.26, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.10 },
