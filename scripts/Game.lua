@@ -336,7 +336,11 @@ local function EnterRoom(game, roomId, travelDirection)
     local arrivalState = "clear"
     if not roomState.cleared then
         arrivalState = "intro"
+        assert(#room.groups > 0, "Room has no enemy groups: " .. tostring(roomId))
+        assert(#room.spawns > 0, "Room has no enemy spawns: " .. tostring(roomId))
         local group = room.groups[math.random(1, #room.groups)]
+        assert(group ~= nil, "Selected enemy group is missing: " .. tostring(roomId))
+        ---@cast group string[]
         for index, kind in ipairs(group) do
             local spawn = room.spawns[((index - 1) % #room.spawns) + 1]
             table.insert(game.enemies, Entities.NewEnemy(kind, spawn, game.nextEntityId))

@@ -8,8 +8,9 @@ local SOOT_SPRITE_PATH = "image/soot_monster.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
--- All Spine pages are repacked within the 2048px device texture budget.
-local ENABLE_SPINE_PLAYER = true
+-- 当前资源由 Spine 3.8.75 导出，但运行时要求 Spine 4.2。
+-- 在用 Spine 4.2 重新导出骨骼前，启用静态角色回退以避免原生崩溃。
+local ENABLE_SPINE_PLAYER = false
 local playerImageHandle = 0
 local playerImageWidth = 1
 local playerImageHeight = 1
@@ -865,6 +866,7 @@ end
 
 local function DrawProjectile(ctx, width, height, projectile, combo)
     local x, y, scale = Renderer.WorldToScreen(width, height, projectile.x, projectile.y)
+    ---@type number[]
     local color = projectile.owner == "player" and { 125, 238, 255 } or { 255, 135, 205 }
     if projectile.owner == "enemy" and projectile.style == "spore" then
         color = { 208, 166, 238 }
@@ -877,7 +879,10 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
             { 245, 195, 105 },
             { 255, 126, 161 },
         }
-        color = tierColors[math.min(combo.tier, #tierColors)]
+        local tierColor = tierColors[math.min(combo.tier, #tierColors)]
+        if tierColor ~= nil then
+            color = tierColor
+        end
     end
     local radius = (5 + projectile.radius * 80) * scale
     if projectile.style == "spore" then

@@ -37,10 +37,11 @@ end
 nvgDeleteImage = function() end
 
 assert(Renderer.LoadAssets({}))
-assert(spineCreateCalls == 1, "startup must create the compressed Spine player")
-assert(loadedSpinePath == "Characters/bard_cat/bard_cat.json")
-assert(imagePaths[1] == "image/soot_monster.png")
+assert(spineCreateCalls == 0, "incompatible Spine 3.8 asset must not be loaded by the 4.2 runtime")
+assert(loadedSpinePath == nil)
+assert(imagePaths[1] == "Characters/player.png")
+assert(imagePaths[2] == "image/soot_monster.png")
 
 Renderer.UnloadAssets({})
-assert(disposed)
+assert(not disposed, "no Spine instance should exist while the static fallback is enabled")
 print("PASS test_renderer_assets")
