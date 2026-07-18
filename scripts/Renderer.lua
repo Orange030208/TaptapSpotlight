@@ -4,36 +4,96 @@ local Feedback = require "Feedback"
 local BossRenderer = require "BossRenderer"
 
 local Renderer = {}
+local SOOT_SPRITE_PATH = "image/soot_monster.png"
+local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
+local PLAYER_IDLE_ANIMATION = "move/STAND"
+local PLAYER_MOVE_ANIMATION = "move/MOVE"
 local playerImageHandle = 0
 local playerImageWidth = 1
 local playerImageHeight = 1
+local sootImageHandle = 0
+local sootImageWidth = 1
+local sootImageHeight = 1
+---@type SpineInstance|nil
+local playerSpine = nil
+---@type string|nil
+local playerSpineAnimation = nil
+---@type number|nil
+local playerSpineLastTime = nil
 
 function Renderer.LoadAssets(ctx)
-    playerImageHandle = nvgCreateImage(ctx, "Characters/player.png", 0)
-    if playerImageHandle == nil or playerImageHandle <= 0 then
-        playerImageHandle = 0
-        print("WARNING: Failed to load player sprite: Characters/player.png; using vector fallback")
-        return false
+    local playerLoaded = false
+    playerSpine = nvgSpineCreate(ctx)
+    if playerSpine ~= nil and playerSpine:Load(PLAYER_SPINE_PATH) then
+        playerSpine:SetDefaultMix(0.12)
+        playerSpine:SetAnimation(0, PLAYER_IDLE_ANIMATION, true)
+        playerSpineAnimation = PLAYER_IDLE_ANIMATION
+        playerSpineLastTime = nil
+        playerLoaded = true
+        print("Loaded Spine player character: " .. PLAYER_SPINE_PATH)
+    else
+        if playerSpine ~= nil then
+            playerSpine:Unload()
+            playerSpine:Dispose()
+            playerSpine = nil
+        end
+
+        playerImageHandle = nvgCreateImage(ctx, "Characters/player.png", 0)
+        if playerImageHandle == nil or playerImageHandle <= 0 then
+            playerImageHandle = 0
+            print("WARNING: Failed to load Spine player and static fallback: Characters/player.png")
+        else
+            playerImageWidth, playerImageHeight = nvgImageSize(ctx, playerImageHandle)
+            if playerImageWidth <= 0 or playerImageHeight <= 0 then
+                nvgDeleteImage(ctx, playerImageHandle)
+                playerImageHandle = 0
+                playerImageWidth, playerImageHeight = 1, 1
+                print("WARNING: Player sprite fallback has invalid dimensions")
+            else
+                playerLoaded = true
+            end
+        end
     end
 
-    playerImageWidth, playerImageHeight = nvgImageSize(ctx, playerImageHandle)
-    if playerImageWidth <= 0 or playerImageHeight <= 0 then
-        nvgDeleteImage(ctx, playerImageHandle)
-        playerImageHandle = 0
-        playerImageWidth, playerImageHeight = 1, 1
-        print("WARNING: Player sprite has invalid dimensions; using vector fallback")
-        return false
+    local sootLoaded = true
+    sootImageHandle = nvgCreateImage(ctx, SOOT_SPRITE_PATH, 0)
+    if sootImageHandle == nil or sootImageHandle <= 0 then
+        sootImageHandle = 0
+        sootLoaded = false
+        print("WARNING: Failed to load soot sprite: " .. SOOT_SPRITE_PATH .. "; using vector fallback")
+    else
+        sootImageWidth, sootImageHeight = nvgImageSize(ctx, sootImageHandle)
+        if sootImageWidth <= 0 or sootImageHeight <= 0 then
+            nvgDeleteImage(ctx, sootImageHandle)
+            sootImageHandle = 0
+            sootImageWidth, sootImageHeight = 1, 1
+            sootLoaded = false
+            print("WARNING: Soot sprite has invalid dimensions; using vector fallback")
+        end
     end
 
-    return true
+    return playerLoaded and sootLoaded
 end
 
 function Renderer.UnloadAssets(ctx)
+    if playerSpine ~= nil then
+        playerSpine:Unload()
+        playerSpine:Dispose()
+        playerSpine = nil
+    end
+    playerSpineAnimation = nil
+    playerSpineLastTime = nil
+
     if playerImageHandle ~= nil and playerImageHandle > 0 then
         nvgDeleteImage(ctx, playerImageHandle)
     end
     playerImageHandle = 0
     playerImageWidth, playerImageHeight = 1, 1
+    if sootImageHandle ~= nil and sootImageHandle > 0 then
+        nvgDeleteImage(ctx, sootImageHandle)
+    end
+    sootImageHandle = 0
+    sootImageWidth, sootImageHeight = 1, 1
 end
 
 local function Lerp(a, b, t)
@@ -322,8 +382,82 @@ local function DrawSpritePlayer(ctx, width, height, player, time)
     nvgRestore(ctx)
 end
 
+local function UpdatePlayerSpineAnimation(player, time)
+    if playerSpine == nil or not playerSpine:IsLoaded() then
+        return
+    end
+
+    local animation = player.isMoving and PLAYER_MOVE_ANIMATION or PLAYER_IDLE_ANIMATION
+    if playerSpineAnimation ~= animation then
+        if not playerSpine:SetAnimation(0, animation, true) then
+            print("WARNING: Missing player Spine animation: " .. animation)
+        end
+        playerSpineAnimation = animation
+    end
+
+    local deltaTime = 0
+    if playerSpineLastTime ~= nil then
+        deltaTime = Clamp(time - playerSpineLastTime, 0, 0.1)
+    end
+    playerSpineLastTime = time
+    if deltaTime > 0 then
+        playerSpine:Update(deltaTime)
+    end
+end
+
+local function DrawSpinePose(ctx, displayHeight, flip, red, green, blue, alpha)
+    if playerSpine == nil then
+        return false
+    end
+
+    local dataWidth = playerSpine:GetDataWidth()
+    local dataHeight = playerSpine:GetDataHeight()
+    if dataWidth <= 0 or dataHeight <= 0 then
+        return false
+    end
+
+    local scale = displayHeight / dataHeight
+    local displayWidth = dataWidth * scale
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight
+    local dataX = playerSpine:GetDataX()
+    local dataY = playerSpine:GetDataY()
+
+    playerSpine:SetScale(scale * flip, -scale)
+    playerSpine:SetPosition(
+        drawX + (flip < 0 and (dataWidth + dataX) or -dataX) * scale,
+        drawY + (dataHeight + dataY) * scale
+    )
+    playerSpine:SetColor(red, green, blue, alpha)
+    nvgSpineRender(ctx, playerSpine)
+    return true
+end
+
+local function DrawSpinePlayer(ctx, width, height, player, time)
+    local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
+    local displayHeight = 58 * scale
+    local flip = player.facing == "left" and -1 or 1
+    local bob = math.sin(time * 10) * 1.2 * scale
+    local alpha = 1.0
+    if player.invulnerabilityTimer > 0 then
+        alpha = 0.42 + 0.38 * math.abs(math.sin(time * 24))
+    end
+
+    UpdatePlayerSpineAnimation(player, time)
+    DrawShadow(ctx, x, y, scale, 23, 135)
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y + bob)
+    if player.parryTimer > 0 then
+        DrawSpinePose(ctx, displayHeight * 1.08, flip, 110 / 255, 235 / 255, 1.0, 0.49)
+    end
+    DrawSpinePose(ctx, displayHeight, flip, 1.0, 1.0, 1.0, alpha)
+    nvgRestore(ctx)
+end
+
 local function DrawPlayer(ctx, width, height, player, time)
-    if playerImageHandle ~= nil and playerImageHandle > 0 then
+    if playerSpine ~= nil and playerSpine:IsLoaded() then
+        DrawSpinePlayer(ctx, width, height, player, time)
+    elseif playerImageHandle ~= nil and playerImageHandle > 0 then
         DrawSpritePlayer(ctx, width, height, player, time)
     else
         DrawFallbackPlayer(ctx, width, height, player, time)
@@ -437,6 +571,53 @@ local function DrawSoot(ctx, x, y, size, scale, time, color, secondary)
         nvgFill(ctx)
     end
     DrawEyes(ctx, x, centerY - size * 0.04, scale, size * 0.14)
+end
+
+local function GetSootSpriteHeight(scale)
+    return 42 * scale
+end
+
+local function GetSootSquashStretch(enemy, time)
+    local speed = math.sqrt(enemy.vx * enemy.vx + enemy.vy * enemy.vy)
+    local rhythm = math.sin(time * (4.8 + math.min(speed, 1) * 12) + enemy.id * 0.67)
+    local scaleX = 1 + rhythm * (speed > 0.01 and 0.055 or 0.025)
+    local scaleY = 1 - rhythm * (speed > 0.01 and 0.045 or 0.02)
+    local spec = EnemyConfig.soot
+
+    if enemy.state == "telegraph" then
+        local duration = math.max(0.001, spec.attack.telegraph)
+        local progress = 1 - Clamp(enemy.stateTimer / duration, 0, 1)
+        scaleX = 1 + progress * 0.14
+        scaleY = 1 - progress * 0.12
+    elseif enemy.state == "dash" then
+        scaleX = 0.91
+        scaleY = 1.14
+    elseif enemy.state == "recovery" then
+        local duration = math.max(0.001, spec.attack.recovery)
+        local progress = Clamp(enemy.stateTimer / duration, 0, 1)
+        scaleX = 1 + progress * 0.1
+        scaleY = 1 - progress * 0.08
+    end
+
+    return scaleX, scaleY
+end
+
+local function DrawSpriteSoot(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetSootSpriteHeight(scale)
+    local displayWidth = displayHeight * sootImageWidth / sootImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight
+    local scaleX, scaleY = GetSootSquashStretch(enemy, time)
+    local flip = enemy.facing == "left" and -1 or 1
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y)
+    nvgScale(ctx, flip * scaleX, scaleY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, sootImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
 end
 
 local function DrawBlueSwarm(ctx, x, y, size, scale, time, color, secondary)
@@ -636,7 +817,11 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     end
 
     if enemy.kind == "soot" then
-        DrawSoot(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
+        if sootImageHandle ~= nil and sootImageHandle > 0 then
+            DrawSpriteSoot(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawSoot(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
+        end
     elseif enemy.kind == "blue_swarm" then
         DrawBlueSwarm(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
     elseif enemy.kind == "tree" then
@@ -663,6 +848,9 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     local healthWidth = size * 1.06
     local healthHeight = 3.5 * scale
     local healthY = y - size * 1.18
+    if enemy.kind == "soot" and sootImageHandle ~= nil and sootImageHandle > 0 then
+        healthY = y - GetSootSpriteHeight(scale) - 5 * scale
+    end
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
     nvgBeginPath(ctx)
     nvgRoundedRect(ctx, x - healthWidth * 0.5, healthY, healthWidth, healthHeight, healthHeight * 0.5)
