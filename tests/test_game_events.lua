@@ -136,6 +136,7 @@ Game.Update(battle, 0.1, 1, 0)
 assert(battle.player.x > birthX and battle.spawnGuideAlpha < 1, "movement must dismiss the floor guide")
 assert(battle.spawnParryGuideAlpha == 1, "movement must reveal the mouse parry guide")
 assert(Game.TryParry(battle, battle.player.x + 1, battle.player.y, true), "the left-click tutorial must allow a parry")
+assert(battle.spawnParryGuideAlpha == 0, "the mouse parry guide must disappear immediately after a successful click")
 assert(battle.roomCleared, "movement and parry must unlock the birth room exits")
 battle.player.x, battle.player.y = 0.5, RoomConfig.minY
 Game.Update(battle, 0, 0, 0)
@@ -294,13 +295,18 @@ end
 
 local comboEvents = PerformPerfectComboParry(3201)
 assert(comboGame.combo.count == ComboConfig.perfectGain and comboGame.combo.tier == 0)
+assert(FindEvent(comboEvents, "perfect_parry").data.perfectStreak == 1,
+    "the first perfect parry must begin a separate visual streak")
 comboEvents = PerformPerfectComboParry(3202)
 assert(comboGame.combo.count == ComboConfig.perfectGain * 2 and comboGame.combo.tier == 1)
 assert(HasEvent(comboEvents, "combo_tier_up"))
+assert(FindEvent(comboEvents, "perfect_parry").data.perfectStreak == 2,
+    "each consecutive perfect parry must increment the visual streak by one")
 comboEvents = PerformPerfectComboParry(3203)
 assert(comboGame.combo.tier == 2)
 assert(HasEvent(comboEvents, "combo_tier_up") and HasEvent(comboEvents, "combo_shockwave"),
     "tier two perfect parries must create a shockwave event")
+assert(FindEvent(comboEvents, "perfect_parry").data.perfectStreak == 3)
 PerformPerfectComboParry(3204)
 comboEvents = PerformPerfectComboParry(3205)
 assert(comboGame.combo.count == ComboConfig.overdriveThreshold)
@@ -309,9 +315,11 @@ assert(HasEvent(comboEvents, "overdrive_start"))
 local comboHud = Game.GetHud(comboGame).combo
 assert(comboHud.count == ComboConfig.overdriveThreshold and comboHud.tier == 3)
 assert(comboHud.overdriveRemaining == ComboConfig.overdriveDuration)
+assert(comboGame.perfectStreak.count == 5, "perfect streak count must stay independent from combo points")
 
 Game.Update(comboGame, ComboConfig.overdriveDuration + 0.01, 0, 0)
 assert(comboGame.combo.overdriveRemaining == 0, "overdrive must expire after its configured duration")
+assert(comboGame.perfectStreak.count == 0, "three seconds without a perfect parry must reset the visual streak")
 comboGame.player.invulnerabilityTimer = 0
 comboGame.projectiles = { Entities.NewProjectile(comboGame.player.x, comboGame.player.y, 0, 0, "enemy", 1) }
 Game.Update(comboGame, 0, 0, 0)
@@ -348,6 +356,7 @@ sharedGauge.enemies[1].stateTimer = 0.5
 assert(Game.TryParry(sharedGauge))
 Game.Update(sharedGauge, 0, 0, 0)
 assert(sharedGauge.gauge.value == GaugeConfig.perfectGain, "melee parries must fill the shared gauge")
+assert(sharedGauge.perfectStreak.count == 1)
 
 sharedGauge.player.parryTimer = 0
 sharedGauge.player.parryCooldown = 0
@@ -359,6 +368,7 @@ sharedGauge.player.parryElapsed = PlayerConfig.perfectParryWindow + 0.01
 Game.Update(sharedGauge, 0, 0, 0)
 assert(sharedGauge.gauge.value == GaugeConfig.perfectGain + GaugeConfig.normalGain,
     "ranged reflections must continue filling the same gauge")
+assert(sharedGauge.perfectStreak.count == 0, "a normal parry must break the strict perfect streak")
 
 local gauge = Game.New()
 Game.StartOrRestart(gauge)

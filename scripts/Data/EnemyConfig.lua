@@ -84,15 +84,18 @@ return {
         behavior = "ranged_fan", hp = 2, radius = 0.047,
         attackRangeMeters = 15, attackRange = MetersToWorld(15),
         moveSpeed = 0, immovable = true, touchDamage = 1,
-        attack = { interval = 2.45, telegraph = 0.76, recovery = 0.75 },
-        projectile = { count = 5, spread = 78, speed = 0.42, style = "seed", radius = 0.014, damage = 1 },
+        attack = { interval = 0.75, repeatInterval = 1.2, telegraph = 0.3, recovery = 0.15 },
+        projectile = {
+            count = 10, pattern = "radial_random", speed = 0.42, style = "seed",
+            minRadius = 0.01, maxRadius = 0.022, damage = 1,
+        },
         visual = Visual({ 56, 52, 73 }, { 133, 119, 158 }, { 22, 20, 35 }),
     },
     purple_orb = {
         behavior = "aoe_pulse", hp = 2, radius = 0.043,
-        attackRangeMeters = 8, attackRange = MetersToWorld(8),
+        attackRangeMeters = 3, attackRange = MetersToWorld(3),
         moveSpeed = 0.18, preferredDistance = MetersToWorld(2.8), touchDamage = 1,
-        attack = { interval = 1.0, telegraph = 0.58, active = 0.12, recovery = 0.3, range = MetersToWorld(3.7) },
+        attack = { interval = 0.55, repeatInterval = 1, telegraph = 0.25, active = 0.1, recovery = 0.1, range = MetersToWorld(3) },
         visual = Visual({ 253, 247, 255 }, { 208, 114, 255 }, { 115, 57, 160 }),
     },
     toxic_moss = {

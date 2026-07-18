@@ -8,6 +8,7 @@ local SOOT_SPRITE_PATH = "image/soot_monster.png"
 local LUMINOUS_WRAITH_SPRITE_PATH = "image/luminous_wraith_solid_alpha_20260718134330.png"
 local STONE_SPRITE_PATH = "image/stone_monster_rolling_20260718145411.png"
 local MUSHROOM_SPRITE_PATH = "image/dark_spore_mushroom_20260718151718.png"
+local DANDELION_SPRITE_PATH = "image/dark_dandelion_turret_20260718153010.png"
 local SPAWN_ROOM_GUIDE_SPRITE_PATH = "image/spawn_room_wasd_floor_guide_20260718145203.png"
 local SPAWN_ROOM_PARRY_GUIDE_SPRITE_PATH = "image/spawn_room_left_click_parry_chalk_20260718151041.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
@@ -31,6 +32,9 @@ local stoneImageHeight = 1
 local mushroomImageHandle = 0
 local mushroomImageWidth = 1
 local mushroomImageHeight = 1
+local dandelionImageHandle = 0
+local dandelionImageWidth = 1
+local dandelionImageHeight = 1
 local spawnRoomGuideImageHandle = 0
 local spawnRoomGuideImageWidth = 1
 local spawnRoomGuideImageHeight = 1
@@ -148,6 +152,23 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
+    local dandelionLoaded = true
+    dandelionImageHandle = nvgCreateImage(ctx, DANDELION_SPRITE_PATH, 0)
+    if dandelionImageHandle == nil or dandelionImageHandle <= 0 then
+        dandelionImageHandle = 0
+        dandelionLoaded = false
+        print("WARNING: Failed to load dandelion sprite: " .. DANDELION_SPRITE_PATH .. "; using vector fallback")
+    else
+        dandelionImageWidth, dandelionImageHeight = nvgImageSize(ctx, dandelionImageHandle)
+        if dandelionImageWidth <= 0 or dandelionImageHeight <= 0 then
+            nvgDeleteImage(ctx, dandelionImageHandle)
+            dandelionImageHandle = 0
+            dandelionImageWidth, dandelionImageHeight = 1, 1
+            dandelionLoaded = false
+            print("WARNING: Dandelion sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
     local spawnRoomGuideLoaded = true
     spawnRoomGuideImageHandle = nvgCreateImage(ctx, SPAWN_ROOM_GUIDE_SPRITE_PATH, 0)
     if spawnRoomGuideImageHandle == nil or spawnRoomGuideImageHandle <= 0 then
@@ -182,7 +203,7 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and mushroomLoaded and spawnRoomGuideLoaded
+    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and spawnRoomGuideLoaded
         and spawnRoomParryGuideLoaded
 end
 
@@ -220,6 +241,11 @@ function Renderer.UnloadAssets(ctx)
     end
     mushroomImageHandle = 0
     mushroomImageWidth, mushroomImageHeight = 1, 1
+    if dandelionImageHandle ~= nil and dandelionImageHandle > 0 then
+        nvgDeleteImage(ctx, dandelionImageHandle)
+    end
+    dandelionImageHandle = 0
+    dandelionImageWidth, dandelionImageHeight = 1, 1
     if spawnRoomGuideImageHandle ~= nil and spawnRoomGuideImageHandle > 0 then
         nvgDeleteImage(ctx, spawnRoomGuideImageHandle)
     end
@@ -687,16 +713,30 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
             nvgStroke(ctx)
         end
     elseif behavior == "ranged_fan" then
-        local spread = math.rad(spec.projectile.spread)
-        local startAngle = Atan2(directionY, directionX) - spread * 0.5
-        for index = 0, spec.projectile.count - 1 do
-            local angle = startAngle + spread * index / (spec.projectile.count - 1)
-            nvgBeginPath(ctx)
-            nvgMoveTo(ctx, x, y)
-            nvgLineTo(ctx, x + math.cos(angle) * radius * 2.5, y + math.sin(angle) * radius * 2.5)
-            nvgStrokeWidth(ctx, 1.4 * scale)
-            StrokeColor(ctx, { 202, 174, 235 }, math.floor(pulse * 0.7))
-            nvgStroke(ctx)
+        local count = spec.projectile.count
+        if spec.projectile.pattern == "radial_random" then
+            local offset = enemy.id * 0.37
+            for index = 0, count - 1 do
+                local angle = offset + math.pi * 2 * index / count
+                nvgBeginPath(ctx)
+                nvgMoveTo(ctx, x, y)
+                nvgLineTo(ctx, x + math.cos(angle) * radius * 2.15, y + math.sin(angle) * radius * 2.15)
+                nvgStrokeWidth(ctx, 1.2 * scale)
+                StrokeColor(ctx, { 202, 174, 235 }, math.floor(pulse * 0.66))
+                nvgStroke(ctx)
+            end
+        else
+            local spread = math.rad(spec.projectile.spread)
+            local startAngle = Atan2(directionY, directionX) - spread * 0.5
+            for index = 0, count - 1 do
+                local angle = startAngle + spread * index / (count - 1)
+                nvgBeginPath(ctx)
+                nvgMoveTo(ctx, x, y)
+                nvgLineTo(ctx, x + math.cos(angle) * radius * 2.5, y + math.sin(angle) * radius * 2.5)
+                nvgStrokeWidth(ctx, 1.4 * scale)
+                StrokeColor(ctx, { 202, 174, 235 }, math.floor(pulse * 0.7))
+                nvgStroke(ctx)
+            end
         end
     elseif player ~= nil then
         local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
@@ -880,6 +920,39 @@ local function DrawSpriteMushroom(ctx, x, y, enemy, time, scale)
     nvgBeginPath(ctx)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
     nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, mushroomImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
+local function GetDandelionSpriteHeight(scale)
+    return 42 * scale
+end
+
+local function DrawSpriteDandelion(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetDandelionSpriteHeight(scale)
+    local displayWidth = displayHeight * dandelionImageWidth / dandelionImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 2 * scale
+    local shakeX, shakeY, rotation = 0, 0, 0
+
+    if enemy.state == "telegraph" then
+        local attack = EnemyConfig.dandelion.attack
+        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
+        local jitter = math.sin(time * 54 + enemy.id * 1.37) * progress
+        shakeX = jitter * 1.8 * scale
+        shakeY = math.cos(time * 47 + enemy.id * 0.61) * progress * 0.55 * scale
+        rotation = jitter * 0.055
+    end
+
+    local pivotY = drawY + displayHeight
+    nvgSave(ctx)
+    nvgTranslate(ctx, x + shakeX, y + shakeY)
+    nvgTranslate(ctx, 0, pivotY)
+    nvgRotate(ctx, rotation)
+    nvgTranslate(ctx, 0, -pivotY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, dandelionImageHandle, 1.0))
     nvgFill(ctx)
     nvgRestore(ctx)
 end
@@ -1113,7 +1186,11 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
             DrawMushroom(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
         end
     elseif enemy.kind == "dandelion" then
-        DrawDandelion(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        if dandelionImageHandle ~= nil and dandelionImageHandle > 0 then
+            DrawSpriteDandelion(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawDandelion(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        end
     elseif enemy.kind == "purple_orb" then
         DrawOrb(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
     else
@@ -1134,6 +1211,8 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         healthY = y - GetStoneSpriteHeight(scale) - 4 * scale
     elseif enemy.kind == "mushroom" and mushroomImageHandle ~= nil and mushroomImageHandle > 0 then
         healthY = y - GetMushroomSpriteHeight(scale) - 4 * scale
+    elseif enemy.kind == "dandelion" and dandelionImageHandle ~= nil and dandelionImageHandle > 0 then
+        healthY = y - GetDandelionSpriteHeight(scale) - 4 * scale
     end
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
     nvgBeginPath(ctx)
@@ -1291,12 +1370,6 @@ local function DrawSpawnRoomParryGuide(ctx, width, height, game)
     local guideX = centerX - guideWidth * 0.5
     local guideY = centerY - guideHeight * 0.5
     local pulse = 0.9 + 0.1 * math.sin(game.time * 3.0)
-
-    nvgBeginPath(ctx)
-    nvgCircle(ctx, centerX, centerY, guideWidth * 0.46)
-    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, guideWidth * 0.12, guideWidth * 0.52,
-        nvgRGBA(96, 216, 230, math.floor(36 * guideAlpha * pulse)), nvgRGBA(70, 52, 96, 0)))
-    nvgFill(ctx)
 
     nvgBeginPath(ctx)
     nvgRect(ctx, guideX, guideY, guideWidth, guideHeight)

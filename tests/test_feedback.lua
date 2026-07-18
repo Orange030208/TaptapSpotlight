@@ -19,8 +19,8 @@ Feedback.ProcessEvents(feedback, {
     },
 })
 assert(Feedback.GetSimulationDelta(feedback, 0.016) == 0.016, "normal parries must not pause gameplay")
-assert(#feedback.impacts == 1)
-assert(#feedback.bursts == 2 and feedback.bursts[2].kind == "parry_success")
+assert(#feedback.impacts == 0, "normal parries must not create visible world feedback")
+assert(#feedback.bursts == 1, "normal parries must not create success bursts")
 assert(#feedback.floatingTexts == 0, "normal parries must not add damage text")
 assert(feedback.shake == nil and feedback.flash == nil, "normal parries must stay world-local")
 Feedback.Update(feedback, 1.0)
@@ -35,8 +35,9 @@ Feedback.ProcessEvents(peak, {
 })
 assert(Feedback.GetSimulationDelta(peak, 0.016) == 0, "perfect parries are a gameplay peak")
 assert(#peak.impacts == 1, "non-critical combat events must not stack visual impacts")
-assert(#peak.floatingTexts == 1)
-assert(peak.floatingTexts[1].text == "完美 0.8")
+assert(#peak.floatingTexts == 0, "perfect parry text must not compete with the lightning feedback")
+assert(peak.perfectStreakDisplay ~= nil and peak.perfectStreakDisplay.count == 1,
+    "perfect parries must create a top-screen lightning display")
 
 local hurt = Feedback.New()
 Feedback.ProcessEvents(hurt, {
@@ -76,9 +77,13 @@ assert(feedback.floatingTexts[1].text == "净化")
 
 local defense = Feedback.New()
 Feedback.ProcessEvents(defense, {
-    { name = "perfect_parry", data = { x = 0.5, y = 0.5, damage = 0, defenseOnly = true } },
+    { name = "perfect_parry", data = { x = 0.5, y = 0.5, damage = 0, defenseOnly = true, perfectStreak = 3 } },
 })
-assert(defense.floatingTexts[1].text == "完美", "defensive parries must not display zero damage")
+assert(#defense.floatingTexts == 0, "defensive parries must not display zero damage")
+assert(defense.perfectStreakDisplay.count == 3, "the renderer needs the exact perfect streak count")
+assert(defense.perfectStreakDisplay.focusIndex == 3, "the newest lightning must receive the entry animation")
+Feedback.Update(defense, 1.0)
+assert(defense.perfectStreakDisplay == nil, "lightning feedback must fade instead of becoming a permanent HUD")
 
 local combo = Feedback.New()
 Feedback.ProcessEvents(combo, {

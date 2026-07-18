@@ -83,7 +83,7 @@ end
 local function GetRecoveryAttackTimer(spec)
     local attack = spec.attack
     if attack.repeatInterval ~= nil then
-        return math.max(0, attack.repeatInterval - (attack.telegraph or 0) - (attack.recovery or 0))
+        return math.max(0, attack.repeatInterval - (attack.telegraph or 0) - (attack.active or 0) - (attack.recovery or 0))
     end
     return attack.interval * (0.8 + math.random() * 0.25)
 end
@@ -384,6 +384,21 @@ end
 local function EmitConfiguredProjectiles(enemy, spec, emitProjectile)
     local projectile = spec.projectile
     local count = projectile.count
+    if projectile.pattern == "radial_random" then
+        local minRadius = projectile.minRadius or projectile.radius
+        local maxRadius = projectile.maxRadius or projectile.radius
+        for _ = 1, count do
+            local angle = math.random() * math.pi * 2
+            local radius = minRadius + (maxRadius - minRadius) * math.random()
+            emitProjectile(Entities.NewProjectile(
+                enemy.x, enemy.y,
+                math.cos(angle) * projectile.speed, math.sin(angle) * projectile.speed,
+                "enemy", projectile.damage, enemy.kind, projectile.style, radius
+            ))
+        end
+        return
+    end
+
     for index = 1, count do
         local offset = 0
         if count > 1 then

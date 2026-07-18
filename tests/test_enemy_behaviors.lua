@@ -49,16 +49,44 @@ assert(#splitChildren == EnemyConfig.sap.split.count)
 sap.splitGeneration = 1
 assert(#Entities.GetSplitChildren(sap) == 0, "sap must split only once")
 
+math.randomseed(137)
 local dandelion = NewEnemy("dandelion", 0.3, 0.5, 4)
-dandelion.state, dandelion.stateTimer = "telegraph", 0
-dandelion.attackX, dandelion.attackY = 1, 0
-local emitted = {}
-Entities.UpdateEnemy(dandelion, player, 0.01, function(projectile)
-    table.insert(emitted, projectile)
-end)
-assert(#emitted == EnemyConfig.dandelion.projectile.count)
-for _, projectile in ipairs(emitted) do
-    assert(projectile.style == "seed")
+dandelion.stateTimer = 0
+local dandelionWaves = {}
+local elapsedDandelion = 0
+for _ = 1, 420 do
+    local wave = {}
+    Entities.UpdateEnemy(dandelion, player, 0.01, function(projectile)
+        table.insert(wave, projectile)
+    end)
+    if #wave > 0 then
+        table.insert(dandelionWaves, { time = elapsedDandelion, seeds = wave })
+    end
+    elapsedDandelion = elapsedDandelion + 0.01
+end
+assert(#dandelionWaves >= 3, "dark dandelion must repeatedly release seed waves")
+local smallestSeed = math.huge
+local largestSeed = 0
+local hasOffAxisSeed = false
+for _, wave in ipairs(dandelionWaves) do
+    assert(#wave.seeds == EnemyConfig.dandelion.projectile.count, "each wave must contain ten seeds")
+    for _, projectile in ipairs(wave.seeds) do
+        assert(projectile.style == "seed")
+        assert(projectile.damage == 1)
+        local speed = math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy)
+        assert(math.abs(speed - EnemyConfig.dandelion.projectile.speed) < 0.000001)
+        assert(projectile.radius >= EnemyConfig.dandelion.projectile.minRadius)
+        assert(projectile.radius <= EnemyConfig.dandelion.projectile.maxRadius)
+        smallestSeed = math.min(smallestSeed, projectile.radius)
+        largestSeed = math.max(largestSeed, projectile.radius)
+        hasOffAxisSeed = hasOffAxisSeed or math.abs(projectile.vy) > 0.001
+    end
+end
+assert(largestSeed > smallestSeed, "dark dandelion seeds must vary in size")
+assert(hasOffAxisSeed, "dark dandelion seeds must use 360 degree directions")
+for index = 2, #dandelionWaves do
+    local cadence = dandelionWaves[index].time - dandelionWaves[index - 1].time
+    assert(math.abs(cadence - 1.2) <= 0.011, "dark dandelion waves must repeat every 1.2 seconds")
 end
 
 player.x, player.y = 0.5, 0.5
@@ -94,6 +122,25 @@ assert(Entities.CollectEnemyHit(orb, player) ~= nil)
 assert(Entities.CollectEnemyHit(orb, player) == nil, "one AOE pulse may hit once")
 orb.attackSerial = 2
 assert(Entities.CollectEnemyHit(orb, player) ~= nil)
+
+local pulsingOrb = NewEnemy("purple_orb", 0.5, 0.5, 14)
+pulsingOrb.stateTimer = 0
+local orbPulseTimes = {}
+local elapsedOrb = 0
+local lastAttackSerial = pulsingOrb.attackSerial
+for _ = 1, 340 do
+    Entities.UpdateEnemy(pulsingOrb, player, 0.01, function() end)
+    if pulsingOrb.attackSerial ~= lastAttackSerial then
+        table.insert(orbPulseTimes, elapsedOrb)
+        lastAttackSerial = pulsingOrb.attackSerial
+    end
+    elapsedOrb = elapsedOrb + 0.01
+end
+assert(#orbPulseTimes >= 3, "purple orb must repeatedly emit AOE pulses")
+for index = 2, #orbPulseTimes do
+    local cadence = orbPulseTimes[index] - orbPulseTimes[index - 1]
+    assert(math.abs(cadence - 1) <= 0.011, "purple orb AOE cadence must be one second")
+end
 
 local tree = NewEnemy("tree", 0.5, 0.5, 7)
 tree.state, tree.attackSerial, tree.attackX, tree.attackY, tree.attackArc = "active", 1, 1, 0, 180

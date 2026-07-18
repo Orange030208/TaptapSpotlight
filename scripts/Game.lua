@@ -82,6 +82,13 @@ local function CreateCombo()
     }
 end
 
+local function CreatePerfectStreak()
+    return {
+        count = 0,
+        timer = 0,
+    }
+end
+
 local function GetComboTier(count)
     local tier = 0
     for index, definition in ipairs(ComboConfig.tiers) do
@@ -118,6 +125,37 @@ local function ResetCombo(game)
         EmitEvent(game, "overdrive_end", { x = game.player.x, y = game.player.y })
     end
     EmitComboChanged(game)
+end
+
+local function ResetPerfectStreak(game)
+    local streak = game.perfectStreak
+    if streak == nil then
+        return
+    end
+    streak.count = 0
+    streak.timer = 0
+end
+
+local function RegisterPerfectStreak(game)
+    local streak = game.perfectStreak
+    if streak == nil then
+        streak = CreatePerfectStreak()
+        game.perfectStreak = streak
+    end
+    streak.count = streak.count + 1
+    streak.timer = ComboConfig.perfectStreakWindow
+    return streak.count
+end
+
+local function UpdatePerfectStreak(game, dt)
+    local streak = game.perfectStreak
+    if streak == nil or streak.count <= 0 then
+        return
+    end
+    streak.timer = math.max(0, streak.timer - dt)
+    if streak.timer <= 0 then
+        ResetPerfectStreak(game)
+    end
 end
 
 local function UpdateCombo(game, dt)
@@ -319,6 +357,7 @@ local function EnterRoom(game, roomId, travelDirection)
     local room = RoomData.rooms[roomId]
     assert(room ~= nil, "Unknown room id: " .. tostring(roomId))
 
+    ResetPerfectStreak(game)
     game.currentRoomId = roomId
     game.room = room
     game.enemies = {}
@@ -397,6 +436,7 @@ local function StartRun(game)
     game.particles = {}
     game.gauge = CreateGauge()
     game.combo = CreateCombo()
+    game.perfectStreak = CreatePerfectStreak()
     game.crystalState = CrystalAbilities.NewState()
     game.activeBuffs = {}
     game.currentRoomId = nil
@@ -633,9 +673,14 @@ end
 
 local function TryDamagePlayer(game, amount, invulnerabilityDuration)
     if CrystalAbilities.TryPreventLethalDamage(game, amount) then
+        ResetPerfectStreak(game)
         return true, true
     end
-    return Entities.DamagePlayer(game.player, amount, invulnerabilityDuration), false
+    local damaged = Entities.DamagePlayer(game.player, amount, invulnerabilityDuration)
+    if damaged then
+        ResetPerfectStreak(game)
+    end
+    return damaged, false
 end
 
 local function ResolveProjectileContacts(game)
@@ -945,6 +990,7 @@ function Game.New()
         particles = {},
         gauge = CreateGauge(),
         combo = CreateCombo(),
+        perfectStreak = CreatePerfectStreak(),
         activeBuffs = {},
         crystalState = CrystalAbilities.NewState(),
         spawnGuideAlpha = 0,
@@ -980,6 +1026,7 @@ function Game.TryParry(game, targetX, targetY, allowBirthTutorial)
     if accepted and isBirthTutorial then
         game.birthTutorialParried = true
         game.spawnParryGuideDismissed = true
+        game.spawnParryGuideAlpha = 0
         CompleteBirthTutorial(game)
     end
     return accepted
@@ -1025,6 +1072,7 @@ function Game.Update(game, dt, moveX, moveY, realDt)
 
     if game.state == "battle" then
         UpdateCombo(game, dt)
+        UpdatePerfectStreak(game, dt)
     end
 
     if game.doorCooldown > 0 then
@@ -1089,8 +1137,6 @@ function Game.Update(game, dt, moveX, moveY, realDt)
 end
 
 function Game.GetHud(game)
-    local cooldown = game.player.parryCooldown
-    local cooldownText = cooldown <= 0 and "就绪" or "恢复中"
     local buffLines = {}
     for _, definition in ipairs(GaugeConfig.buffs) do
         local active = game.activeBuffs[definition.id]
@@ -1120,8 +1166,6 @@ function Game.GetHud(game)
         gaugeRatio = gaugeRatio,
         room = game.room ~= nil and game.room.name or "尚未开始",
         roomProgress = "探索 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount),
-        parry = "招架 " .. cooldownText,
-        parryReady = cooldown <= 0,
         message = game.messageTimer > 0 and game.message or "",
         crystals = game.player.crystalOrder,
         buffs = #buffLines > 0 and table.concat(buffLines, "\n") or "暂无临时增益",

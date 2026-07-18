@@ -107,6 +107,19 @@ AudioManager.ProcessEvents({
 })
 assert(#createdSources == before + 2, "combo stages must reuse their mapped sound cues")
 
+before = #createdSources
+AudioManager.ProcessEvents({
+    { name = "perfect_parry", data = { perfectStreak = 1 } },
+    { name = "perfect_parry", data = { perfectStreak = 2 } },
+    { name = "perfect_parry", data = { perfectStreak = 3 } },
+})
+assert(#createdSources == before + 3, "each perfect parry in a streak must receive its own rising cue")
+assert(createdSources[before + 1].frequency < createdSources[before + 2].frequency)
+assert(createdSources[before + 2].frequency < createdSources[before + 3].frequency)
+assert(createdSources[before + 3].frequency <= 44100 * 1.43, "perfect streak pitch must remain capped")
+assert(createdSources[before + 1].gain < createdSources[before + 3].gain,
+    "perfect streak feedback must become stronger as the chain grows")
+
 AudioManager.Shutdown()
 assert(disposed)
 

@@ -27,13 +27,16 @@ assert(imagePaths[2] == "image/soot_monster.png")
 assert(imagePaths[3] == "image/luminous_wraith_solid_alpha_20260718134330.png")
 assert(imagePaths[4] == "image/stone_monster_rolling_20260718145411.png")
 assert(imagePaths[5] == "image/dark_spore_mushroom_20260718151718.png")
-assert(imagePaths[6] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
-assert(imagePaths[7] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
+assert(imagePaths[6] == "image/dark_dandelion_turret_20260718153010.png")
+assert(imagePaths[7] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
+assert(imagePaths[8] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
+assert(imagePaths[9] == "image/ui/lightning.png", "perfect streak lightning must load once with the renderer assets")
 
 Renderer.UnloadAssets({})
 
 local scaleCalls = {}
 local rotationCalls = {}
+local radialGradients = {}
 local noop = function() end
 setmetatable(_G, {
     __index = function(_, name)
@@ -47,6 +50,13 @@ nvgScale = function(_, x, y)
 end
 nvgRotate = function(_, angle)
     table.insert(rotationCalls, angle)
+end
+nvgRGBA = function(r, g, b, a)
+    return { r, g, b, a }
+end
+nvgRadialGradient = function(_, _, _, _, _, innerColor, outerColor)
+    table.insert(radialGradients, { inner = innerColor, outer = outerColor })
+    return {}
 end
 
 assert(Renderer.LoadAssets({}))
@@ -83,8 +93,34 @@ local mushroom = {
 }
 local scaleCount = #scaleCalls
 game.enemies = { mushroom }
+game.projectiles = {
+    {
+        owner = "enemy", style = "spore", x = 0.5, y = 0.5,
+        vx = 0.48, vy = 0, radius = 0.016, reflected = false,
+    },
+}
 Renderer.Draw({}, game, 960, 540, nil)
 assert(#scaleCalls > scaleCount, "mushroom sprite must squash during its spore attack")
+local hasWhiteSporeHalo = false
+for _, gradient in ipairs(radialGradients) do
+    if gradient.inner[1] == 255 and gradient.inner[2] == 255 and gradient.inner[3] == 255 and gradient.inner[4] == 170
+        and gradient.outer[1] == 255 and gradient.outer[2] == 255 and gradient.outer[3] == 255 and gradient.outer[4] == 0 then
+        hasWhiteSporeHalo = true
+        break
+    end
+end
+assert(hasWhiteSporeHalo, "mushroom spores must use a white halo")
+
+local dandelion = {
+    kind = "dandelion", id = 4, x = 0.5, y = 0.5,
+    vx = 0, vy = 0, facing = "right", state = "telegraph", stateTimer = 0.15,
+    hp = 2, maxHp = 2, radius = 0.047,
+}
+local rotationCount = #rotationCalls
+game.enemies = { dandelion }
+game.projectiles = {}
+Renderer.Draw({}, game, 960, 540, nil)
+assert(#rotationCalls > rotationCount, "dark dandelion must shake during its seed release")
 
 local birthRoomGame = {
     time = 0, state = "clear", transition = nil, room = { isBirthRoom = true, connections = {} }, map = nil,
