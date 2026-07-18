@@ -88,8 +88,8 @@ local function GetSpriteKey(boss)
     if boss.state == "purifying" then return "purifying" end
     if boss.state == "defeat" then return "defeat" end
     if boss.dead then return "defeat" end
-    if boss.state == "phase_transition" then return "phase_transition" end
-    if boss.state == "airborne" then return "phase_transition" end
+    if boss.entrance then return "phase_transition" end
+    if boss.state == "airborne" then return "feathers" end
     if boss.state == "recovery" then return "recovery" end
     if boss.state == "telegraph" or boss.state == "active" then
         return boss.attack or (boss.isMoving and "move" or "idle")
@@ -165,13 +165,14 @@ local function GetSpriteMotion(boss, time)
         scaleY = 1 - recovery * 0.12
         offsetY = recovery * 5
         alpha = 0.72 + (1 - recovery) * 0.28
-    elseif boss.state == "phase_transition" then
-        local progress = Clamp(1 - boss.stateTimer / BossConfig.phaseTransitionDuration, 0, 1)
-        scaleX = 1 + progress * 0.25
-        scaleY = 1 + progress * 0.25
-        offsetY = -progress * 8
-        glow = progress
-        alpha = 0.85 + progress * 0.15
+    elseif boss.entrance or boss.state == "phase_transition" then
+        local duration = boss.entrance and 0.7 or BossConfig.phaseTransitionDuration
+        local progress = Clamp(1 - boss.stateTimer / duration, 0, 1)
+        scaleX = 0.72 + progress * 0.28
+        scaleY = 0.72 + progress * 0.28
+        offsetY = 20 - progress * 20
+        glow = 0.35 + progress * 0.65
+        alpha = 0.35 + progress * 0.65
     elseif boss.state == "airborne" then
         return 1.0, 1.0, 0, -80, 0, 0, 0
     elseif boss.state == "purifying" then

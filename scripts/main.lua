@@ -18,6 +18,7 @@ local logicalWidth = 0
 local logicalHeight = 0
 local hudTimer = 0
 local chestPanelWasVisible = false
+local chestPanelIsFadingOut = false
 local feedback = nil
 
 ---@type Widget|nil
@@ -1047,7 +1048,68 @@ local function RefreshChestPanel()
     if chestPanel == nil or game == nil then
         return
     end
-    chestPanel:SetVisible(false)
+
+    local shouldShow = game.state == "chest_select" and game.chestOptions ~= nil
+    if shouldShow then
+        if not chestPanelWasVisible then
+            for index, definition in ipairs(game.chestOptions) do
+                local color = definition.color
+                chestTitleLabels[index]:SetText(definition.name)
+                chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                chestDescriptionLabels[index]:SetText(definition.shortDescription)
+                chestIconLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
+                chestCards[index]:SetState({
+                    accentColor = color,
+                    borderColor = { color[1], color[2], color[3], 210 },
+                    iconBorderColor = { color[1], color[2], color[3], 190 },
+                })
+                SetChestCardRest(chestCards[index])
+            end
+
+            chestPanelWasVisible = true
+            chestPanelIsFadingOut = false
+            chestPanel:SetVisible(true)
+            chestPanel:Animate({
+                keyframes = {
+                    [0] = { opacity = 0 },
+                    [1] = { opacity = 1 },
+                },
+                duration = 0.28,
+                easing = "easeOutCubic",
+                fillMode = "both",
+            })
+            for index, card in ipairs(chestCards) do
+                StartChestCardEntrance(card, index)
+                StartChestCardIdle(card)
+            end
+            print("[UI] Enhancement cards fading in")
+        end
+        return
+    end
+
+    if chestPanelWasVisible and not chestPanelIsFadingOut then
+        chestPanelWasVisible = false
+        chestPanelIsFadingOut = true
+        chestPanel:Animate({
+            keyframes = {
+                [0] = { opacity = 1 },
+                [1] = { opacity = 0 },
+            },
+            duration = 0.24,
+            easing = "easeOutCubic",
+            fillMode = "both",
+            onComplete = function()
+                chestPanelIsFadingOut = false
+                if game == nil or game.state ~= "chest_select" then
+                    chestPanel:SetVisible(false)
+                end
+            end,
+        })
+        print("[UI] Enhancement cards fading out")
+    elseif not chestPanelIsFadingOut then
+        chestPanel:SetVisible(false)
+    end
 end
 
 local function RefreshStateOverlay()
@@ -1267,10 +1329,6 @@ function HandleMouseButtonDown(eventType, eventData)
     local screenX = eventData:GetInt("X") / devicePixelRatio
     local screenY = eventData:GetInt("Y") / devicePixelRatio
     if game.state == "chest_select" then
-        local choice = CrystalRenderer.GetChoiceAt(game, logicalWidth, logicalHeight, screenX, screenY)
-        if choice ~= nil then
-            ChooseChestOption(choice)
-        end
         return
     end
     if CrystalRenderer.IsPointerOverStatusIcon(game, logicalWidth, logicalHeight, screenX, screenY) then

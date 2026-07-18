@@ -141,6 +141,7 @@ end
 function Boss.Initialize(enemy)
     enemy.bossName = BossConfig.name
     enemy.phase = 1
+    enemy.entrance = true
     enemy.attack = nil
     enemy.lastAttack = nil
     enemy.attackTimer = 0
@@ -295,6 +296,7 @@ function Boss.Update(boss, player, dt)
 
     boss.stateTimer = boss.stateTimer - dt
     if boss.state == "phase_transition" then
+        boss.entrance = false
         if boss.stateTimer <= 0 then
             boss.state = "idle"
             boss.stateTimer = BossConfig.attackIntervalMax
