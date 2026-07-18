@@ -1,6 +1,5 @@
 local ChestConfig = require "Data.ChestConfig"
 local EnemyConfig = require "Data.EnemyConfig"
-local GameConfig = require "Data.GameConfig"
 local GaugeConfig = require "Data.GaugeConfig"
 local PlayerConfig = require "Data.PlayerConfig"
 local ProjectileConfig = require "Data.ProjectileConfig"
@@ -236,7 +235,6 @@ local function EnterRoom(game, roomId, travelDirection)
         game.state = arrivalState
     end
 
-    print("加载房间 " .. roomId .. ": " .. room.name)
 end
 
 local function FinishRoom(game)
@@ -668,7 +666,6 @@ function Game.New()
         nextEntityId = 1,
         perfectRepairConsumed = false,
         events = {},
-        debug = GameConfig.Debug,
     }
 end
 
@@ -714,11 +711,6 @@ function Game.ConsumeEvents(game)
     local events = game.events
     game.events = {}
     return events
-end
-
-function Game.ToggleDebug(game)
-    game.debug = not game.debug
-    SetMessage(game, game.debug and "调试开启" or "调试关闭", 0.8)
 end
 
 function Game.Update(game, dt, moveX, moveY, realDt)
@@ -793,13 +785,8 @@ function Game.Update(game, dt, moveX, moveY, realDt)
 end
 
 function Game.GetHud(game)
-    local hearts = ""
-    for index = 1, PlayerConfig.maxHp do
-        hearts = hearts .. (index <= game.player.hp and "●" or "○")
-    end
-
     local cooldown = game.player.parryCooldown
-    local cooldownText = cooldown <= 0 and "就绪" or string.format("%.2f 秒", cooldown)
+    local cooldownText = cooldown <= 0 and "就绪" or "恢复中"
     local upgradeLines = {}
     for _, definition in ipairs(UpgradeConfig.definitions) do
         local stacks = game.player.abilities[definition.id]
@@ -812,7 +799,7 @@ function Game.GetHud(game)
     for _, definition in ipairs(GaugeConfig.buffs) do
         local active = game.activeBuffs[definition.id]
         if active ~= nil and active.remaining > 0 then
-            table.insert(buffLines, definition.name .. " " .. string.format("%.1f 秒", active.remaining))
+            table.insert(buffLines, definition.name .. " · " .. tostring(math.ceil(active.remaining)) .. "秒")
         end
     end
 
@@ -824,10 +811,18 @@ function Game.GetHud(game)
         end
     end
 
+    local healthRatio = math.max(0, math.min(1, game.player.hp / PlayerConfig.maxHp))
+    local gaugeRatio = math.max(0, math.min(1, game.gauge.value / game.gauge.threshold))
+    local hudVisible = game.state ~= "menu" and game.state ~= "dead" and game.state ~= "victory"
+
     return {
-        health = "生命 " .. hearts .. "  " .. string.format("%.2f/%d", game.player.hp, PlayerConfig.maxHp),
-        room = game.room ~= nil and (game.room.name .. "  已清理 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount)) or "尚未开始",
+        hudVisible = hudVisible,
+        healthRatio = healthRatio,
+        gaugeRatio = gaugeRatio,
+        room = game.room ~= nil and game.room.name or "尚未开始",
+        roomProgress = "探索 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount),
         parry = "招架 " .. cooldownText,
+        parryReady = cooldown <= 0,
         message = game.messageTimer > 0 and game.message or "",
         upgrades = #upgradeLines > 0 and table.concat(upgradeLines, "\n") or "暂无强化",
         buffs = #buffLines > 0 and table.concat(buffLines, "\n") or "暂无临时增益",
