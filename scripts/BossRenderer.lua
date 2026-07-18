@@ -4,6 +4,12 @@ local Boss = require "Boss"
 
 local BossRenderer = {}
 
+local BOSS_SPRITE_PATH = "image/boss_hui_an.png"
+local bossImageHandle = 0
+local bossImageWidth = 1
+local bossImageHeight = 1
+local bossSpriteLoaded = false
+
 local function Clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
 end
@@ -18,6 +24,146 @@ end
 
 local function WorldPoint(worldToScreen, width, height, x, y)
     return worldToScreen(width, height, x, y)
+end
+
+function BossRenderer.LoadAssets(ctx)
+    BossRenderer.UnloadAssets(ctx)
+    bossImageHandle = nvgCreateImage(ctx, BOSS_SPRITE_PATH, 0)
+    if bossImageHandle == nil or bossImageHandle <= 0 then
+        bossImageHandle = 0
+        bossSpriteLoaded = false
+        print("WARNING: Failed to load Boss sprite: " .. BOSS_SPRITE_PATH .. "; using vector fallback")
+        return false
+    end
+
+    bossImageWidth, bossImageHeight = nvgImageSize(ctx, bossImageHandle)
+    if bossImageWidth <= 0 or bossImageHeight <= 0 then
+        nvgDeleteImage(ctx, bossImageHandle)
+        bossImageHandle = 0
+        bossImageWidth, bossImageHeight = 1, 1
+        bossSpriteLoaded = false
+        print("WARNING: Boss sprite has invalid dimensions; using vector fallback")
+        return false
+    end
+
+    bossSpriteLoaded = true
+    print("Loaded Boss sprite: " .. BOSS_SPRITE_PATH .. " ("
+        .. tostring(bossImageWidth) .. "x" .. tostring(bossImageHeight) .. ")")
+    return true
+end
+
+function BossRenderer.UnloadAssets(ctx)
+    if bossImageHandle ~= nil and bossImageHandle > 0 then
+        nvgDeleteImage(ctx, bossImageHandle)
+    end
+    bossImageHandle = 0
+    bossImageWidth, bossImageHeight = 1, 1
+    bossSpriteLoaded = false
+end
+
+local function GetSpriteMotion(boss, time)
+    local scaleX, scaleY = 1, 1
+    local offsetX, offsetY = 0, 0
+    local rotation = 0
+    local alpha = 1
+    local glow = 0
+    local phase = boss.phase == 2 and 1 or 0
+
+    if boss.state == "telegraph" then
+        local spec = BossConfig.attacks[boss.attack]
+        local progress = Clamp(1 - boss.stateTimer / math.max(0.001, spec.telegraph), 0, 1)
+        if boss.attack == "sweep" then
+            scaleX = 1 + progress * 0.16
+            scaleY = 1 - progress * 0.08
+            rotation = -progress * (boss.facing == "left" and -0.10 or 0.10)
+        elseif boss.attack == "skewer" then
+            scaleX = 1 + progress * 0.22
+            scaleY = 1 - progress * 0.10
+            rotation = progress * (boss.facing == "left" and -0.06 or 0.06)
+        elseif boss.attack == "charge" then
+            scaleX = 1 - progress * 0.13
+            scaleY = 1 + progress * 0.17
+            offsetX = (boss.facing == "left" and 1 or -1) * progress * 5
+        elseif boss.attack == "quake" then
+            scaleX = 1 + progress * 0.11
+            scaleY = 1 - progress * 0.13
+            offsetY = progress * 4
+        elseif boss.attack == "feathers" then
+            scaleX = 1 + progress * 0.08
+            scaleY = 1 + progress * 0.08
+            offsetY = -progress * 4
+            glow = progress
+        end
+    elseif boss.state == "active" then
+        if boss.attack == "charge" then
+            scaleX = 1.17
+            scaleY = 0.88
+            offsetX = boss.vx < 0 and -4 or 4
+        elseif boss.attack == "quake" then
+            scaleX = 1.08
+            scaleY = 0.92
+            offsetY = 3
+        elseif boss.attack == "feathers" then
+            local pulse = boss.featherPulse or 1
+            glow = 0.55 + 0.45 * math.sin(time * 30 + pulse)
+            scaleX = 1 + glow * 0.05
+            scaleY = 1 + glow * 0.05
+        end
+    elseif boss.state == "recovery" then
+        local recovery = Clamp(boss.stateTimer / math.max(0.001, BossConfig.recoveryDuration), 0, 1)
+        scaleX = 1 - recovery * 0.06
+        scaleY = 1 - recovery * 0.12
+        offsetY = recovery * 5
+        alpha = 0.72 + (1 - recovery) * 0.28
+    elseif boss.state == "phase_transition" then
+        local progress = Clamp(1 - boss.stateTimer / BossConfig.phaseTransitionDuration, 0, 1)
+        scaleX = 1 + progress * 0.25
+        scaleY = 1 + progress * 0.25
+        offsetY = -progress * 8
+        glow = progress
+        alpha = 0.85 + progress * 0.15
+    elseif boss.state == "purifying" then
+        local progress = Clamp(boss.purificationProgress or 0, 0, 1)
+        scaleX = 1 - progress * 0.45
+        scaleY = 1 - progress * 0.45
+        offsetY = -progress * 12
+        glow = progress
+        alpha = 1 - progress * 0.35
+    end
+
+    local bob = math.sin(time * (boss.state == "active" and 7 or 4) + (boss.id or 0))
+    offsetY = offsetY + bob * (boss.state == "idle" and 2.5 or 1.2)
+    if phase == 1 then glow = math.max(glow, 0.35 + 0.2 * math.sin(time * 5)) end
+    return scaleX, scaleY, offsetX, offsetY, rotation, alpha, glow
+end
+
+local function DrawBossSprite(ctx, x, y, boss, time, scale)
+    local scaleX, scaleY, offsetX, offsetY, rotation, alpha, glow = GetSpriteMotion(boss, time)
+    local displayHeight = 92 * scale
+    local displayWidth = displayHeight * bossImageWidth / bossImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight
+    local flip = boss.facing == "left" and -1 or 1
+
+    if glow > 0.01 then
+        local radius = math.max(displayWidth, displayHeight) * (0.62 + glow * 0.18)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x + offsetX, y - displayHeight * 0.52 + offsetY, radius)
+        nvgFillPaint(ctx, nvgRadialGradient(ctx, x + offsetX, y - displayHeight * 0.52 + offsetY,
+            radius * 0.16, radius, nvgRGBA(132, 214, 255, math.floor(70 + glow * 100)), nvgRGBA(38, 20, 70, 0)))
+        nvgFill(ctx)
+    end
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x + offsetX, y + offsetY)
+    nvgRotate(ctx, rotation)
+    nvgScale(ctx, flip * scaleX, scaleY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePatternTinted(ctx, drawX, drawY, displayWidth, displayHeight, 0,
+        bossImageHandle, nvgRGBA(255, 255, 255, math.floor(alpha * 255))))
+    nvgFill(ctx)
+    nvgRestore(ctx)
 end
 
 local function BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
@@ -172,6 +318,11 @@ end
 
 function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    if bossSpriteLoaded then
+        DrawBossSprite(ctx, x, y, boss, time, scale)
+        return
+    end
+
     local purifiedScale = boss.state == "purifying" and (1 - 0.45 * boss.purificationProgress) or 1
     local size = 48 * scale * EnemyConfig.sizeMultiplier * purifiedScale
     local phaseTwo = boss.phase == 2
