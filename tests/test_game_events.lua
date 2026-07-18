@@ -31,11 +31,17 @@ local function FindEvent(events, name)
 end
 
 local game = Game.New()
+local menuHud = Game.GetHud(game)
+assert(menuHud.hudVisible == false, "the combat HUD must stay hidden on the main menu")
 assert(#Game.ConsumeEvents(game) == 0)
 
 game.stateBeforeChest = "stale"
 Game.StartOrRestart(game)
 assert(game.stateBeforeChest == nil, "starting a run must clear transient chest state")
+local runHud = Game.GetHud(game)
+assert(runHud.hudVisible == true, "the combat HUD must be visible during a run")
+assert(runHud.healthRatio == 1, "a fresh run must expose a full health ratio")
+assert(runHud.gaugeRatio == 0, "a fresh run must expose an empty gauge ratio")
 local events = Game.ConsumeEvents(game)
 assert(HasEvent(events, "run_start"))
 assert(#Game.ConsumeEvents(game) == 0, "consuming events must clear the queue")
@@ -46,6 +52,67 @@ events = Game.ConsumeEvents(game)
 assert(HasEvent(events, "parry_start"))
 local parryStart = FindEvent(events, "parry_start")
 assert(type(parryStart.data) == "table" and type(parryStart.data.x) == "number")
+
+local directional = Game.New()
+Game.StartOrRestart(directional)
+Game.ConsumeEvents(directional)
+directional.state = "battle"
+local upperEnemy = Entities.NewEnemy("melee", {
+    x = directional.player.x,
+    y = directional.player.y - 0.12,
+}, 101)
+local lowerEnemy = Entities.NewEnemy("melee", {
+    x = directional.player.x,
+    y = directional.player.y + 0.12,
+}, 102)
+upperEnemy.state, upperEnemy.stateTimer = "dash", 0.5
+lowerEnemy.state, lowerEnemy.stateTimer = "dash", 0.5
+directional.enemies = { upperEnemy, lowerEnemy }
+assert(Game.TryParry(directional, directional.player.x, directional.player.y - 1))
+Game.ConsumeEvents(directional)
+Game.Update(directional, 0, 0, 0)
+assert(upperEnemy.state == "recovery", "an upward guard must parry the upper threat")
+assert(lowerEnemy.state == "dash", "an upward guard must not parry the lower threat")
+assert(directional.player.parryCooldown <= PlayerConfig.successfulParryCooldown,
+    "a successful parry must compress its remaining cooldown")
+
+local movementLock = Game.New()
+Game.StartOrRestart(movementLock)
+Game.ConsumeEvents(movementLock)
+movementLock.state = "battle"
+movementLock.enemies = { Entities.NewEnemy("melee", { x = 0.1, y = 0.1 }, 103) }
+movementLock.enemies[1].stateTimer = 99
+local lockedX, lockedY = movementLock.player.x, movementLock.player.y
+assert(Game.TryParry(movementLock, movementLock.player.x + 1, movementLock.player.y))
+Game.Update(movementLock, 0.05, 1, -1)
+assert(movementLock.player.x == lockedX and movementLock.player.y == lockedY,
+    "the player must not move while the parry window is active")
+
+local buffered = Game.New()
+Game.StartOrRestart(buffered)
+Game.ConsumeEvents(buffered)
+buffered.state = "battle"
+buffered.enemies = { Entities.NewEnemy("melee", { x = 0.1, y = 0.1 }, 104) }
+buffered.enemies[1].stateTimer = 99
+buffered.player.parryCooldown = PlayerConfig.parryInputBuffer - 0.01
+assert(Game.TryParry(buffered, buffered.player.x, buffered.player.y - 1),
+    "an input inside the cooldown-end buffer must be accepted")
+assert(not Entities.IsParrying(buffered.player), "buffered input must wait for cooldown completion")
+assert(not HasEvent(Game.ConsumeEvents(buffered), "parry_start"),
+    "buffered input must not announce a parry before it starts")
+Game.Update(buffered, PlayerConfig.parryInputBuffer, 0, 0)
+assert(Entities.IsParrying(buffered.player), "buffered parry must start when cooldown reaches zero")
+assert(buffered.player.parryDirectionY < -0.99, "buffered parry must preserve the clicked direction")
+assert(HasEvent(Game.ConsumeEvents(buffered), "parry_start"),
+    "starting a buffered parry must emit its start event")
+
+local tooEarly = Game.New()
+Game.StartOrRestart(tooEarly)
+Game.ConsumeEvents(tooEarly)
+tooEarly.state = "battle"
+tooEarly.player.parryCooldown = PlayerConfig.parryInputBuffer + 0.01
+assert(not Game.TryParry(tooEarly, tooEarly.player.x, tooEarly.player.y - 1),
+    "inputs before the cooldown-end buffer must still be rejected")
 
 game.state = "chest_select"
 game.stateBeforeChest = "battle"
@@ -109,7 +176,7 @@ reflect.enemies = { Entities.NewEnemy("melee", { x = 0.2, y = 0.2 }, 3001) }
 reflect.enemies[1].stateTimer = 99
 reflect.player.facing = "right"
 reflect.projectiles = { Entities.NewProjectile(reflect.player.x + 0.04, reflect.player.y, -0.1, 0, "enemy", 1, "ranged") }
-assert(Game.TryParry(reflect))
+assert(Game.TryParry(reflect, reflect.player.x + 1, reflect.player.y))
 reflect.player.parryElapsed = PlayerConfig.perfectParryWindow + 0.01
 Game.ConsumeEvents(reflect)
 Game.Update(reflect, 0, 0, 0)
@@ -117,6 +184,8 @@ events = Game.ConsumeEvents(reflect)
 assert(HasEvent(events, "parry_success"))
 assert(HasEvent(events, "projectile_reflect"))
 assert(FindEvent(events, "projectile_reflect").data.sourceKind == "ranged")
+assert(reflect.projectiles[1].vx > 0 and math.abs(reflect.projectiles[1].vy) < 0.0001,
+    "a reflected projectile must travel along the clicked guard direction")
 
 local hit = Game.New()
 Game.StartOrRestart(hit)

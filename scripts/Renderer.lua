@@ -1,4 +1,3 @@
-local GaugeConfig = require "Data.GaugeConfig"
 local PlayerConfig = require "Data.PlayerConfig"
 local Feedback = require "Feedback"
 local BossRenderer = require "BossRenderer"
@@ -25,7 +24,6 @@ function Renderer.LoadAssets(ctx)
         return false
     end
 
-    print("Loaded player sprite: " .. tostring(playerImageWidth) .. "x" .. tostring(playerImageHeight))
     return true
 end
 
@@ -482,50 +480,6 @@ local function DrawParryCone(ctx, width, height, player)
     nvgStroke(ctx)
 end
 
-local function DrawGauge(ctx, x, y, width, height, gauge, definition)
-    local ratio = Clamp(gauge.value / gauge.threshold, 0, 1)
-    local pulse = gauge.pulse
-    local fillWidth = math.max(0, (width - 4) * ratio)
-    local label = definition.label .. "  " .. string.format("%d/%d", math.floor(gauge.value + 0.001), gauge.threshold)
-
-    nvgFontFace(ctx, "sans")
-    nvgFontSize(ctx, 10)
-    nvgTextAlign(ctx, NVG_ALIGN_LEFT + NVG_ALIGN_BOTTOM)
-    nvgFillColor(ctx, nvgRGBA(235, 240, 255, 230))
-    nvgText(ctx, x, y - 4, label, nil)
-
-    nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x, y, width, height, height * 0.5)
-    Color(ctx, { 18, 16, 31 }, 225)
-    nvgFill(ctx)
-    nvgStrokeWidth(ctx, pulse > 0 and 2.4 or 1.2)
-    StrokeColor(ctx, definition.color, pulse > 0 and 255 or 155)
-    nvgStroke(ctx)
-
-    if fillWidth > 0 then
-        local fill = nvgLinearGradient(ctx, x, y, x + width, y,
-            nvgRGBA(definition.color[1], definition.color[2], definition.color[3], 245),
-            nvgRGBA(255, 247, 220, pulse > 0 and 255 or 190))
-        nvgBeginPath(ctx)
-        nvgRoundedRect(ctx, x + 2, y + 2, fillWidth, math.max(1, height - 4), math.max(1, (height - 4) * 0.5))
-        nvgFillPaint(ctx, fill)
-        nvgFill(ctx)
-    end
-end
-
-local function DrawGaugeBar(ctx, width, height, game)
-    if game.state == "menu" or game.state == "dead" or game.state == "victory" then
-        return
-    end
-
-    local gauge = game.gauge
-    local barHeight = Clamp(height * 0.017, 8, 12)
-    local barWidth = math.min(520, width * 0.78)
-    local x = (width - barWidth) * 0.5
-    local y = height * 0.895
-    DrawGauge(ctx, x, y, barWidth, barHeight, gauge, GaugeConfig)
-end
-
 local function DrawParticles(ctx, width, height, particles)
     for _, particle in ipairs(particles) do
         local x, y, scale = Renderer.WorldToScreen(width, height, particle.x, particle.y)
@@ -581,42 +535,6 @@ local function DrawFeedbackFlash(ctx, width, height, feedback)
     nvgFill(ctx)
 end
 
-local function DrawDebug(ctx, width, height, game)
-    if not game.debug or game.room == nil then
-        return
-    end
-
-    DrawSpawnMarkers(ctx, width, height, game)
-    nvgFontFace(ctx, "sans")
-    nvgFontSize(ctx, 13)
-    nvgTextAlign(ctx, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
-    nvgFillColor(ctx, nvgRGBA(225, 235, 255, 230))
-    nvgText(ctx, 14, 14, string.format("状态=%s 敌人=%d 投射物=%d 宝箱=%d", game.state, #game.enemies, #game.projectiles, #game.chests), nil)
-end
-
-local function DrawOverlay(ctx, width, height, game)
-    if game.state ~= "menu" and game.state ~= "dead" and game.state ~= "victory" then
-        return
-    end
-
-    nvgBeginPath(ctx)
-    nvgRect(ctx, 0, 0, width, height)
-    nvgFillColor(ctx, nvgRGBA(8, 8, 20, 155))
-    nvgFill(ctx)
-
-    local title = game.state == "menu" and "弹反之室" or (game.state == "victory" and "诅咒消散" or "本局失败")
-    local subtitle = game.state == "menu" and "WASD 移动  •  空格招架  •  回车开始"
-        or (game.state == "victory" and "晦暗低鸣已获净化 · 按 R 重新开始" or "按 R 回到第一间房")
-    nvgFontFace(ctx, "sans")
-    nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-    nvgFontSize(ctx, math.min(52, width * 0.065))
-    nvgFillColor(ctx, nvgRGBA(240, 246, 255, 255))
-    nvgText(ctx, width * 0.5, height * 0.44, title, nil)
-    nvgFontSize(ctx, math.min(20, width * 0.027))
-    nvgFillColor(ctx, nvgRGBA(165, 220, 255, 245))
-    nvgText(ctx, width * 0.5, height * 0.53, subtitle, nil)
-end
-
 local function DrawChestPauseDim(ctx, width, height, game)
     if game.state ~= "chest_select" then
         return
@@ -625,22 +543,6 @@ local function DrawChestPauseDim(ctx, width, height, game)
     nvgRect(ctx, 0, 0, width, height)
     nvgFillColor(ctx, nvgRGBA(6, 6, 16, 100))
     nvgFill(ctx)
-end
-
-local function DrawMessage(ctx, width, height, game)
-    if game.message == nil or game.message == "" or game.state == "menu" or game.state == "dead" or game.state == "victory" or game.state == "chest_select" then
-        return
-    end
-
-    nvgFontFace(ctx, "sans")
-    nvgFontSize(ctx, math.min(24, width * 0.032))
-    nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-    nvgFillColor(ctx, nvgRGBA(244, 241, 255, 245))
-    local hasBoss = false
-    for _, enemy in ipairs(game.enemies) do
-        if enemy.kind == "boss" then hasBoss = true; break end
-    end
-    nvgText(ctx, width * 0.5, height * (hasBoss and 0.17 or 0.11), game.message, nil)
 end
 
 local function IsRoomMapped(game, roomId)
@@ -766,7 +668,7 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     for _, enemy in ipairs(game.enemies) do
         if enemy.kind == "boss" then boss = enemy; break end
     end
-    BossRenderer.DrawGround(ctx, width, height, boss, game.player, game.time, Renderer.WorldToScreen, game.debug)
+    BossRenderer.DrawGround(ctx, width, height, boss, game.player, game.time, Renderer.WorldToScreen, false)
 
     local drawables = {}
     for _, chest in ipairs(game.chests) do table.insert(drawables, { kind = "chest", value = chest, y = chest.y }) end
@@ -797,17 +699,13 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     DrawParticles(ctx, width, height, game.particles)
     BossRenderer.DrawMechanismTarget(ctx, width, height, boss, game.player, game.time, Renderer.WorldToScreen)
     DrawFeedbackWorld(ctx, width, height, feedback)
-    DrawDebug(ctx, width, height, game)
     nvgRestore(ctx)
 
     BossRenderer.DrawFog(ctx, width, height, boss, game.player, Renderer.WorldToScreen)
 
     DrawFeedbackFlash(ctx, width, height, feedback)
     DrawChestPauseDim(ctx, width, height, game)
-    DrawGaugeBar(ctx, width, height, game)
     DrawMinimap(ctx, width, height, game)
-    DrawMessage(ctx, width, height, game)
-    DrawOverlay(ctx, width, height, game)
 end
 
 return Renderer

@@ -77,9 +77,7 @@ function AudioManager.Initialize()
     elapsed = 0
 
     local loadedCount = 0
-    local cueCount = 0
     for name, definition in pairs(CUES) do
-        cueCount = cueCount + 1
         local path = RESOURCE_ROOT .. definition.file
         local sound = cache:GetResource("Sound", path)
         if sound ~= nil then
@@ -90,7 +88,6 @@ function AudioManager.Initialize()
         end
     end
 
-    print("AudioManager ready: " .. tostring(loadedCount) .. "/" .. tostring(cueCount) .. " cues loaded")
     return loadedCount > 0
 end
 

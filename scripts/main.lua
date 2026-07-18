@@ -20,15 +20,31 @@ local chestPanelWasVisible = false
 local feedback = nil
 
 ---@type Widget|nil
-local healthLabel = nil
+local combatHud = nil
+---@type Widget|nil
+local healthPanel = nil
+---@type ProgressBar|nil
+local healthProgressBar = nil
 ---@type Widget|nil
 local roomLabel = nil
+---@type Widget|nil
+local roomProgressLabel = nil
+---@type Widget|nil
+local parryPanel = nil
 ---@type Widget|nil
 local parryLabel = nil
 ---@type Widget|nil
 local buffLabel = nil
 ---@type Widget|nil
 local abilityLabel = nil
+---@type ProgressBar|nil
+local gaugeProgressBar = nil
+---@type Widget|nil
+local gaugeStatusLabel = nil
+---@type Widget|nil
+local messagePanel = nil
+---@type Widget|nil
+local messageLabel = nil
 ---@type Widget|nil
 local bossPanel = nil
 ---@type Widget|nil
@@ -39,16 +55,40 @@ local bossObjectiveLabel = nil
 local bossProgressBar = nil
 ---@type Widget|nil
 local chestPanel = nil
+---@type Widget|nil
+local stateOverlay = nil
+---@type Widget|nil
+local stateKickerLabel = nil
+---@type Widget|nil
+local stateTitleLabel = nil
+---@type Widget|nil
+local stateSubtitleLabel = nil
+---@type Widget|nil
+local stateActionButton = nil
 local chestTitleLabels = {}
 local chestDescriptionLabels = {}
 local chestIconLabels = {}
 local chestCards = {}
 local chestAccentPanels = {}
 local chestIconPanels = {}
+local chestLiftPanels = {}
+local chestFloatPanels = {}
+local chestFacePanels = {}
 
 local CHEST_CARD_IDLE_ROTATIONS = { 0, 0, 0 }
 local CHEST_CARD_IDLE_DURATIONS = { 3.4, 3.8, 3.6 }
-local CHEST_CARD_MAX_POINTER_TILT = 2.2
+local CHEST_CARD_MAX_POINTER_TILT = 3.2
+
+local COLORS = {
+    panelTop = { 28, 31, 50, 238 },
+    panelBottom = { 13, 16, 31, 246 },
+    cream = { 255, 244, 218, 255 },
+    muted = { 190, 196, 218, 235 },
+    gold = { 239, 190, 105, 255 },
+    coral = { 244, 112, 112, 255 },
+    cyan = { 105, 225, 221, 255 },
+    violet = { 170, 142, 238, 255 },
+}
 
 local function RefreshCanvasMetrics()
     physicalWidth = graphics:GetWidth()
@@ -64,152 +104,216 @@ local function ChooseChestOption(index)
     end
 end
 
-local function StartChestCardIdle(card)
-    local idleRotation = card.state.idleRotation or 0
-    local idleDuration = card.state.idleDuration or 3.0
-    local iconPanel = card.state.iconPanel
+local function StartOrRestartRun()
+    if game == nil then
+        return
+    end
+    Game.StartOrRestart(game)
+    hudTimer = 1.0
+end
 
-    card:Animate({
+local function StartChestCardIdle(card)
+    local idleDuration = card.state.idleDuration or 3.0
+    local floatPanel = card.state.floatPanel
+
+    if floatPanel == nil then
+        return
+    end
+
+    floatPanel:Animate({
         keyframes = {
-            [0] = { scale = 1.0, translateY = 0, rotate = idleRotation },
-            [0.5] = { scale = 1.006, translateY = -2, rotate = idleRotation },
-            [1] = { scale = 1.0, translateY = 0, rotate = idleRotation },
+            [0] = { translateY = 0 },
+            [0.46] = { translateY = -2.4 },
+            [1] = { translateY = 0 },
         },
         duration = idleDuration,
         easing = "easeInOut",
         loop = true,
         fillMode = "both",
     })
+end
 
-    if iconPanel ~= nil then
-        iconPanel:Animate({
-            keyframes = {
-                [0] = { scale = 1.0, translateY = 0, rotate = 0 },
-                [0.5] = { scale = 1.012, translateY = -1, rotate = 0 },
-                [1] = { scale = 1.0, translateY = 0, rotate = 0 },
-            },
-            duration = idleDuration * 0.9,
-            easing = "easeInOut",
-            loop = true,
-            fillMode = "both",
+local function StartChestCardEntrance(card, index)
+    local delayRatio = (index - 1) * 0.12
+    local keyframes = {
+        [0] = { opacity = 0, scale = 0.965, translateY = 22 },
+        [1] = { opacity = 1, scale = 1.0, translateY = 0 },
+    }
+    if delayRatio > 0 then
+        keyframes[delayRatio] = { opacity = 0, scale = 0.965, translateY = 22 }
+    end
+
+    card:Animate({
+        keyframes = keyframes,
+        duration = 0.42 + (index - 1) * 0.07,
+        easing = "easeOutCubic",
+        fillMode = "both",
+    })
+end
+
+local function GetChestCardPointerMotion(card, event)
+    if event == nil then
+        return 0, 0, 0
+    end
+
+    local layout = card:GetAbsoluteLayout()
+    if layout.w <= 0 or layout.h <= 0 then
+        return 0, 0, 0
+    end
+
+    local normalizedX = (event.x - layout.x) / layout.w * 2 - 1
+    local normalizedY = (event.y - layout.y) / layout.h * 2 - 1
+    normalizedX = math.max(-1, math.min(1, normalizedX))
+    normalizedY = math.max(-1, math.min(1, normalizedY))
+    return normalizedX * CHEST_CARD_MAX_POINTER_TILT, normalizedX * 2.2, normalizedY * 1.6
+end
+
+local function UpdateChestCardHoverTilt(card, event)
+    if not card.state.hovered or card.state.pressed then
+        return
+    end
+
+    local hoverRotation, iconOffsetX, iconOffsetY = GetChestCardPointerMotion(card, event)
+    local idleRotation = card.state.idleRotation or 0
+    local facePanel = card.state.facePanel
+    card:SetState({ hoverRotation = hoverRotation })
+    if facePanel ~= nil then
+        facePanel:SetStyle({ rotate = idleRotation + hoverRotation })
+    end
+    if card.state.iconPanel ~= nil then
+        card.state.iconPanel:SetStyle({
+            translateX = iconOffsetX,
+            translateY = -3 + iconOffsetY,
+            rotate = -hoverRotation * 0.24,
         })
     end
 end
 
-local function GetChestCardPointerTilt(card, event)
-    if event == nil then
-        return 0
+local function SetChestCardRest(card)
+    local accentColor = card.state.accentColor or { 236, 202, 105 }
+    local borderColor = card.state.borderColor or { accentColor[1], accentColor[2], accentColor[3], 210 }
+    local iconBorderColor = card.state.iconBorderColor or { accentColor[1], accentColor[2], accentColor[3], 190 }
+    local idleRotation = card.state.idleRotation or 0
+    local liftPanel = card.state.liftPanel
+    local facePanel = card.state.facePanel
+    local iconPanel = card.state.iconPanel
+
+    if liftPanel ~= nil then
+        liftPanel:SetStyle({
+            transition = "scale 0.20s easeOutCubic, translateY 0.22s easeOutCubic",
+            scale = 1.0,
+            translateY = 0,
+        })
     end
-
-    local layout = card:GetAbsoluteLayout()
-    if layout.w <= 0 then
-        return 0
+    if facePanel ~= nil then
+        facePanel:SetStyle({
+            transition = "rotate 0.20s easeOutCubic, borderColor 0.20s easeOut, shadowBlur 0.22s easeOut, shadowOffsetY 0.22s easeOut, shadowColor 0.22s easeOut",
+            rotate = idleRotation,
+            borderColor = borderColor,
+            shadowBlur = 18,
+            shadowOffsetY = 7,
+            shadowColor = { 0, 0, 0, 175 },
+        })
     end
-
-    local normalizedX = (event.x - layout.x) / layout.w * 2 - 1
-    normalizedX = math.max(-1, math.min(1, normalizedX))
-    return normalizedX * CHEST_CARD_MAX_POINTER_TILT
-end
-
-local function UpdateChestCardHoverTilt(card, event)
-    if not card.state.hovered then
-        return
-    end
-
-    local hoverRotation = GetChestCardPointerTilt(card, event)
-    card:SetState({ hoverRotation = hoverRotation })
-    card:SetStyle({ rotate = hoverRotation })
-    if card.state.iconPanel ~= nil then
-        card.state.iconPanel:SetStyle({ rotate = -hoverRotation * 0.28 })
+    if iconPanel ~= nil then
+        iconPanel:SetStyle({
+            transition = "scale 0.20s easeOutCubic, translateX 0.20s easeOutCubic, translateY 0.20s easeOutCubic, rotate 0.20s easeOutCubic, borderColor 0.20s easeOut, shadowBlur 0.22s easeOut, shadowColor 0.22s easeOut",
+            scale = 1.0,
+            translateX = 0,
+            translateY = 0,
+            rotate = 0,
+            borderColor = iconBorderColor,
+            shadowBlur = 12,
+            shadowColor = { accentColor[1], accentColor[2], accentColor[3], 78 },
+        })
     end
 end
 
 local function SetChestCardHover(card, hovered, event)
     local accentColor = card.state.accentColor or { 236, 202, 105 }
-    local borderColor = card.state.borderColor or { accentColor[1], accentColor[2], accentColor[3], 210 }
-    local iconBorderColor = card.state.iconBorderColor or { accentColor[1], accentColor[2], accentColor[3], 190 }
     local idleRotation = card.state.idleRotation or 0
+    local liftPanel = card.state.liftPanel
+    local facePanel = card.state.facePanel
     local iconPanel = card.state.iconPanel
 
-    if hovered then
-        local hoverRotation = GetChestCardPointerTilt(card, event)
-        card:SetState({ hovered = true, hoverRotation = hoverRotation })
-        card:StopAnimation()
-        if iconPanel ~= nil then
-            iconPanel:StopAnimation()
-        end
-        card:SetStyle({
+    if not hovered then
+        card:SetState({ hovered = false, pressed = false, hoverRotation = 0 })
+        SetChestCardRest(card)
+        return
+    end
+
+    local hoverRotation, iconOffsetX, iconOffsetY = GetChestCardPointerMotion(card, event)
+    card:SetState({ hovered = true, hoverRotation = hoverRotation })
+    if liftPanel ~= nil then
+        liftPanel:SetStyle({
+            transition = "scale 0.16s easeOutCubic, translateY 0.18s easeOutCubic",
+            scale = 1.03,
+            translateY = -9,
+        })
+    end
+    if facePanel ~= nil then
+        facePanel:SetStyle({
+            transition = "rotate 0.13s easeOutCubic, borderColor 0.18s easeOut, shadowBlur 0.18s easeOut, shadowOffsetY 0.18s easeOut, shadowColor 0.18s easeOut",
+            rotate = idleRotation + hoverRotation,
             borderColor = { math.min(255, accentColor[1] + 22), math.min(255, accentColor[2] + 22), math.min(255, accentColor[3] + 22), 255 },
-            shadowBlur = 30,
-            shadowOffsetY = 14,
-            shadowColor = { accentColor[1], accentColor[2], accentColor[3], 125 },
+            shadowBlur = 28,
+            shadowOffsetY = 12,
+            shadowColor = { accentColor[1], accentColor[2], accentColor[3], 112 },
         })
-        card:Animate({
-            keyframes = {
-                [0] = { scale = 1.0, translateY = 0, rotate = idleRotation },
-                [1] = { scale = 1.045, translateY = -13, rotate = hoverRotation },
-            },
-            duration = 0.18,
-            easing = "easeOutBack",
-            fillMode = "forwards",
+    end
+    if iconPanel ~= nil then
+        iconPanel:SetStyle({
+            transition = "scale 0.16s easeOutCubic, translateX 0.13s easeOutCubic, translateY 0.13s easeOutCubic, rotate 0.13s easeOutCubic, borderColor 0.18s easeOut, shadowBlur 0.18s easeOut, shadowColor 0.18s easeOut",
+            scale = 1.065,
+            translateX = iconOffsetX,
+            translateY = -3 + iconOffsetY,
+            rotate = -hoverRotation * 0.24,
+            borderColor = { math.min(255, accentColor[1] + 28), math.min(255, accentColor[2] + 28), math.min(255, accentColor[3] + 28), 255 },
+            shadowBlur = 19,
+            shadowColor = { accentColor[1], accentColor[2], accentColor[3], 135 },
         })
-        if iconPanel ~= nil then
-            iconPanel:SetStyle({
-                borderColor = { math.min(255, accentColor[1] + 28), math.min(255, accentColor[2] + 28), math.min(255, accentColor[3] + 28), 255 },
-                shadowBlur = 20,
-                shadowColor = { accentColor[1], accentColor[2], accentColor[3], 145 },
-            })
-            iconPanel:Animate({
-                keyframes = {
-                    [0] = { scale = 1.0, translateY = 0, rotate = 0 },
-                    [1] = { scale = 1.08, translateY = -3, rotate = -hoverRotation * 0.28 },
-                },
-                duration = 0.18,
-                easing = "easeOutBack",
-                fillMode = "forwards",
-            })
+    end
+end
+
+local function SetChestCardPressed(card, pressed, event)
+    local accentColor = card.state.accentColor or { 236, 202, 105 }
+    local liftPanel = card.state.liftPanel
+    local facePanel = card.state.facePanel
+    local iconPanel = card.state.iconPanel
+
+    if not pressed then
+        card:SetState({ pressed = false })
+        if event ~= nil and event.pointerType == "touch" then
+            SetChestCardHover(card, false)
+        elseif card.state.hovered then
+            SetChestCardHover(card, true, event)
+        else
+            SetChestCardRest(card)
         end
         return
     end
 
-    card:SetState({ hovered = false })
-    local hoverRotation = card.state.hoverRotation or 0
-    card:StopAnimation()
-    if iconPanel ~= nil then
-        iconPanel:StopAnimation()
+    card:SetState({ hovered = true, pressed = true })
+    if liftPanel ~= nil then
+        liftPanel:SetStyle({
+            transition = "scale 0.07s easeOut, translateY 0.07s easeOut",
+            scale = 0.985,
+            translateY = -3,
+        })
     end
-    card:SetStyle({
-        borderColor = borderColor,
-        shadowBlur = 18,
-        shadowOffsetY = 7,
-        shadowColor = { 0, 0, 0, 175 },
-    })
-    card:Animate({
-        keyframes = {
-            [0] = { scale = 1.045, translateY = -13, rotate = hoverRotation },
-            [1] = { scale = 1.0, translateY = 0, rotate = idleRotation },
-        },
-        duration = 0.22,
-        easing = "easeInOut",
-        fillMode = "forwards",
-        onComplete = function()
-            card:SetState({ resumeIdle = true })
-        end,
-    })
+    if facePanel ~= nil then
+        facePanel:SetStyle({
+            transition = "shadowBlur 0.07s easeOut, shadowOffsetY 0.07s easeOut, shadowColor 0.07s easeOut",
+            shadowBlur = 12,
+            shadowOffsetY = 4,
+            shadowColor = { accentColor[1], accentColor[2], accentColor[3], 82 },
+        })
+    end
     if iconPanel ~= nil then
         iconPanel:SetStyle({
-            borderColor = iconBorderColor,
-            shadowBlur = 12,
-            shadowColor = { accentColor[1], accentColor[2], accentColor[3], 78 },
-        })
-        iconPanel:Animate({
-            keyframes = {
-                [0] = { scale = 1.08, translateY = -3, rotate = -hoverRotation * 0.28 },
-                [1] = { scale = 1.0, translateY = 0, rotate = 0 },
-            },
-            duration = 0.22,
-            easing = "easeInOut",
-            fillMode = "forwards",
+            transition = "scale 0.07s easeOut, translateY 0.07s easeOut",
+            scale = 0.96,
+            translateY = 1,
         })
     end
 end
@@ -251,7 +355,11 @@ local function CreateChestCard(index)
         },
         shadowBlur = 12,
         shadowColor = { 0, 0, 0, 150 },
-        transition = "rotate 0.10s easeOut",
+        scale = 1.0,
+        translateX = 0,
+        translateY = 0,
+        rotate = 0,
+        transition = "scale 0.20s easeOutCubic, translateX 0.20s easeOutCubic, translateY 0.20s easeOutCubic, rotate 0.20s easeOutCubic, borderColor 0.20s easeOut, shadowBlur 0.22s easeOut, shadowColor 0.22s easeOut",
         pointerEvents = "none",
         children = { icon },
     }
@@ -278,11 +386,12 @@ local function CreateChestCard(index)
         lineHeight = 1.35,
         fontColor = { 216, 218, 221, 225 },
     }
-    local card = UI.Panel {
-        width = 226,
-        minWidth = 196,
-        aspectRatio = 2 / 3,
-        minHeight = 294,
+    local facePanel = UI.Panel {
+        position = "absolute",
+        top = 0,
+        left = 0,
+        right = 0,
+        bottom = 0,
         padding = { 12, 14, 14, 14 },
         gap = 11,
         borderRadius = 7,
@@ -300,19 +409,8 @@ local function CreateChestCard(index)
         shadowColor = { 0, 0, 0, 175 },
         rotate = CHEST_CARD_IDLE_ROTATIONS[optionIndex],
         transformOrigin = "bottom",
-        transition = "rotate 0.10s easeOut, borderColor 0.18s easeOut, shadowBlur 0.18s easeOut, shadowOffsetY 0.18s easeOut, shadowColor 0.18s easeOut",
-        onPointerEnter = function(event, widget)
-            SetChestCardHover(widget, true, event)
-        end,
-        onPointerMove = function(event, widget)
-            UpdateChestCardHoverTilt(widget, event)
-        end,
-        onPointerLeave = function(event, widget)
-            SetChestCardHover(widget, false)
-        end,
-        onClick = function()
-            ChooseChestOption(optionIndex)
-        end,
+        transition = "rotate 0.20s easeOutCubic, borderColor 0.20s easeOut, shadowBlur 0.22s easeOut, shadowOffsetY 0.22s easeOut, shadowColor 0.22s easeOut",
+        pointerEvents = "none",
         children = {
             accent,
             iconPanel,
@@ -326,6 +424,57 @@ local function CreateChestCard(index)
             description,
         },
     }
+    local floatPanel = UI.Panel {
+        position = "absolute",
+        top = 0,
+        left = 0,
+        right = 0,
+        bottom = 0,
+        pointerEvents = "none",
+        children = { facePanel },
+    }
+    local liftPanel = UI.Panel {
+        position = "absolute",
+        top = 0,
+        left = 0,
+        right = 0,
+        bottom = 0,
+        scale = 1.0,
+        translateY = 0,
+        transition = "scale 0.20s easeOutCubic, translateY 0.22s easeOutCubic",
+        pointerEvents = "none",
+        children = { floatPanel },
+    }
+    local card = UI.Panel {
+        width = 226,
+        minWidth = 196,
+        aspectRatio = 2 / 3,
+        minHeight = 294,
+        overflow = "visible",
+        pointerEvents = "box-only",
+        onPointerEnter = function(event, widget)
+            SetChestCardHover(widget, true, event)
+        end,
+        onPointerMove = function(event, widget)
+            UpdateChestCardHoverTilt(widget, event)
+        end,
+        onPointerLeave = function(event, widget)
+            SetChestCardHover(widget, false)
+        end,
+        onPointerDown = function(event, widget)
+            SetChestCardPressed(widget, true, event)
+        end,
+        onPointerUp = function(event, widget)
+            SetChestCardPressed(widget, false, event)
+        end,
+        onPointerCancel = function(event, widget)
+            SetChestCardHover(widget, false)
+        end,
+        onClick = function()
+            ChooseChestOption(optionIndex)
+        end,
+        children = { liftPanel },
+    }
 
     chestTitleLabels[index] = title
     chestDescriptionLabels[index] = description
@@ -333,67 +482,302 @@ local function CreateChestCard(index)
     chestCards[index] = card
     chestAccentPanels[index] = accent
     chestIconPanels[index] = iconPanel
+    chestLiftPanels[index] = liftPanel
+    chestFloatPanels[index] = floatPanel
+    chestFacePanels[index] = facePanel
     card:SetState({
         idleRotation = CHEST_CARD_IDLE_ROTATIONS[optionIndex],
         hoverRotation = 0,
         idleDuration = CHEST_CARD_IDLE_DURATIONS[optionIndex],
+        liftPanel = liftPanel,
+        floatPanel = floatPanel,
+        facePanel = facePanel,
         iconPanel = iconPanel,
         hovered = false,
+        pressed = false,
     })
     return card
 end
 
 local function CreateHud()
-    healthLabel = UI.Label {
-        text = "生命 ●●●",
-        fontSize = 21,
-        fontColor = { 255, 132, 154, 255 },
+    healthProgressBar = UI.ProgressBar {
+        value = 1,
+        max = 1,
+        width = "100%",
+        height = 14,
+        showLabel = false,
+        borderRadius = 7,
+        borderWidth = 1,
+        borderColor = { 255, 180, 145, 120 },
+        backgroundColor = { 8, 10, 20, 220 },
+        fillGradient = {
+            direction = "to-right",
+            from = { 225, 72, 92, 255 },
+            to = { 255, 177, 100, 255 },
+        },
+        transition = "value 0.18s easeOut",
     }
     roomLabel = UI.Label {
         text = "尚未开始",
         fontSize = 14,
-        fontColor = { 232, 237, 255, 245 },
+        fontWeight = "bold",
+        fontColor = COLORS.cream,
+    }
+    roomProgressLabel = UI.Label {
+        text = "探索 0/7",
+        fontSize = 10,
+        fontColor = COLORS.muted,
+        textAlign = "right",
+    }
+    healthPanel = UI.Panel {
+        width = "40%",
+        minWidth = 150,
+        maxWidth = 282,
+        padding = { 10, 13, 11, 13 },
+        gap = 7,
+        borderRadius = 15,
+        borderWidth = 1,
+        borderLeftWidth = 3,
+        borderColor = { 239, 190, 105, 105 },
+        borderLeftColor = COLORS.coral,
+        backgroundGradient = {
+            type = "linear",
+            direction = "to-bottom-right",
+            from = COLORS.panelTop,
+            to = COLORS.panelBottom,
+        },
+        boxShadow = {
+            { x = 0, y = 6, blur = 18, spread = 0, color = { 0, 0, 0, 125 } },
+            { x = 0, y = 1, blur = 2, spread = 0, color = { 255, 219, 164, 24 }, inset = true },
+        },
+        pointerEvents = "none",
+        children = {
+            UI.Panel {
+                width = "100%",
+                flexDirection = "row",
+                alignItems = "center",
+                gap = 7,
+                children = {
+                    UI.Label {
+                        text = "♥",
+                        fontSize = 16,
+                        fontColor = COLORS.coral,
+                        textShadow = { offsetX = 0, offsetY = 1, blur = 6, color = { 244, 112, 112, 150 } },
+                    },
+                    UI.Label {
+                        text = "生命律动",
+                        fontSize = 12,
+                        fontWeight = "bold",
+                        letterSpacing = 1,
+                        fontColor = COLORS.cream,
+                    },
+                },
+            },
+            healthProgressBar,
+            UI.Panel {
+                width = "100%",
+                flexDirection = "row",
+                alignItems = "baseline",
+                children = { roomLabel, UI.Spacer(), roomProgressLabel },
+            },
+        },
     }
     parryLabel = UI.Label {
         text = "招架 就绪",
-        fontSize = 14,
-        fontColor = { 130, 232, 255, 255 },
+        fontSize = 12,
+        fontWeight = "bold",
+        letterSpacing = 1,
+        fontColor = COLORS.cyan,
+    }
+    parryPanel = UI.Panel {
+        padding = { 7, 12, 7, 12 },
+        borderRadius = 16,
+        borderWidth = 1,
+        borderColor = { 105, 225, 221, 145 },
+        backgroundColor = { 15, 38, 48, 225 },
+        shadowBlur = 12,
+        shadowColor = { 48, 197, 205, 65 },
+        pointerEvents = "none",
+        children = { parryLabel },
     }
     buffLabel = UI.Label {
-        text = "暂无临时增益",
-        fontSize = 11,
-        textAlign = "right",
+        text = "暂无回响",
+        width = "100%",
+        fontSize = 10,
         whiteSpace = "normal",
         fontColor = { 132, 244, 184, 240 },
     }
     abilityLabel = UI.Label {
         text = "暂无强化",
-        fontSize = 11,
-        textAlign = "right",
+        width = "100%",
+        fontSize = 10,
         whiteSpace = "normal",
-        fontColor = { 197, 175, 255, 235 },
+        fontColor = { 210, 191, 255, 235 },
     }
     bossNameLabel = UI.Label {
-        text = "晦暗低鸣", width = "100%", fontSize = 15, fontWeight = "bold",
-        textAlign = "center", fontColor = { 238, 221, 203, 255 },
+        text = "晦暗低鸣", width = "100%", fontSize = 16, fontWeight = "bold",
+        letterSpacing = 2, textAlign = "center", fontColor = COLORS.cream,
+        textShadow = { offsetX = 0, offsetY = 2, blur = 4, color = { 0, 0, 0, 180 } },
     }
     bossObjectiveLabel = UI.Label {
-        text = "第一阶段 · 黑影", width = "100%", fontSize = 11,
-        textAlign = "center", fontColor = { 201, 190, 214, 235 },
+        text = "第一阶段 · 黑影", width = "100%", fontSize = 10,
+        letterSpacing = 1, textAlign = "center", fontColor = { 214, 202, 225, 235 },
     }
     bossProgressBar = UI.ProgressBar {
-        value = 100, max = 100, width = "100%", height = 8, borderRadius = 4,
+        value = 100, max = 100, width = "100%", height = 10, borderRadius = 5,
+        showLabel = false,
+        backgroundColor = { 8, 8, 17, 220 },
+        borderColor = { 243, 190, 126, 95 }, borderWidth = 1,
         fillGradient = {
             direction = "to-right", from = { 105, 42, 66, 255 }, to = { 220, 98, 104, 255 },
         },
         transition = "value 0.16s easeOut",
     }
     bossPanel = UI.Panel {
-        visible = false, width = "44%", maxWidth = 430, minWidth = 250,
-        padding = { 7, 12, 8, 12 }, gap = 4, borderRadius = 4,
-        borderWidth = 1, borderColor = { 126, 105, 132, 145 },
-        backgroundColor = { 13, 12, 20, 205 }, pointerEvents = "none",
+        visible = false, width = "52%", maxWidth = 500, minWidth = 240,
+        padding = { 9, 16, 11, 16 }, gap = 5, borderRadius = 15,
+        borderWidth = { 1, 1, 3, 1 }, borderColor = { 188, 145, 120, 135 },
+        backgroundGradient = {
+            type = "linear", direction = "to-bottom",
+            from = { 39, 24, 39, 238 }, to = { 16, 13, 27, 244 },
+        },
+        shadowBlur = 20, shadowOffsetY = 7, shadowColor = { 0, 0, 0, 140 },
+        pointerEvents = "none",
         children = { bossNameLabel, bossObjectiveLabel, bossProgressBar },
+    }
+
+    gaugeStatusLabel = UI.Label {
+        text = "等待弹反",
+        fontSize = 10,
+        fontColor = COLORS.muted,
+        textAlign = "right",
+    }
+    gaugeProgressBar = UI.ProgressBar {
+        value = 0,
+        max = 1,
+        width = "100%",
+        height = 12,
+        showLabel = false,
+        borderRadius = 6,
+        borderWidth = 1,
+        borderColor = { 255, 196, 112, 110 },
+        backgroundColor = { 8, 9, 20, 225 },
+        fillGradient = {
+            direction = "to-right",
+            from = { 247, 137, 79, 255 },
+            to = { 255, 225, 126, 255 },
+        },
+        transition = "value 0.16s easeOut",
+    }
+    local gaugePanel = UI.Panel {
+        width = "62%",
+        minWidth = 260,
+        maxWidth = 560,
+        padding = { 9, 14, 11, 14 },
+        gap = 7,
+        borderRadius = 16,
+        borderWidth = { 1, 1, 3, 1 },
+        borderColor = { 225, 164, 91, 130 },
+        backgroundGradient = {
+            type = "linear", direction = "to-bottom",
+            from = { 38, 27, 41, 235 }, to = { 16, 16, 31, 245 },
+        },
+        shadowBlur = 18, shadowOffsetY = 7, shadowColor = { 0, 0, 0, 135 },
+        pointerEvents = "none",
+        children = {
+            UI.Panel {
+                width = "100%", flexDirection = "row", alignItems = "baseline",
+                children = {
+                    UI.Label {
+                        text = "✦  弹反共鸣",
+                        fontSize = 12,
+                        fontWeight = "bold",
+                        letterSpacing = 1,
+                        fontColor = COLORS.gold,
+                    },
+                    UI.Spacer(),
+                    gaugeStatusLabel,
+                },
+            },
+            gaugeProgressBar,
+        },
+    }
+
+    local insightPanel = UI.Panel {
+        width = "40%",
+        minWidth = 150,
+        maxWidth = 282,
+        padding = { 9, 12, 10, 12 },
+        gap = 6,
+        borderRadius = 14,
+        borderWidth = 1,
+        borderColor = { 164, 139, 211, 95 },
+        backgroundGradient = {
+            type = "linear", direction = "to-bottom-left",
+            from = { 29, 29, 51, 230 }, to = { 14, 17, 31, 242 },
+        },
+        boxShadow = { { x = 0, y = 6, blur = 18, spread = 0, color = { 0, 0, 0, 115 } } },
+        pointerEvents = "none",
+        children = {
+            UI.Label { text = "临时回响", fontSize = 9, letterSpacing = 1, fontColor = { 112, 225, 175, 220 } },
+            buffLabel,
+            UI.Divider { width = "100%", color = { 255, 255, 255, 24 }, spacing = 1 },
+            UI.Label { text = "遗物构筑", fontSize = 9, letterSpacing = 1, fontColor = { 183, 154, 243, 220 } },
+            abilityLabel,
+        },
+    }
+
+    messageLabel = UI.Label {
+        text = "",
+        fontSize = 14,
+        fontWeight = "bold",
+        textAlign = "center",
+        whiteSpace = "normal",
+        fontColor = COLORS.cream,
+        textShadow = { offsetX = 0, offsetY = 2, blur = 4, color = { 0, 0, 0, 175 } },
+    }
+    messagePanel = UI.Panel {
+        visible = false,
+        maxWidth = 520,
+        padding = { 8, 16, 8, 16 },
+        borderRadius = 16,
+        borderWidth = 1,
+        borderColor = { 239, 190, 105, 95 },
+        backgroundColor = { 17, 18, 34, 218 },
+        shadowBlur = 14,
+        shadowColor = { 0, 0, 0, 115 },
+        pointerEvents = "none",
+        children = { messageLabel },
+    }
+
+    combatHud = UI.SafeAreaView {
+        visible = false,
+        width = "100%",
+        height = "100%",
+        pointerEvents = "box-none",
+        children = {
+            UI.Panel {
+                position = "absolute", top = 14, left = 16,
+                width = "100%", pointerEvents = "box-none", children = { healthPanel },
+            },
+            UI.Panel {
+                position = "absolute", top = 14, right = 16,
+                width = "100%", alignItems = "flex-end", gap = 8,
+                pointerEvents = "box-none", children = { parryPanel, insightPanel },
+            },
+            UI.Panel {
+                position = "absolute", top = 30, left = 0, right = 0,
+                alignItems = "center", pointerEvents = "none", children = { bossPanel },
+            },
+            UI.Panel {
+                position = "absolute", top = 108, left = 0, right = 0,
+                alignItems = "center", pointerEvents = "none", children = { messagePanel },
+            },
+            UI.Panel {
+                position = "absolute", bottom = 14, left = 0, right = 0,
+                alignItems = "center", pointerEvents = "none", children = { gaugePanel },
+            },
+        },
     }
 
     chestPanel = UI.Panel {
@@ -405,8 +789,11 @@ local function CreateHud()
         bottom = 0,
         justifyContent = "center",
         alignItems = "center",
-        backgroundColor = { 7, 7, 18, 218 },
-        backdropBlur = 8,
+        backgroundGradient = {
+            type = "radial", innerRadius = 60, outerRadius = 760,
+            from = { 45, 34, 53, 230 }, to = { 5, 7, 17, 246 },
+        },
+        backdropBlur = 10,
         pointerEvents = "auto",
         children = {
             UI.SafeAreaView {
@@ -414,7 +801,7 @@ local function CreateHud()
                 height = "100%",
                 children = {
                     UI.Label {
-                        text = "遗物抉择",
+                        text = "遗物抉择  ·  选择一份回响",
                         position = "absolute",
                         top = 22,
                         left = 0,
@@ -423,7 +810,8 @@ local function CreateHud()
                         fontWeight = "bold",
                         textAlign = "center",
                         textStroke = { width = 1, color = { 18, 18, 20, 240 } },
-                        fontColor = { 246, 235, 199, 255 },
+                        letterSpacing = 2,
+                        fontColor = COLORS.cream,
                         pointerEvents = "none",
                     },
                     UI.ScrollView {
@@ -462,51 +850,191 @@ local function CreateHud()
         },
     }
 
+    stateKickerLabel = UI.Label {
+        text = "绘本奇幻 · 弹反冒险",
+        fontSize = 12,
+        fontWeight = "bold",
+        letterSpacing = 2,
+        fontColor = COLORS.gold,
+    }
+    stateTitleLabel = UI.Label {
+        text = "弹反之室",
+        width = "100%",
+        fontSize = 52,
+        fontWeight = "bold",
+        lineHeight = 1.05,
+        whiteSpace = "normal",
+        letterSpacing = 3,
+        fontColor = COLORS.cream,
+        textStroke = { width = 1, color = { 81, 45, 55, 230 } },
+        textShadow = { offsetX = 0, offsetY = 5, blur = 10, color = { 0, 0, 0, 170 } },
+    }
+    stateSubtitleLabel = UI.Label {
+        text = "拨动琴弦般把握节奏，弹回每一枚诅咒。",
+        width = "100%",
+        maxWidth = 500,
+        fontSize = 16,
+        lineHeight = 1.5,
+        whiteSpace = "normal",
+        fontColor = { 214, 219, 235, 245 },
+    }
+    stateActionButton = UI.Button {
+        text = "踏入房间",
+        width = 220,
+        height = 52,
+        fontSize = 16,
+        textColor = { 40, 25, 30, 255 },
+        backgroundGradient = {
+            type = "linear", direction = "to-right",
+            from = { 255, 191, 102, 255 }, to = { 244, 116, 105, 255 },
+        },
+        hoverBackgroundColor = { 255, 205, 125, 255 },
+        pressedBackgroundColor = { 226, 103, 91, 255 },
+        borderRadius = 15,
+        borderWidth = { 1, 1, 4, 1 },
+        borderColor = { 255, 222, 157, 220 },
+        shadowBlur = 22,
+        shadowOffsetY = 9,
+        shadowColor = { 232, 105, 91, 105 },
+        transition = "scale 0.16s easeOutBack, shadowBlur 0.16s easeOut, backgroundColor 0.16s easeOut",
+        onPointerEnter = function(_, widget)
+            widget:SetStyle({ scale = 1.035, shadowBlur = 28 })
+        end,
+        onPointerLeave = function(_, widget)
+            widget:SetStyle({ scale = 1.0, shadowBlur = 22 })
+        end,
+        onClick = function()
+            StartOrRestartRun()
+        end,
+    }
+
+    local portraitPanel = UI.Panel {
+        width = "38%",
+        minWidth = 238,
+        maxWidth = 390,
+        height = 390,
+        justifyContent = "center",
+        alignItems = "center",
+        backgroundGradient = {
+            type = "radial", innerRadius = 10, outerRadius = 190,
+            from = { 116, 220, 211, 58 }, to = { 17, 20, 37, 0 },
+        },
+        pointerEvents = "none",
+        children = {
+            UI.Panel {
+                width = "94%", height = "94%",
+                backgroundImage = "Characters/player.png",
+                backgroundFit = "contain",
+                pointerEvents = "none",
+            },
+        },
+    }
+
+    stateOverlay = UI.Panel {
+        visible = true,
+        position = "absolute",
+        top = 0, left = 0, right = 0, bottom = 0,
+        backgroundGradient = {
+            type = "linear", direction = "to-bottom-right",
+            from = { 25, 29, 52, 250 }, to = { 7, 8, 19, 252 },
+        },
+        pointerEvents = "auto",
+        children = {
+            UI.Panel {
+                position = "absolute", top = -140, right = -100,
+                width = 430, height = 430, borderRadius = 215,
+                backgroundGradient = {
+                    type = "radial", innerRadius = 0, outerRadius = 215,
+                    from = { 244, 123, 105, 52 }, to = { 244, 123, 105, 0 },
+                },
+                pointerEvents = "none",
+            },
+            UI.Panel {
+                position = "absolute", bottom = -170, left = -110,
+                width = 500, height = 500, borderRadius = 250,
+                backgroundGradient = {
+                    type = "radial", innerRadius = 0, outerRadius = 250,
+                    from = { 76, 205, 205, 42 }, to = { 76, 205, 205, 0 },
+                },
+                pointerEvents = "none",
+            },
+            UI.SafeAreaView {
+                width = "100%", height = "100%",
+                children = {
+                    UI.ScrollView {
+                        width = "100%", height = "100%",
+                        scrollX = false, scrollY = true,
+                        showScrollbar = false,
+                        children = {
+                            UI.Panel {
+                                width = "100%", minHeight = "100%",
+                                justifyContent = "center", alignItems = "center",
+                                padding = { 26, 18, 28, 18 },
+                                children = {
+                                    UI.Panel {
+                                        width = "94%", maxWidth = 1020,
+                                        minHeight = 450,
+                                        flexDirection = "row", flexWrap = "wrap",
+                                        alignItems = "center", justifyContent = "center",
+                                        columnGap = 24, rowGap = 10,
+                                        padding = { 28, 32, 28, 32 },
+                                        borderRadius = 28,
+                                        borderWidth = { 1, 1, 4, 1 },
+                                        borderColor = { 239, 190, 105, 115 },
+                                        backgroundGradient = {
+                                            type = "linear", direction = "to-bottom-right",
+                                            from = { 39, 42, 65, 228 }, to = { 15, 17, 33, 244 },
+                                        },
+                                        boxShadow = {
+                                            { x = 0, y = 18, blur = 42, spread = 0, color = { 0, 0, 0, 150 } },
+                                            { x = 0, y = 1, blur = 2, spread = 0, color = { 255, 229, 180, 26 }, inset = true },
+                                        },
+                                        children = {
+                                            UI.Panel {
+                                                width = "55%", minWidth = 270,
+                                                flexGrow = 1,
+                                                gap = 16,
+                                                children = {
+                                                    stateKickerLabel,
+                                                    stateTitleLabel,
+                                                    UI.Divider { width = 86, thickness = 3, color = COLORS.coral, spacing = 1 },
+                                                    stateSubtitleLabel,
+                                                    UI.Panel {
+                                                        flexDirection = "row", flexWrap = "wrap", gap = 8,
+                                                        children = {
+                                                            UI.Chip { label = "精准弹反", variant = "soft", color = "warning", size = "sm" },
+                                                            UI.Chip { label = "反射弹幕", variant = "soft", color = "primary", size = "sm" },
+                                                            UI.Chip { label = "净化诅咒", variant = "soft", color = "success", size = "sm" },
+                                                        },
+                                                    },
+                                                    stateActionButton,
+                                                    UI.Label {
+                                                        text = "WASD 移动  ·  空格招架  ·  回车开始",
+                                                        fontSize = 11,
+                                                        fontColor = { 177, 184, 207, 205 },
+                                                    },
+                                                },
+                                            },
+                                            portraitPanel,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
     UI.SetRoot(UI.Panel {
         width = "100%",
         height = "100%",
         pointerEvents = "box-none",
         children = {
-            UI.SafeAreaView {
-                width = "100%",
-                height = "100%",
-                pointerEvents = "box-none",
-                children = {
-                    UI.Panel {
-                        position = "absolute",
-                        top = 16,
-                        left = 18,
-                        gap = 3,
-                        pointerEvents = "none",
-                        children = { healthLabel, roomLabel },
-                    },
-                    UI.Panel {
-                        position = "absolute",
-                        top = 16,
-                        right = 18,
-                        alignItems = "flex-end",
-                        gap = 3,
-                        pointerEvents = "none",
-                        children = { parryLabel, buffLabel, abilityLabel },
-                    },
-                    UI.Panel {
-                        position = "absolute", top = 42, left = 0, right = 0,
-                        alignItems = "center", pointerEvents = "none", children = { bossPanel },
-                    },
-                    UI.Label {
-                        text = "WASD 移动   空格招架   量表充满后获得短时增益",
-                        position = "absolute",
-                        bottom = 14,
-                        left = 0,
-                        right = 0,
-                        textAlign = "center",
-                        fontSize = 11,
-                        fontColor = { 212, 215, 245, 175 },
-                        pointerEvents = "none",
-                    },
-                },
-            },
+            combatHud,
             chestPanel,
+            stateOverlay,
         },
     })
 end
@@ -522,11 +1050,13 @@ local function RefreshChestPanel()
         if chestPanelWasVisible then
             for _, card in ipairs(chestCards) do
                 card:StopAnimation()
-                card:SetStyle({ scale = 1.0, translateY = 0, rotate = card.state.idleRotation or 0 })
-                if card.state.iconPanel ~= nil then
-                    card.state.iconPanel:StopAnimation()
-                    card.state.iconPanel:SetStyle({ scale = 1.0, translateY = 0, rotate = 0 })
+                card:SetStyle({ opacity = 1.0, scale = 1.0, translateY = 0 })
+                card:SetState({ hovered = false, pressed = false, hoverRotation = 0 })
+                if card.state.floatPanel ~= nil then
+                    card.state.floatPanel:StopAnimation()
+                    card.state.floatPanel:SetStyle({ translateY = 0 })
                 end
+                SetChestCardRest(card)
             end
         end
         chestPanelWasVisible = false
@@ -547,7 +1077,8 @@ local function RefreshChestPanel()
                     borderColor = borderColor,
                     iconBorderColor = { color[1], color[2], color[3], 190 },
                     hovered = false,
-                    resumeIdle = false,
+                    pressed = false,
+                    hoverRotation = 0,
                 })
                 chestTitleLabels[index]:SetText(option.name)
                 chestDescriptionLabels[index]:SetText(option.description)
@@ -559,43 +1090,110 @@ local function RefreshChestPanel()
                     borderColor = { color[1], color[2], color[3], 190 },
                     shadowColor = { color[1], color[2], color[3], 78 },
                     scale = 1.0,
+                    translateX = 0,
                     translateY = 0,
                     rotate = 0,
                 })
-                card:SetStyle({
+                chestLiftPanels[index]:SetStyle({
+                    scale = 1.0,
+                    translateY = 0,
+                })
+                chestFacePanels[index]:SetStyle({
                     borderColor = borderColor,
                     shadowBlur = 18,
                     shadowOffsetY = 7,
                     shadowColor = { 0, 0, 0, 175 },
-                    scale = 1.0,
-                    translateY = 0,
                     rotate = card.state.idleRotation or 0,
                 })
+                chestFloatPanels[index]:StopAnimation()
+                chestFloatPanels[index]:SetStyle({ translateY = 0 })
                 StartChestCardIdle(card)
-            end
-            if card.state.resumeIdle then
-                card:SetState({ resumeIdle = false })
-                StartChestCardIdle(card)
+                if not chestPanelWasVisible then
+                    card:StopAnimation()
+                    StartChestCardEntrance(card, index)
+                end
             end
         end
     end
     chestPanelWasVisible = true
 end
 
+local function RefreshStateOverlay()
+    if game == nil or stateOverlay == nil then
+        return
+    end
+
+    local visible = game.state == "menu" or game.state == "dead" or game.state == "victory"
+    stateOverlay:SetVisible(visible)
+    if not visible then
+        return
+    end
+
+    if game.state == "menu" then
+        stateKickerLabel:SetText("绘本奇幻 · 弹反冒险")
+        stateTitleLabel:SetText("弹反之室")
+        stateSubtitleLabel:SetText("拨动琴弦般把握节奏，弹回每一枚诅咒，在幽暗房间中收集遗物与回响。")
+        stateActionButton:SetText("踏入房间")
+    elseif game.state == "victory" then
+        stateKickerLabel:SetText("诅咒已净化 · 回响仍在延续")
+        stateTitleLabel:SetText("晦暗消散")
+        stateSubtitleLabel:SetText("最后一段低鸣已经安静。带着这次旅途的节奏，再奏响一轮新的挑战。")
+        stateActionButton:SetText("再次挑战")
+    else
+        stateKickerLabel:SetText("旅途暂歇 · 节奏尚未终止")
+        stateTitleLabel:SetText("回响未尽")
+        stateSubtitleLabel:SetText("这次失手只是一枚休止符。重新握紧节拍，把袭来的诅咒一一弹回。")
+        stateActionButton:SetText("重新踏入")
+    end
+end
+
 local function UpdateHud()
-    if game == nil or healthLabel == nil then
+    if game == nil or healthProgressBar == nil then
         return
     end
 
     local hud = Game.GetHud(game)
     local hurtPulse = Feedback.GetHudPulse(feedback)
-    healthLabel:SetText(hud.health)
-    healthLabel:SetFontColor({ 255, math.floor(132 + 92 * hurtPulse), math.floor(154 + 76 * hurtPulse), 255 })
-    healthLabel:SetStyle({ scale = 1 + 0.08 * hurtPulse })
+    combatHud:SetVisible(hud.hudVisible)
+    healthProgressBar:SetValue(hud.healthRatio)
+    healthPanel:SetStyle({
+        scale = 1 + 0.035 * hurtPulse,
+        borderColor = {
+            239,
+            math.floor(190 + 38 * hurtPulse),
+            math.floor(105 + 40 * hurtPulse),
+            math.floor(105 + 95 * hurtPulse),
+        },
+    })
+    if hud.healthRatio <= 0.34 then
+        healthProgressBar:SetStyle({
+            fillGradient = { direction = "to-right", from = { 169, 34, 67, 255 }, to = { 255, 102, 102, 255 } },
+        })
+    else
+        healthProgressBar:SetStyle({
+            fillGradient = { direction = "to-right", from = { 225, 72, 92, 255 }, to = { 255, 177, 100, 255 } },
+        })
+    end
     roomLabel:SetText(hud.room)
+    roomProgressLabel:SetText(hud.roomProgress)
     parryLabel:SetText(hud.parry)
-    buffLabel:SetText("临时增益\n" .. hud.buffs)
-    abilityLabel:SetText("构筑\n" .. hud.upgrades)
+    parryLabel:SetFontColor(hud.parryReady and COLORS.cyan or COLORS.violet)
+    parryPanel:SetStyle({
+        borderColor = hud.parryReady and { 105, 225, 221, 145 } or { 170, 142, 238, 120 },
+        backgroundColor = hud.parryReady and { 15, 38, 48, 225 } or { 31, 25, 51, 225 },
+    })
+    buffLabel:SetText(hud.buffs == "暂无临时增益" and "暂无回响" or hud.buffs)
+    abilityLabel:SetText(hud.upgrades)
+    messagePanel:SetVisible(hud.message ~= "")
+    messageLabel:SetText(hud.message)
+    gaugeProgressBar:SetValue(hud.gaugeRatio)
+    if hud.gaugeRatio <= 0 then
+        gaugeStatusLabel:SetText("等待弹反")
+    elseif hud.gaugeRatio >= 0.7 then
+        gaugeStatusLabel:SetText("回响渐强")
+    else
+        gaugeStatusLabel:SetText("共鸣聚集中")
+    end
     local boss = hud.boss
     bossPanel:SetVisible(boss ~= nil)
     if boss ~= nil then
@@ -618,6 +1216,7 @@ local function UpdateHud()
         end
     end
     RefreshChestPanel()
+    RefreshStateOverlay()
 end
 
 function Start()
@@ -628,7 +1227,6 @@ function Start()
 
     UI.Init({
         theme = "default-dark",
-        fonts = { { family = "sans", weights = { normal = "Fonts/MiSans-Regular.ttf" } } },
         scale = UI.Scale.DEFAULT,
     })
     CreateHud()
@@ -651,7 +1249,6 @@ function Start()
     SubscribeToEvent("KeyDown", "HandleKeyDown")
     SubscribeToEvent("ScreenMode", "HandleScreenMode")
     SubscribeToEvent(nvgContext, "NanoVGRender", "HandleNanoVGRender")
-    print("弹反之室准备完成：按回车开始")
 end
 
 function Stop()
@@ -709,10 +1306,6 @@ function HandleKeyDown(eventType, eventData)
         return
     end
 
-    if key == KEY_F1 then
-        Game.ToggleDebug(game)
-        return
-    end
     if key == KEY_RETURN and game.state == "menu" then
         Game.StartOrRestart(game)
         return
