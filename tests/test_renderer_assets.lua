@@ -3,10 +3,26 @@ package.path = "./scripts/?.lua;./scripts/?/init.lua;" .. package.path
 local Renderer = require "Renderer"
 local spineCreateCalls = 0
 local imagePaths = {}
+local loadedSpinePath = nil
+local disposed = false
 
 nvgSpineCreate = function()
     spineCreateCalls = spineCreateCalls + 1
-    error("startup must not load the oversized Spine atlas")
+    return {
+        Load = function(_, path)
+            loadedSpinePath = path
+            return true
+        end,
+        SetDefaultMix = function() end,
+        SetAnimation = function() end,
+        IsLoaded = function()
+            return true
+        end,
+        Unload = function() end,
+        Dispose = function()
+            disposed = true
+        end,
+    }
 end
 
 nvgCreateImage = function(_, path)
@@ -21,9 +37,10 @@ end
 nvgDeleteImage = function() end
 
 assert(Renderer.LoadAssets({}))
-assert(spineCreateCalls == 0, "startup must not create a Spine instance")
-assert(imagePaths[1] == "Characters/player.png")
-assert(imagePaths[2] == "image/soot_monster.png")
+assert(spineCreateCalls == 1, "startup must create the compressed Spine player")
+assert(loadedSpinePath == "Characters/bard_cat/bard_cat.json")
+assert(imagePaths[1] == "image/soot_monster.png")
 
 Renderer.UnloadAssets({})
+assert(disposed)
 print("PASS test_renderer_assets")

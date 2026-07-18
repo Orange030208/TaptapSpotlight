@@ -8,8 +8,8 @@ local SOOT_SPRITE_PATH = "image/soot_monster.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
--- Re-enable after the Spine atlas is repacked within the device texture budget.
-local ENABLE_SPINE_PLAYER = false
+-- All Spine pages are repacked within the 2048px device texture budget.
+local ENABLE_SPINE_PLAYER = true
 local playerImageHandle = 0
 local playerImageWidth = 1
 local playerImageHeight = 1
