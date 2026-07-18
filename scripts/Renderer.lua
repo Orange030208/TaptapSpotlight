@@ -609,11 +609,10 @@ local function DrawSpriteSoot(ctx, x, y, enemy, time, scale)
     local drawX = -displayWidth * 0.5
     local drawY = -displayHeight
     local scaleX, scaleY = GetSootSquashStretch(enemy, time)
-    local flip = enemy.facing == "left" and -1 or 1
 
     nvgSave(ctx)
     nvgTranslate(ctx, x, y)
-    nvgScale(ctx, flip * scaleX, scaleY)
+    nvgScale(ctx, scaleX, scaleY)
     nvgBeginPath(ctx)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
     nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, sootImageHandle, 1.0))
