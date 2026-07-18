@@ -495,7 +495,6 @@ end
 function CrystalRenderer.Draw(ctx, game, width, height)
     QueuePendingAcquisitions(game, width, height)
     DrawWorldEffects(ctx, game, width, height)
-    DrawChoiceCards(ctx, game, width, height)
     DrawStatusBar(ctx, game, width, height)
     DrawAcquireAnimations(ctx)
 end
