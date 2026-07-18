@@ -1,6 +1,6 @@
 return {
     normalGain = 1,
-    perfectGain = 2,
+    perfectGain = 1,
     decayDuration = 3.0,
     perfectStreakWindow = 3.0,
     shockwaveTier = 2,

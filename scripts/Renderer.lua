@@ -2136,9 +2136,11 @@ local function DrawGuardStreak(ctx, width, height, feedback, game)
     local fade = Clamp(remaining / 0.22, 0, 1)
     local alpha = math.floor(255 * fade)
     local profile = display.kind == "perfect" and FeedbackConfig.perfectStreak or FeedbackConfig.normalParry
-    local text = display.kind == "perfect" and "金色S" or "N"
+    local text = "S"
     if display.kind == "perfect" then
         text = text .. string.rep("！", math.min(3, math.max(0, display.count - 1)))
+    else
+        text = "N"
     end
 
     local player = game ~= nil and game.player or nil
@@ -2183,61 +2185,6 @@ local function DrawFeedbackFlash(ctx, width, height, feedback)
     nvgRect(ctx, 0, 0, width, height)
     Color(ctx, flash.color, math.floor(flash.alpha * progress * progress))
     nvgFill(ctx)
-end
-
-local function DrawPerfectStreak(ctx, width, height, feedback)
-    local display = Feedback.GetPerfectStreakDisplay(feedback)
-    if display == nil or perfectStreakLightningImageHandle == nil or perfectStreakLightningImageHandle <= 0 then
-        return
-    end
-
-    local remaining = Clamp(display.life / math.max(0.001, display.maxLife), 0, 1)
-    local elapsed = 1 - remaining
-    local iconSize = Clamp(math.min(width, height) * 0.078, 34, 54)
-    local visibleCount = math.min(display.count, 10)
-    local centerX = width * 0.5
-    local centerY = Clamp(height * 0.31, 156, 230)
-    local alpha = math.floor(255 * remaining)
-
-    local glow = nvgRadialGradient(ctx, centerX, centerY, iconSize * 0.22, iconSize * 2.35,
-        nvgRGBA(255, 230, 130, math.floor(alpha * 0.25)), nvgRGBA(255, 195, 85, 0))
-    nvgBeginPath(ctx)
-    nvgCircle(ctx, centerX, centerY, iconSize * 2.35)
-    nvgFillPaint(ctx, glow)
-    nvgFill(ctx)
-
-    local focusProgress = Clamp(elapsed / 0.18, 0, 1)
-    local focusScale = 1 + (1 - focusProgress) * 0.42
-    for index = 1, visibleCount do
-        local slot = index - (visibleCount + 1) * 0.5
-        local x = centerX + slot * iconSize * 0.72
-        local y = centerY + slot * slot * iconSize * 0.065
-        local isFocus = index == display.focusIndex
-        local jitter = isFocus and (1 - focusProgress) * 4.2 or 0
-        local jitterX = jitter * math.sin((feedback.time or 0) * 155 + index * 2.7)
-        local jitterY = jitter * math.cos((feedback.time or 0) * 193 + index * 1.9) * 0.55
-        local size = iconSize * (isFocus and focusScale or 1)
-
-        nvgSave(ctx)
-        nvgTranslate(ctx, x + jitterX, y + jitterY)
-        nvgRotate(ctx, slot * math.rad(7))
-        nvgBeginPath(ctx)
-        nvgRect(ctx, -size * 0.5, -size * 0.5, size, size)
-        nvgFillPaint(ctx, nvgImagePatternTinted(ctx, -size * 0.5, -size * 0.5, size, size, 0,
-            perfectStreakLightningImageHandle, nvgRGBA(255, 226, 120, alpha)))
-        nvgFill(ctx)
-        nvgRestore(ctx)
-    end
-
-    if display.count > 10 then
-        nvgFontFace(ctx, "sans")
-        nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFontSize(ctx, 15)
-        nvgFillColor(ctx, nvgRGBA(12, 10, 18, math.floor(alpha * 0.82)))
-        nvgText(ctx, centerX + 1, centerY + iconSize * 0.82 + 1, "x" .. tostring(display.count), nil)
-        nvgFillColor(ctx, nvgRGBA(255, 241, 187, alpha))
-        nvgText(ctx, centerX, centerY + iconSize * 0.82, "x" .. tostring(display.count), nil)
-    end
 end
 
 local function DrawChestPauseDim(ctx, width, height, game)
