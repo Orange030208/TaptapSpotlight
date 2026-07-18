@@ -110,11 +110,11 @@ local function GetBossImage(boss)
 end
 
 local function GetSpriteMotion(boss, time)
-    local scaleX, scaleY = 1, 1
-    local offsetX, offsetY = 0, 0
-    local rotation = 0
-    local alpha = 1
-    local glow = 0
+    local scaleX, scaleY = 1.0, 1.0
+    local offsetX, offsetY = 0.0, 0.0
+    local rotation = 0.0
+    local alpha = 1.0
+    local glow = 0.0
     local phase = boss.phase == 2 and 1 or 0
     local spriteKey = GetSpriteKey(boss)
 
@@ -174,7 +174,14 @@ local function GetSpriteMotion(boss, time)
         glow = 0.35 + progress * 0.65
         alpha = 0.35 + progress * 0.65
     elseif boss.state == "airborne" then
-        return 1.0, 1.0, 0, -80, 0, 0, 0
+        local featherPhase = boss.feathersPhase or "takeoff"
+        local lift = featherPhase == "takeoff" and 0.35 or 1.0
+        scaleX = 1.02 + lift * 0.08
+        scaleY = 0.94 + lift * 0.08
+        offsetY = -42 - lift * 24
+        rotation = math.sin(time * 5 + (boss.id or 0)) * 0.05
+        glow = 0.55 + lift * 0.25
+        alpha = 1
     elseif boss.state == "purifying" then
         local progress = Clamp(boss.purificationProgress or 0, 0, 1)
         scaleX = 1 - progress * 0.32
@@ -491,9 +498,6 @@ end
 
 function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
-    if boss.state == "airborne" then
-        return
-    end
     if bossSpriteLoaded and DrawBossSprite(ctx, x, y, boss, time, scale) then
         return
     end

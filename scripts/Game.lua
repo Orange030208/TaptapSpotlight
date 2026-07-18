@@ -312,7 +312,16 @@ local function HandleEnemyDeaths(game)
         local enemy = game.enemies[index]
         if enemy.dead then
             local isBoss = enemy.kind == "boss"
-            if isBoss and enemy.state ~= "defeat" then
+            if isBoss and enemy.purified then
+                local splitChildren = Entities.GetSplitChildren(enemy)
+                EmitEvent(game, "boss_defeat", {
+                    x = enemy.x,
+                    y = enemy.y,
+                    kind = enemy.kind,
+                })
+                AddParticles(game, enemy.x, enemy.y, { 130, 255, 185 }, 30)
+                table.remove(game.enemies, index)
+            elseif isBoss and enemy.state ~= "defeat" then
                 enemy.state = "defeat"
                 enemy.dead = false
                 enemy.stateTimer = 0.9

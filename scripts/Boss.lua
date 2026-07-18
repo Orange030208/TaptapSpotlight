@@ -79,7 +79,7 @@ local function IsAttackHitting(boss, player)
     elseif boss.attack == "feathers" then
         -- 飞龙在天只在落地瞬间判定，伤害中心锁定在起飞前记录的玩家位置。
         local spec = BossConfig.attacks.feathers
-        if boss.feathersPhase ~= "landing" then return false end
+        if boss.feathersPhase ~= nil and boss.feathersPhase ~= "landing" then return false end
         return Length(player.x - boss.landingX, player.y - boss.landingY)
             <= spec.landingRadius + (player.radius or 0)
     end
@@ -284,6 +284,17 @@ function Boss.Update(boss, player, dt)
     boss.mechanismChanged = false
     boss.mechanismTransition = math.max(0, boss.mechanismTransition - dt)
 
+    if boss.entrance then
+        boss.stateTimer = boss.stateTimer - dt
+        boss.vx, boss.vy = 0, 0
+        if boss.stateTimer <= 0 then
+            boss.entrance = false
+            boss.state = "idle"
+            boss.stateTimer = BossConfig.attackIntervalMax
+        end
+        return
+    end
+
     if boss.state == "purifying" then
         boss.stateTimer = boss.stateTimer - dt
         boss.purificationProgress = Clamp(1 - boss.stateTimer / BossConfig.purificationDuration, 0, 1)
@@ -296,6 +307,9 @@ function Boss.Update(boss, player, dt)
 
     boss.stateTimer = boss.stateTimer - dt
     if boss.state == "phase_transition" then
+        if boss.entrance then
+            return
+        end
         boss.entrance = false
         if boss.stateTimer <= 0 then
             boss.state = "idle"
