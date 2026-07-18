@@ -11,8 +11,8 @@ return {
                 { x = 0.34, y = 0.55 }, { x = 0.66, y = 0.55 },
             },
             groups = {
-                { "melee", "ranged", "melee" },
-                { "melee", "melee", "ranged" },
+                { "soot", "mushroom", "blue_swarm" },
+                { "soot", "soot", "mushroom" },
             },
         },
         crossfire = {
@@ -24,8 +24,8 @@ return {
                 { x = 0.5, y = 0.66 },
             },
             groups = {
-                { "melee", "ranged", "ranged", "melee", "ranged" },
-                { "melee", "melee", "ranged", "ranged", "melee" },
+                { "blue_swarm", "mushroom", "dandelion", "sap", "soot" },
+                { "sap", "soot", "mushroom", "blue_swarm", "dandelion" },
             },
         },
         pressure = {
@@ -37,8 +37,8 @@ return {
                 { x = 0.5, y = 0.66 },
             },
             groups = {
-                { "melee", "melee", "ranged", "melee" },
-                { "melee", "ranged", "ranged", "melee" },
+                { "tree", "stone", "purple_orb", "soot" },
+                { "tree", "sap", "stone", "purple_orb" },
             },
         },
         ambush = {
@@ -50,8 +50,8 @@ return {
                 { x = 0.5, y = 0.72 },
             },
             groups = {
-                { "melee", "melee", "ranged", "ranged", "melee" },
-                { "melee", "melee", "melee", "ranged", "ranged" },
+                { "ghost_a", "blue_swarm", "ghost_b", "mushroom", "toxic_moss" },
+                { "ghost_a", "soot", "ghost_b", "sap", "toxic_moss" },
             },
         },
         crypt = {
@@ -62,8 +62,8 @@ return {
                 { x = 0.5, y = 0.72 },
             },
             groups = {
-                { "melee", "melee", "ranged", "melee" },
-                { "ranged", "ranged", "ranged", "melee" },
+                { "tree", "sap", "dandelion", "toxic_moss" },
+                { "ghost_b", "ghost_a", "mushroom", "purple_orb" },
             },
         },
         treasury = {
@@ -73,8 +73,8 @@ return {
                 { x = 0.3, y = 0.32 }, { x = 0.7, y = 0.32 }, { x = 0.5, y = 0.62 },
             },
             groups = {
-                { "melee", "ranged", "melee" },
-                { "melee", "melee", "ranged" },
+                { "dandelion", "purple_orb", "stone" },
+                { "tree", "blue_swarm", "sap" },
             },
         },
         warden = {

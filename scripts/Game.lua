@@ -271,17 +271,24 @@ local function HandleEnemyDeaths(game)
     for index = #game.enemies, 1, -1 do
         local enemy = game.enemies[index]
         if enemy.dead then
+            local splitChildren = Entities.GetSplitChildren(enemy)
             EmitEvent(game, enemy.kind == "boss" and "boss_defeat" or "enemy_defeat", {
                 x = enemy.x,
                 y = enemy.y,
                 kind = enemy.kind,
             })
-            SpawnChestForEnemy(game, enemy)
+            if #splitChildren == 0 then
+                SpawnChestForEnemy(game, enemy)
+            end
             AddParticles(game, enemy.x, enemy.y,
                 enemy.kind == "boss" and { 255, 120, 70 } or { 255, 215, 90 },
                 enemy.kind == "boss" and 24 or 10
             )
             table.remove(game.enemies, index)
+            for _, spawn in ipairs(splitChildren) do
+                table.insert(game.enemies, Entities.NewEnemy(enemy.kind, spawn, game.nextEntityId))
+                game.nextEntityId = game.nextEntityId + 1
+            end
         end
     end
 end
@@ -785,16 +792,17 @@ local function ResolveEnemyContacts(game)
                     })
                 end
             end
-        elseif Entities.EnemyTouchesPlayer(enemy, game.player) then
-            if Entities.DamagePlayer(game.player, EnemyConfig[enemy.kind].touchDamage) then
+        else
+            local hit = Entities.CollectEnemyHit(enemy, game.player)
+            if hit ~= nil and Entities.DamagePlayer(game.player, hit.amount) then
                 ResetCombo(game)
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                 SetMessage(game, "受到伤害", 0.5)
                 EmitEvent(game, "player_hurt", {
                     x = game.player.x,
                     y = game.player.y,
-                    amount = EnemyConfig[enemy.kind].touchDamage,
-                    sourceKind = enemy.kind,
+                    amount = hit.amount,
+                    sourceKind = hit.sourceKind,
                 })
             end
         end
