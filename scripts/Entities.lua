@@ -81,6 +81,7 @@ function Entities.NewPlayer()
         hp = PlayerConfig.maxHp,
         radius = PlayerConfig.radius,
         facing = "right",
+        isMoving = false,
         parryTimer = 0,
         parryElapsed = 0,
         parryCooldown = 0,
@@ -180,6 +181,7 @@ function Entities.UpdatePlayer(player, dt, moveX, moveY, speedMultiplier)
     local speed = PlayerConfig.speed * speedMultiplier
     player.x = Clamp(player.x + directionX * speed * dt, RoomConfig.minX, RoomConfig.maxX)
     player.y = Clamp(player.y + directionY * speed * dt, RoomConfig.minY, RoomConfig.maxY)
+    player.isMoving = math.abs(directionX) > 0.001 or math.abs(directionY) > 0.001
 
     if math.abs(directionX) > 0.05 then
         player.facing = directionX < 0 and "left" or "right"
@@ -301,15 +303,25 @@ local function IsInsideAttackArc(enemy, player, range, arc)
     return Dot(dx / distance, dy / distance, enemy.attackX, enemy.attackY) >= math.cos(math.rad(arc * 0.5))
 end
 
-function Entities.IsEnemyActive(enemy, player)
+function Entities.IsEnemyInTrackingRange(enemy, player)
     local spec = EnemyConfig[enemy.kind]
-    return spec.alwaysActive or (spec.activationRange > 0 and IsInRange(player, enemy, spec.activationRange))
+    local range = spec.trackingRange or EnemyConfig.defaultTrackingRange
+    return range > 0 and IsInRange(player, enemy, range)
+end
+
+function Entities.IsEnemyInAttackRange(enemy, player)
+    local spec = EnemyConfig[enemy.kind]
+    return spec.attackRange ~= nil and spec.attackRange > 0 and IsInRange(player, enemy, spec.attackRange)
+end
+
+function Entities.IsEnemyActive(enemy, player)
+    return Entities.IsEnemyInTrackingRange(enemy, player)
 end
 
 local function MoveMeleeEnemy(enemy, player, spec, dt)
     local dx, dy = player.x - enemy.x, player.y - enemy.y
     local distance = Length(dx, dy)
-    local preferredDistance = spec.preferredDistance or spec.activationRange * 0.54
+    local preferredDistance = spec.preferredDistance or spec.attackRange * 0.54
     if distance > math.max(enemy.radius + player.radius + 0.045, preferredDistance) then
         MoveEnemy(enemy, dx, dy, spec.moveSpeed, dt)
     else
@@ -401,19 +413,21 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     end
 
     if enemy.state == "idle" then
-        if not Entities.IsEnemyActive(enemy, player) then
+        if not Entities.IsEnemyInTrackingRange(enemy, player) then
             enemy.vx, enemy.vy = 0, 0
             return
         end
 
-        if behavior == "ranged_single" or behavior == "ranged_fan" then
+        if spec.immovable then
+            enemy.vx, enemy.vy = 0, 0
+        elseif behavior == "ranged_single" or behavior == "ranged_fan" then
             MoveRangedEnemy(enemy, player, spec, dt)
-        elseif behavior ~= "rolling" then
+        else
             MoveMeleeEnemy(enemy, player, spec, dt)
         end
 
         enemy.stateTimer = enemy.stateTimer - dt
-        if enemy.stateTimer <= 0 then
+        if enemy.stateTimer <= 0 and Entities.IsEnemyInAttackRange(enemy, player) then
             BeginTelegraph(enemy, player, spec)
         end
         return

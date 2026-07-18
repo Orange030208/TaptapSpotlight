@@ -11,12 +11,37 @@ end
 local player = Entities.NewPlayer()
 player.x, player.y = 0.5, 0.5
 
-local ghostA = NewEnemy("ghost_a", 0.1, 0.1, 1)
-local ghostB = NewEnemy("ghost_b", 0.1, 0.1, 2)
-assert(Entities.IsEnemyActive(ghostA, player))
-assert(not Entities.IsEnemyActive(ghostB, player))
-ghostB.x, ghostB.y = 0.55, 0.5
-assert(Entities.IsEnemyActive(ghostB, player))
+local farSoot = NewEnemy("soot", 0.08, 0.08, 1)
+farSoot.stateTimer = 0
+assert(Entities.IsEnemyInTrackingRange(farSoot, player),
+    "ordinary enemies must track across the whole room by default")
+assert(not Entities.IsEnemyInAttackRange(farSoot, player),
+    "tracking range must not also start attacks")
+local sootStartX, sootStartY = farSoot.x, farSoot.y
+Entities.UpdateEnemy(farSoot, player, 0.1, function() end)
+assert(farSoot.x > sootStartX and farSoot.y > sootStartY,
+    "a tracking enemy must move toward a distant player")
+assert(farSoot.state == "idle", "a distant target must not start a melee attack")
+
+local attackSoot = NewEnemy("soot", 0.36, 0.5, 2)
+attackSoot.stateTimer = 0
+assert(Entities.IsEnemyInAttackRange(attackSoot, player))
+Entities.UpdateEnemy(attackSoot, player, 0.01, function() end)
+assert(attackSoot.state == "telegraph", "an enemy may attack after entering its attack range")
+
+local rollingStone = NewEnemy("stone", 0.08, 0.08, 3)
+rollingStone.stateTimer = 99
+local stoneStartX, stoneStartY = rollingStone.x, rollingStone.y
+Entities.UpdateEnemy(rollingStone, player, 0.1, function() end)
+assert(rollingStone.x > stoneStartX and rollingStone.y > stoneStartY,
+    "rolling enemies must also move while tracking")
+
+local fixedDandelion = NewEnemy("dandelion", 0.3, 0.5, 4)
+fixedDandelion.stateTimer = 99
+local dandelionStartX, dandelionStartY = fixedDandelion.x, fixedDandelion.y
+Entities.UpdateEnemy(fixedDandelion, player, 0.1, function() end)
+assert(fixedDandelion.x == dandelionStartX and fixedDandelion.y == dandelionStartY,
+    "immovable special enemies must remain fixed")
 
 local sap = NewEnemy("sap", 0.4, 0.5, 3)
 local splitChildren = Entities.GetSplitChildren(sap)
