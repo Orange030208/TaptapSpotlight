@@ -167,8 +167,24 @@ assert(HasEvent(events, "perfect_parry"))
 assert(HasEvent(events, "enemy_defeat"))
 assert(HasEvent(events, "room_clear"))
 assert(FindEvent(events, "perfect_parry").data.damage > 0)
+assert(FindEvent(events, "perfect_parry").data.originX == parry.player.x)
+assert(FindEvent(events, "perfect_parry").data.directionX > 0)
 assert(FindEvent(events, "enemy_defeat").data.kind == "soot")
 assert(parry.gauge.value == GaugeConfig.perfectGain, "killing an enemy must preserve gauge progress")
+
+local wraithContact = Game.New()
+Game.StartOrRestart(wraithContact)
+Game.ConsumeEvents(wraithContact)
+wraithContact.state = "battle"
+wraithContact.enemies = {
+    Entities.NewEnemy("luminous_wraith", { x = wraithContact.player.x + 0.05, y = wraithContact.player.y }, 2002),
+}
+Game.Update(wraithContact, 0, 0, 0)
+events = Game.ConsumeEvents(wraithContact)
+local wraithEffect = FindEvent(events, "luminous_wraith_hit")
+assert(wraithEffect ~= nil, "luminous wraith contact must emit an effect event")
+assert(wraithEffect.data.originX > wraithEffect.data.x and wraithEffect.data.directionX < 0,
+    "luminous wraith effect must point from the attacker toward the player")
 
 local reflect = Game.New()
 Game.StartOrRestart(reflect)

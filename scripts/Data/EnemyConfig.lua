@@ -58,6 +58,12 @@ return {
         moveSpeed = 0.2, touchDamage = 1, contactCooldown = 2.25, parryStagger = 0.62,
         visual = Visual({ 244, 250, 255 }, { 92, 219, 255 }, { 64, 162, 255 }),
     },
+    luminous_wraith = {
+        behavior = "contact_chase", hp = 2, radius = 0.043,
+        -- Medium pursuit, low contact damage, and a slow repeat hit interval.
+        moveSpeed = 0.2, touchDamage = 1, contactCooldown = 2.45, parryStagger = 0.65,
+        visual = Visual({ 248, 252, 250 }, { 232, 255, 142 }, { 211, 255, 72 }),
+    },
     stone = {
         behavior = "rolling", hp = 3, radius = 0.052,
         attackRangeMeters = 30, attackRange = MetersToWorld(30),

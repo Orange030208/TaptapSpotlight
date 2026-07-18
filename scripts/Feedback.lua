@@ -63,6 +63,44 @@ local function AddShockwave(state, profile, data)
     return true
 end
 
+local function AddBurst(state, profile, data)
+    if not HasPosition(data) or profile.burstDuration == nil then
+        return false
+    end
+
+    local directionX = type(data.directionX) == "number" and data.directionX or 1
+    local directionY = type(data.directionY) == "number" and data.directionY or 0
+    local directionLength = math.sqrt(directionX * directionX + directionY * directionY)
+    if directionLength <= 0.0001 and type(data.originX) == "number" and type(data.originY) == "number" then
+        directionX = data.x - data.originX
+        directionY = data.y - data.originY
+        directionLength = math.sqrt(directionX * directionX + directionY * directionY)
+    end
+    if directionLength <= 0.0001 then
+        directionX, directionY = 1, 0
+    else
+        directionX, directionY = directionX / directionLength, directionY / directionLength
+    end
+
+    table.insert(state.bursts, {
+        kind = profile.burstKind,
+        x = data.x,
+        y = data.y,
+        originX = data.originX,
+        originY = data.originY,
+        directionX = directionX,
+        directionY = directionY,
+        life = profile.burstDuration,
+        maxLife = profile.burstDuration,
+        startRadius = profile.burstStart,
+        endRadius = profile.burstEnd,
+        stroke = profile.burstStroke,
+        arcDegrees = profile.burstArcDegrees,
+        color = CopyColor(profile.burstColor),
+    })
+    return true
+end
+
 local function ApplyScreenProfile(state, profile)
     local hitStop = profile.hitStop or 0
     if hitStop > 0 then
@@ -119,6 +157,7 @@ function Feedback.New()
         hudPulseDuration = 0,
         impacts = {},
         shockwaves = {},
+        bursts = {},
         floatingTexts = {},
     }
 end
@@ -127,13 +166,19 @@ function Feedback.ProcessEvents(state, events)
     for _, event in ipairs(events or {}) do
         local name = event.name
         local data = event.data
-        if name == "parry_success" then
+        if name == "parry_start" then
+            AddBurst(state, FeedbackConfig.parryStart, data)
+        elseif name == "parry_success" then
             ApplyWorldProfile(state, FeedbackConfig.normalParry, data, nil)
+            AddBurst(state, FeedbackConfig.normalParry, data)
         elseif name == "perfect_parry" then
             local damage = FormatDamage(data)
             ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, damage ~= nil and ("完美 " .. damage) or "完美")
+            AddBurst(state, FeedbackConfig.perfectParry, data)
         elseif name == "player_hurt" then
             ApplyScreenProfile(state, FeedbackConfig.playerHurt)
+        elseif name == "luminous_wraith_hit" then
+            AddBurst(state, FeedbackConfig.luminousWraithHit, data)
         elseif name == "boss_defeat" then
             ApplyWorldProfile(state, FeedbackConfig.bossDefeat, data, "净化")
         elseif name == "boss_phase_changed" then
@@ -190,6 +235,13 @@ function Feedback.Update(state, dt)
         shockwave.life = shockwave.life - dt
         if shockwave.life <= 0 then
             table.remove(state.shockwaves, index)
+        end
+    end
+    for index = #state.bursts, 1, -1 do
+        local burst = state.bursts[index]
+        burst.life = burst.life - dt
+        if burst.life <= 0 then
+            table.remove(state.bursts, index)
         end
     end
     for index = #state.floatingTexts, 1, -1 do

@@ -1,191 +1,191 @@
 
 bard_cat_page_01.png
-size: 2048,1253
+size: 1024,627
 format: RGBA8888
 filter: Linear,Linear
 repeat: none
 右jio
   rotate: false
-  xy: 139, 1180
-  size: 137, 72
-  orig: 1546, 1545
-  offset: 881, 140
+  xy: 70, 590
+  size: 69, 36
+  orig: 773, 773
+  offset: 441, 70
   index: -1
 右大
   rotate: true
-  xy: 753, 1120
-  size: 132, 172
-  orig: 1545, 1546
-  offset: 604, 584
+  xy: 377, 560
+  size: 66, 86
+  orig: 773, 773
+  offset: 302, 292
   index: -1
 右大腿
   rotate: true
-  xy: 1296, 1101
-  size: 151, 210
-  orig: 1545, 1546
-  offset: 800, 320
+  xy: 648, 551
+  size: 76, 105
+  orig: 773, 773
+  offset: 400, 160
   index: -1
 右手
   rotate: false
-  xy: 237, 923
-  size: 285, 242
-  orig: 1546, 1545
-  offset: 870, 614
+  xy: 119, 462
+  size: 143, 121
+  orig: 773, 773
+  offset: 435, 307
   index: -1
 右眼
   rotate: true
-  xy: 613, 1127
-  size: 125, 139
-  orig: 1545, 1546
-  offset: 822, 906
+  xy: 307, 564
+  size: 63, 70
+  orig: 773, 773
+  offset: 411, 453
   index: -1
 头颅
   rotate: false
   xy: 1, 1
-  size: 1001, 790
-  orig: 1546, 1545
-  offset: 251, 742
+  size: 501, 395
+  orig: 773, 773
+  offset: 126, 371
   index: -1
 尾巴
   rotate: false
-  xy: 524, 898
-  size: 388, 221
-  orig: 1546, 1545
-  offset: 345, 410
+  xy: 262, 449
+  size: 194, 111
+  orig: 773, 773
+  offset: 173, 205
   index: -1
 左jio
   rotate: false
-  xy: 277, 1177
-  size: 137, 75
-  orig: 1546, 1545
-  offset: 600, 128
+  xy: 139, 589
+  size: 69, 38
+  orig: 773, 773
+  offset: 300, 64
   index: -1
 左大腿
   rotate: true
-  xy: 1, 965
-  size: 215, 236
-  orig: 1545, 1546
-  offset: 624, 319
+  xy: 1, 483
+  size: 108, 118
+  orig: 773, 773
+  offset: 312, 160
   index: -1
 左手
   rotate: false
-  xy: 1729, 1040
-  size: 313, 212
-  orig: 1546, 1545
-  offset: 624, 579
+  xy: 865, 520
+  size: 157, 106
+  orig: 773, 773
+  offset: 312, 290
   index: -1
 左手指
   rotate: true
-  xy: 1, 1181
-  size: 71, 138
-  orig: 1545, 1546
-  offset: 1077, 692
+  xy: 1, 591
+  size: 36, 69
+  orig: 773, 773
+  offset: 539, 346
   index: -1
 左眼
   rotate: true
-  xy: 925, 1112
-  size: 141, 145
-  orig: 1545, 1546
-  offset: 613, 885
+  xy: 463, 556
+  size: 71, 73
+  orig: 773, 773
+  offset: 307, 443
   index: -1
 左腿
   rotate: false
-  xy: 415, 1167
-  size: 97, 85
-  orig: 1546, 1545
-  offset: 830, 298
+  xy: 208, 584
+  size: 49, 43
+  orig: 773, 773
+  offset: 415, 149
   index: -1
 左腿1
   rotate: false
-  xy: 513, 1166
-  size: 100, 86
-  orig: 1546, 1545
-  offset: 614, 309
+  xy: 257, 583
+  size: 50, 43
+  orig: 773, 773
+  offset: 307, 155
   index: -1
 未命名作品-1
   rotate: true
-  xy: 1072, 1108
-  size: 144, 223
-  orig: 1545, 1546
-  offset: 566, 168
+  xy: 536, 554
+  size: 72, 112
+  orig: 773, 773
+  offset: 283, 84
   index: -1
 未命名作品-14
   rotate: false
-  xy: 1702, 603
-  size: 345, 436
-  orig: 1546, 1545
-  offset: 810, 533
+  xy: 851, 302
+  size: 173, 218
+  orig: 773, 773
+  offset: 405, 267
   index: -1
 未命名作品-3
   rotate: true
-  xy: 1507, 1079
-  size: 174, 222
-  orig: 1545, 1546
-  offset: 832, 164
+  xy: 754, 540
+  size: 87, 111
+  orig: 773, 773
+  offset: 416, 82
   index: -1
 羽毛
   rotate: true
-  xy: 1296, 744
-  size: 334, 405
-  orig: 1545, 1546
-  offset: 170, 667
+  xy: 648, 372
+  size: 167, 203
+  orig: 773, 773
+  offset: 85, 334
   index: -1
 衣服
   rotate: true
-  xy: 912, 792
-  size: 316, 383
-  orig: 1545, 1546
-  offset: 645, 450
+  xy: 456, 396
+  size: 158, 192
+  orig: 773, 773
+  offset: 323, 225
   index: -1
 
 bard_cat_page_02.png
-size: 2048,2048
+size: 1024,1024
 format: RGBA8888
 filter: Linear,Linear
 repeat: none
 half1
   rotate: false
   xy: 1, 1
-  size: 2046, 2046
-  orig: 2046, 2046
+  size: 1023, 1023
+  orig: 1023, 1023
   offset: 0, 0
   index: -1
 
 bard_cat_page_03.png
-size: 2048,2048
+size: 1024,1024
 format: RGBA8888
 filter: Linear,Linear
 repeat: none
 close
   rotate: false
   xy: 1, 1
-  size: 2046, 2046
-  orig: 2046, 2046
+  size: 1023, 1023
+  orig: 1023, 1023
   offset: 0, 0
   index: -1
 
 bard_cat_page_04.png
-size: 2048,2048
+size: 1024,1024
 format: RGBA8888
 filter: Linear,Linear
 repeat: none
 close1
   rotate: false
   xy: 1, 1
-  size: 2046, 2046
-  orig: 2046, 2046
+  size: 1023, 1023
+  orig: 1023, 1023
   offset: 0, 0
   index: -1
 
 bard_cat_page_05.png
-size: 2048,2048
+size: 1024,1024
 format: RGBA8888
 filter: Linear,Linear
 repeat: none
 half
   rotate: false
   xy: 1, 1
-  size: 2046, 2046
-  orig: 2046, 2046
+  size: 1023, 1023
+  orig: 1023, 1023
   offset: 0, 0
   index: -1

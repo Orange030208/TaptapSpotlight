@@ -50,8 +50,8 @@ return {
                 { x = 0.5, y = 0.72 },
             },
             groups = {
-                { "ghost_a", "blue_swarm", "ghost_b", "mushroom", "toxic_moss" },
-                { "ghost_a", "soot", "ghost_b", "sap", "toxic_moss" },
+                { "luminous_wraith", "blue_swarm", "ghost_b", "mushroom", "toxic_moss" },
+                { "luminous_wraith", "soot", "ghost_b", "sap", "toxic_moss" },
             },
         },
         crypt = {

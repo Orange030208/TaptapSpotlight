@@ -95,8 +95,20 @@ player.parryTimer, player.parryDirectionX, player.parryDirectionY = 1, 1, 0
 assert(Entities.TryParryEnemy(player, parryGhost, 1))
 assert(parryGhost.state == "stagger")
 
-local fixedMoss = NewEnemy("toxic_moss", 0.5, 0.5, 10)
-local movingSoot = NewEnemy("soot", 0.5, 0.5, 11)
+local luminousWraith = NewEnemy("luminous_wraith", 0.7, 0.5, 10)
+luminousWraith.stateTimer = 0
+local wraithStartX = luminousWraith.x
+Entities.UpdateEnemy(luminousWraith, player, 0.1, function() end)
+assert(luminousWraith.x < wraithStartX, "luminous wraith must immediately pursue the player")
+luminousWraith.x, luminousWraith.y = player.x, player.y
+assert(Entities.CollectEnemyHit(luminousWraith, player) ~= nil, "luminous wraith must deal contact damage")
+assert(Entities.CollectEnemyHit(luminousWraith, player) == nil, "luminous wraith contact damage must respect cooldown")
+player.parryTimer, player.parryDirectionX, player.parryDirectionY = 1, 1, 0
+assert(Entities.TryParryEnemy(player, luminousWraith, 1))
+assert(luminousWraith.state == "stagger")
+
+local fixedMoss = NewEnemy("toxic_moss", 0.5, 0.5, 11)
+local movingSoot = NewEnemy("soot", 0.5, 0.5, 12)
 Entities.ResolveEnemySeparation({ fixedMoss, movingSoot })
 assert(fixedMoss.x == 0.5 and fixedMoss.y == 0.5, "ground hazards must remain fixed")
 

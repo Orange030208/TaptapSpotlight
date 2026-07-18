@@ -5,7 +5,7 @@ local RoomData = require "Data.RoomData"
 
 local expectedKinds = {
     "soot", "blue_swarm", "tree", "sap", "ghost_a", "ghost_b", "stone",
-    "mushroom", "dandelion", "purple_orb", "toxic_moss",
+    "mushroom", "dandelion", "purple_orb", "toxic_moss", "luminous_wraith",
 }
 
 assert(EnemyConfig.roomWidthMeters == 30)
@@ -38,6 +38,10 @@ assert(EnemyConfig.sap.split.count == 2)
 assert(EnemyConfig.dandelion.immovable)
 assert(EnemyConfig.toxic_moss.immovable)
 assert(not EnemyConfig.stone.immovable)
+assert(EnemyConfig.luminous_wraith.behavior == "contact_chase")
+assert(EnemyConfig.luminous_wraith.moveSpeed == 0.2)
+assert(EnemyConfig.luminous_wraith.touchDamage == 1)
+assert(EnemyConfig.luminous_wraith.contactCooldown == 2.45)
 
 local encountered = {}
 for _, room in pairs(RoomData.rooms) do

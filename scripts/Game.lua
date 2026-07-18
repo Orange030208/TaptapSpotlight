@@ -696,6 +696,8 @@ local function ResolveParries(game)
                 local eventData = {
                     x = result.x or hitX, y = result.y or hitY, damage = result.damage,
                     sourceKind = enemy.kind, defenseOnly = result.damage <= 0,
+                    originX = game.player.x, originY = game.player.y,
+                    directionX = game.player.parryDirectionX, directionY = game.player.parryDirectionY,
                 }
                 EmitEvent(game, perfect and "perfect_parry" or "parry_success", eventData)
                 AddParticles(game, hitX, hitY,
@@ -729,6 +731,8 @@ local function ResolveParries(game)
                 parriedMelee = true
                 EmitEvent(game, perfect and "perfect_parry" or "parry_success", {
                     x = hitX, y = hitY, damage = appliedDamage, sourceKind = enemy.kind,
+                    originX = game.player.x, originY = game.player.y,
+                    directionX = game.player.parryDirectionX, directionY = game.player.parryDirectionY,
                 })
                 AddParticles(game, hitX, hitY, { 115, 240, 255 }, 15)
                 local repaired = TryPerfectRepair(game)
@@ -750,6 +754,10 @@ local function ResolveParries(game)
                 y = hitY,
                 damage = projectile.damage,
                 sourceKind = projectile.sourceKind,
+                originX = game.player.x,
+                originY = game.player.y,
+                directionX = game.player.parryDirectionX,
+                directionY = game.player.parryDirectionY,
             }
             EmitEvent(game, perfect and "perfect_parry" or "parry_success", eventData)
             EmitEvent(game, "projectile_reflect", eventData)
@@ -808,6 +816,24 @@ local function ResolveEnemyContacts(game)
                     amount = hit.amount,
                     sourceKind = hit.sourceKind,
                 })
+                if enemy.kind == "luminous_wraith" then
+                    local directionX = game.player.x - enemy.x
+                    local directionY = game.player.y - enemy.y
+                    local directionLength = math.sqrt(directionX * directionX + directionY * directionY)
+                    if directionLength <= 0.0001 then
+                        directionX, directionY = 1, 0
+                    else
+                        directionX, directionY = directionX / directionLength, directionY / directionLength
+                    end
+                    EmitEvent(game, "luminous_wraith_hit", {
+                        x = game.player.x,
+                        y = game.player.y,
+                        originX = enemy.x,
+                        originY = enemy.y,
+                        directionX = directionX,
+                        directionY = directionY,
+                    })
+                end
             end
         end
     end

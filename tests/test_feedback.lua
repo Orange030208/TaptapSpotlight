@@ -7,10 +7,20 @@ assert(Feedback.GetSimulationDelta(feedback, 0.016) == 0.016)
 assert(Feedback.GetHudPulse(feedback) == 0)
 
 Feedback.ProcessEvents(feedback, {
-    { name = "parry_success", data = { x = 0.4, y = 0.5, damage = 0.5 } },
+    { name = "parry_start", data = { x = 0.4, y = 0.5, directionX = 1, directionY = 0 } },
+})
+assert(#feedback.bursts == 1, "starting a parry must create a player guard burst")
+assert(feedback.bursts[1].kind == "parry_guard")
+
+Feedback.ProcessEvents(feedback, {
+    {
+        name = "parry_success",
+        data = { x = 0.4, y = 0.5, originX = 0.35, originY = 0.5, directionX = 1, directionY = 0, damage = 0.5 },
+    },
 })
 assert(Feedback.GetSimulationDelta(feedback, 0.016) == 0.016, "normal parries must not pause gameplay")
 assert(#feedback.impacts == 1)
+assert(#feedback.bursts == 2 and feedback.bursts[2].kind == "parry_success")
 assert(#feedback.floatingTexts == 0, "normal parries must not add damage text")
 assert(feedback.shake == nil and feedback.flash == nil, "normal parries must stay world-local")
 Feedback.Update(feedback, 1.0)
@@ -36,6 +46,16 @@ assert(Feedback.GetSimulationDelta(hurt, 0.016) == 0.016, "damage feedback must 
 assert(#hurt.impacts == 0 and #hurt.floatingTexts == 0, "damage feedback belongs to the screen and HUD")
 assert(Feedback.GetHudPulse(hurt) > 0, "damage needs to pulse the health HUD")
 assert(hurt.shake ~= nil and hurt.flash ~= nil, "damage needs a restrained screen warning")
+
+local wraithHit = Feedback.New()
+Feedback.ProcessEvents(wraithHit, {
+    {
+        name = "luminous_wraith_hit",
+        data = { x = 0.5, y = 0.5, originX = 0.57, originY = 0.5, directionX = -1, directionY = 0 },
+    },
+})
+assert(#wraithHit.bursts == 1 and wraithHit.bursts[1].kind == "wraith_touch",
+    "luminous wraith contact must create a spectral strike burst")
 
 Feedback.Update(peak, 1.0)
 assert(Feedback.GetSimulationDelta(peak, 0.016) == 0.016)
@@ -70,6 +90,9 @@ assert(#combo.shockwaves == 3, "combo events must create layered world shockwave
 assert(Feedback.GetSimulationDelta(combo, 0.016) == 0, "tier upgrades need a brief hit stop")
 Feedback.Update(combo, 1.0)
 assert(#combo.shockwaves == 0, "shockwaves must clean themselves up")
+Feedback.Update(feedback, 1.0)
+Feedback.Update(wraithHit, 1.0)
+assert(#feedback.bursts == 0 and #wraithHit.bursts == 0, "bursts must clean themselves up")
 
 local phase = Feedback.New()
 Feedback.ProcessEvents(phase, {

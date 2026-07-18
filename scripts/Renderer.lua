@@ -5,11 +5,12 @@ local BossRenderer = require "BossRenderer"
 
 local Renderer = {}
 local SOOT_SPRITE_PATH = "image/soot_monster.png"
+local LUMINOUS_WRAITH_SPRITE_PATH = "image/luminous_wraith_solid_alpha_20260718134330.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
 -- 当前资源由 Spine 3.8.75 导出，但运行时要求 Spine 4.2。
--- 在用 Spine 4.2 重新导出骨骼前，启用静态角色回退以避免原生崩溃。
+-- 在用 Spine 4.2 重新导出骨骼前，始终使用静态角色回退以避免原生崩溃。
 local ENABLE_SPINE_PLAYER = false
 local playerImageHandle = 0
 local playerImageWidth = 1
@@ -17,6 +18,9 @@ local playerImageHeight = 1
 local sootImageHandle = 0
 local sootImageWidth = 1
 local sootImageHeight = 1
+local luminousWraithImageHandle = 0
+local luminousWraithImageWidth = 1
+local luminousWraithImageHeight = 1
 ---@type SpineInstance|nil
 local playerSpine = nil
 ---@type string|nil
@@ -77,7 +81,24 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    return playerLoaded and sootLoaded
+    local luminousWraithLoaded = true
+    luminousWraithImageHandle = nvgCreateImage(ctx, LUMINOUS_WRAITH_SPRITE_PATH, 0)
+    if luminousWraithImageHandle == nil or luminousWraithImageHandle <= 0 then
+        luminousWraithImageHandle = 0
+        luminousWraithLoaded = false
+        print("WARNING: Failed to load luminous wraith sprite: " .. LUMINOUS_WRAITH_SPRITE_PATH .. "; using vector fallback")
+    else
+        luminousWraithImageWidth, luminousWraithImageHeight = nvgImageSize(ctx, luminousWraithImageHandle)
+        if luminousWraithImageWidth <= 0 or luminousWraithImageHeight <= 0 then
+            nvgDeleteImage(ctx, luminousWraithImageHandle)
+            luminousWraithImageHandle = 0
+            luminousWraithImageWidth, luminousWraithImageHeight = 1, 1
+            luminousWraithLoaded = false
+            print("WARNING: Luminous wraith sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
+    return playerLoaded and sootLoaded and luminousWraithLoaded
 end
 
 function Renderer.UnloadAssets(ctx)
@@ -99,6 +120,11 @@ function Renderer.UnloadAssets(ctx)
     end
     sootImageHandle = 0
     sootImageWidth, sootImageHeight = 1, 1
+    if luminousWraithImageHandle ~= nil and luminousWraithImageHandle > 0 then
+        nvgDeleteImage(ctx, luminousWraithImageHandle)
+    end
+    luminousWraithImageHandle = 0
+    luminousWraithImageWidth, luminousWraithImageHeight = 1, 1
 end
 
 local function Lerp(a, b, t)
@@ -621,6 +647,27 @@ local function DrawSpriteSoot(ctx, x, y, enemy, time, scale)
     nvgRestore(ctx)
 end
 
+local function GetLuminousWraithSpriteHeight(scale)
+    return 46 * scale
+end
+
+local function DrawSpriteLuminousWraith(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetLuminousWraithSpriteHeight(scale)
+    local displayWidth = displayHeight * luminousWraithImageWidth / luminousWraithImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 3 * scale
+    local breathe = 1 + math.sin(time * 4.2 + enemy.id * 0.73) * 0.025
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y)
+    nvgScale(ctx, breathe, breathe)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, luminousWraithImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
 local function DrawBlueSwarm(ctx, x, y, size, scale, time, color, secondary)
     local centerY = y - size * 0.58
     for index = 1, 12 do
@@ -829,6 +876,12 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         DrawTree(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary)
     elseif enemy.kind == "sap" then
         DrawSap(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+    elseif enemy.kind == "luminous_wraith" then
+        if luminousWraithImageHandle ~= nil and luminousWraithImageHandle > 0 then
+            DrawSpriteLuminousWraith(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawGhost(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        end
     elseif enemy.kind == "ghost_a" or enemy.kind == "ghost_b" then
         DrawGhost(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
     elseif enemy.kind == "stone" then
@@ -851,6 +904,8 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     local healthY = y - size * 1.18
     if enemy.kind == "soot" and sootImageHandle ~= nil and sootImageHandle > 0 then
         healthY = y - GetSootSpriteHeight(scale) - 5 * scale
+    elseif enemy.kind == "luminous_wraith" and luminousWraithImageHandle ~= nil and luminousWraithImageHandle > 0 then
+        healthY = y - GetLuminousWraithSpriteHeight(scale) - 2 * scale
     end
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
     nvgBeginPath(ctx)
@@ -1024,6 +1079,136 @@ local function DrawParticles(ctx, width, height, particles)
     end
 end
 
+local function DrawBurstArc(ctx, x, y, radius, facingAngle, halfAngle, color, alpha, stroke)
+    nvgBeginPath(ctx)
+    for step = 0, 12 do
+        local angle = facingAngle - halfAngle + (halfAngle * 2 * step / 12)
+        local pointX = x + math.cos(angle) * radius
+        local pointY = y + math.sin(angle) * radius
+        if step == 0 then
+            nvgMoveTo(ctx, pointX, pointY)
+        else
+            nvgLineTo(ctx, pointX, pointY)
+        end
+    end
+    nvgStrokeWidth(ctx, stroke)
+    StrokeColor(ctx, color, alpha)
+    nvgStroke(ctx)
+end
+
+local function DrawParryGuardBurst(ctx, x, y, scale, burst, progress)
+    local radius = Lerp(burst.startRadius, burst.endRadius, math.sqrt(progress)) * scale
+    local alpha = math.floor(230 * (1 - progress) * (1 - progress))
+    local facingAngle = math.atan(burst.directionY, burst.directionX)
+    local halfAngle = math.rad((burst.arcDegrees or 120) * 0.5)
+
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, x, y)
+    for step = 0, 14 do
+        local angle = facingAngle - halfAngle + (halfAngle * 2 * step / 14)
+        nvgLineTo(ctx, x + math.cos(angle) * radius, y + math.sin(angle) * radius)
+    end
+    nvgClosePath(ctx)
+    Color(ctx, burst.color, math.floor(alpha * 0.18))
+    nvgFill(ctx)
+    DrawBurstArc(ctx, x, y, radius, facingAngle, halfAngle, burst.color, alpha,
+        math.max(1, burst.stroke * scale))
+
+    for index = -1, 1 do
+        local rayAngle = facingAngle + index * halfAngle * 0.62
+        local rayStart = radius * 0.28
+        local rayEnd = radius * (0.78 + (index + 1) * 0.07)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x + math.cos(rayAngle) * rayStart, y + math.sin(rayAngle) * rayStart)
+        nvgLineTo(ctx, x + math.cos(rayAngle) * rayEnd, y + math.sin(rayAngle) * rayEnd)
+        nvgStrokeWidth(ctx, math.max(1, burst.stroke * scale * 0.58))
+        StrokeColor(ctx, { 232, 255, 255 }, math.floor(alpha * 0.78))
+        nvgStroke(ctx)
+    end
+end
+
+local function DrawParrySuccessBurst(ctx, x, y, scale, burst, progress)
+    local radius = Lerp(burst.startRadius, burst.endRadius, math.sqrt(progress)) * scale
+    local alpha = math.floor(250 * (1 - progress) * (1 - progress))
+    local rayCount = burst.kind == "perfect_parry" and 8 or 6
+    local coreRadius = radius * (burst.kind == "perfect_parry" and 0.34 or 0.26)
+    local glow = nvgRadialGradient(ctx, x, y, coreRadius * 0.25, radius * 1.18,
+        nvgRGBA(burst.color[1], burst.color[2], burst.color[3], math.floor(alpha * 0.55)),
+        nvgRGBA(burst.color[1], burst.color[2], burst.color[3], 0))
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x, y, radius * 1.18)
+    nvgFillPaint(ctx, glow)
+    nvgFill(ctx)
+
+    local facingAngle = math.atan(burst.directionY, burst.directionX)
+    for index = 1, rayCount do
+        local angle = facingAngle + (index - 1) * math.pi * 2 / rayCount
+        local startRadius = coreRadius * 0.65
+        local endRadius = radius * (0.72 + (index % 2) * 0.16)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x + math.cos(angle) * startRadius, y + math.sin(angle) * startRadius)
+        nvgLineTo(ctx, x + math.cos(angle) * endRadius, y + math.sin(angle) * endRadius)
+        nvgStrokeWidth(ctx, math.max(1, burst.stroke * scale * (burst.kind == "perfect_parry" and 0.92 or 0.66)))
+        StrokeColor(ctx, burst.color, alpha)
+        nvgStroke(ctx)
+    end
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x, y, coreRadius)
+    Color(ctx, { 255, 252, 236 }, math.floor(alpha * 0.92))
+    nvgFill(ctx)
+end
+
+local function DrawWraithTouchBurst(ctx, width, height, x, y, scale, burst, progress)
+    local radius = Lerp(burst.startRadius, burst.endRadius, math.sqrt(progress)) * scale
+    local alpha = math.floor(235 * (1 - progress) * (1 - progress))
+    local originX = x - burst.directionX * radius * 1.15
+    local originY = y - burst.directionY * radius * 1.15
+    if type(burst.originX) == "number" and type(burst.originY) == "number" then
+        originX, originY = Renderer.WorldToScreen(width, height, burst.originX, burst.originY)
+    end
+
+    local tetherX = x - originX
+    local tetherY = y - originY
+    local tetherLength = math.sqrt(tetherX * tetherX + tetherY * tetherY)
+    if tetherLength > 0.001 then
+        local perpendicularX = -tetherY / tetherLength
+        local perpendicularY = tetherX / tetherLength
+        local bend = math.sin(progress * math.pi) * math.min(radius * 0.72, tetherLength * 0.18)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, originX, originY)
+        nvgBezierTo(ctx,
+            originX + tetherX * 0.28 + perpendicularX * bend, originY + tetherY * 0.28 + perpendicularY * bend,
+            originX + tetherX * 0.72 - perpendicularX * bend, originY + tetherY * 0.72 - perpendicularY * bend,
+            x, y)
+        nvgStrokeWidth(ctx, math.max(1.2, burst.stroke * scale * 1.45))
+        StrokeColor(ctx, burst.color, math.floor(alpha * 0.36))
+        nvgStroke(ctx)
+        nvgStrokeWidth(ctx, math.max(1, burst.stroke * scale * 0.5))
+        StrokeColor(ctx, { 249, 255, 198 }, math.floor(alpha * 0.92))
+        nvgStroke(ctx)
+    end
+
+    local glow = nvgRadialGradient(ctx, x, y, radius * 0.12, radius * 1.32,
+        nvgRGBA(burst.color[1], burst.color[2], burst.color[3], math.floor(alpha * 0.48)),
+        nvgRGBA(burst.color[1], burst.color[2], burst.color[3], 0))
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, x, y, radius * 1.32)
+    nvgFillPaint(ctx, glow)
+    nvgFill(ctx)
+
+    for index = 1, 4 do
+        local angle = math.atan(burst.directionY, burst.directionX) + (index - 2.5) * 0.56
+        local startRadius = radius * 0.26
+        local endRadius = radius * (0.68 + (index % 2) * 0.13)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x + math.cos(angle) * startRadius, y + math.sin(angle) * startRadius)
+        nvgLineTo(ctx, x + math.cos(angle) * endRadius, y + math.sin(angle) * endRadius)
+        nvgStrokeWidth(ctx, math.max(1, burst.stroke * scale * 0.62))
+        StrokeColor(ctx, burst.color, alpha)
+        nvgStroke(ctx)
+    end
+end
+
 local function DrawFeedbackWorld(ctx, width, height, feedback)
     if feedback == nil then
         return
@@ -1039,6 +1224,18 @@ local function DrawFeedbackWorld(ctx, width, height, feedback)
         nvgStrokeWidth(ctx, math.max(1, impact.stroke * scale * (1 - progress * 0.35)))
         StrokeColor(ctx, impact.color, alpha)
         nvgStroke(ctx)
+    end
+
+    for _, burst in ipairs(feedback.bursts or {}) do
+        local progress = 1 - Clamp(burst.life / math.max(0.001, burst.maxLife), 0, 1)
+        local x, y, scale = Renderer.WorldToScreen(width, height, burst.x, burst.y)
+        if burst.kind == "parry_guard" then
+            DrawParryGuardBurst(ctx, x, y, scale, burst, progress)
+        elseif burst.kind == "parry_success" or burst.kind == "perfect_parry" then
+            DrawParrySuccessBurst(ctx, x, y, scale, burst, progress)
+        elseif burst.kind == "wraith_touch" then
+            DrawWraithTouchBurst(ctx, width, height, x, y, scale, burst, progress)
+        end
     end
 
     for _, shockwave in ipairs(feedback.shockwaves or {}) do
