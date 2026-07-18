@@ -169,21 +169,27 @@ local function ApplyWorldProfile(state, profile, data, text)
     AddFloatingText(state, profile, data, text)
 end
 
-local function StartPerfectStreakDisplay(state, data)
-    local profile = FeedbackConfig.perfectStreak
-    local count = type(data) == "table" and math.max(1, math.floor(data.perfectStreak or 1)) or 1
-    state.perfectStreakDisplay = {
-        count = count,
-        focusIndex = math.min(count, profile.iconLimit),
+local function StartGuardStreakDisplay(state, data, kind)
+    local profile = kind == "perfect" and FeedbackConfig.perfectStreak or FeedbackConfig.normalParry
+    state.guardStreakCount = (state.guardStreakCount or 0) + 1
+    state.guardStreakDisplay = {
+        kind = kind,
+        count = state.guardStreakCount,
+        x = type(data) == "table" and data.x or 0,
+        y = type(data) == "table" and data.y or 0,
         life = profile.displayDuration,
         maxLife = profile.displayDuration,
+        popDuration = profile.popDuration,
     }
 
-    local strength = math.min(profile.shakeMax, profile.shakeBase + (count - 1) * profile.shakePerStack)
+    local strength = kind == "perfect"
+        and math.min(FeedbackConfig.perfectStreak.shakeMax,
+            FeedbackConfig.perfectStreak.shakeBase + (state.guardStreakCount - 1) * FeedbackConfig.perfectStreak.shakePerStack)
+        or (profile.shake or 0)
     if state.shake == nil or strength >= state.shake.strength then
         state.shake = {
-            timer = profile.shakeDuration,
-            maxTimer = profile.shakeDuration,
+            timer = kind == "perfect" and FeedbackConfig.perfectStreak.shakeDuration or (profile.shakeDuration or 0),
+            maxTimer = kind == "perfect" and FeedbackConfig.perfectStreak.shakeDuration or (profile.shakeDuration or 0),
             strength = strength,
         }
     end
@@ -202,6 +208,8 @@ function Feedback.New()
         bursts = {},
         floatingTexts = {},
         perfectStreakDisplay = nil,
+        guardStreakDisplay = nil,
+        guardStreakCount = 0,
         damagePopupSerial = 0,
     }
 end

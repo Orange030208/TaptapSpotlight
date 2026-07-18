@@ -1,7 +1,7 @@
 -- Design-owned enemy roster. World coordinates are normalized to room width.
 local ROOM_WIDTH_METERS = 30
 local DEFAULT_TRACKING_RANGE_METERS = ROOM_WIDTH_METERS * math.sqrt(2)
-local ENEMY_SIZE_MULTIPLIER = 2
+local ENEMY_SIZE_MULTIPLIER = 1.5
 
 local function MetersToWorld(meters)
     return meters / ROOM_WIDTH_METERS
@@ -20,30 +20,30 @@ return {
 
     soot = {
         behavior = "melee_lunge", hp = 2, radius = 0.035,
-        attackRangeMeters = 5, attackRange = MetersToWorld(5),
+        attackRangeMeters = 6, attackRange = MetersToWorld(6),
         moveSpeed = 0.19, touchDamage = 1,
         attack = { interval = 1.45, telegraph = 0.44, active = 0.24, recovery = 0.52, dashSpeed = 0.88, arc = 70 },
         visual = Visual({ 55, 58, 68 }, { 136, 140, 154 }, { 18, 20, 30 }),
     },
     blue_swarm = {
         behavior = "aoe_pulse", hp = 2, radius = 0.04,
-        attackRangeMeters = 3, attackRange = MetersToWorld(3),
+        attackRangeMeters = 3.5, attackRange = MetersToWorld(3.5),
         moveSpeed = 0.34, touchDamage = 1,
-        attack = { interval = 0.7, repeatInterval = 0.7, telegraph = 0.2, active = 0.01, recovery = 0.09, range = MetersToWorld(3) },
+        attack = { interval = 0.7, repeatInterval = 0.7, telegraph = 0.2, active = 0.01, recovery = 0.09, range = MetersToWorld(3.5) },
         visual = Visual({ 82, 166, 255 }, { 169, 225, 255 }, { 22, 69, 142 }),
     },
     tree = {
         behavior = "tree_swing", hp = 3, radius = 0.055,
-        attackRangeMeters = 3, attackRange = MetersToWorld(3),
+        attackRangeMeters = 4, attackRange = MetersToWorld(4),
         moveSpeed = 0.11, touchDamage = 2,
-        attack = { interval = 1.5, repeatInterval = 1.5, telegraph = 0.55, active = 0.08, recovery = 0.22, range = MetersToWorld(3), arc = 60 },
+        attack = { interval = 1.5, repeatInterval = 1.5, telegraph = 0.55, active = 0.08, recovery = 0.22, range = MetersToWorld(4), arc = 60 },
         visual = Visual({ 29, 31, 39 }, { 75, 65, 86 }, { 7, 9, 16 }),
     },
     sap = {
         behavior = "melee_arc", hp = 3, radius = 0.043,
-        attackRangeMeters = 1, attackRange = MetersToWorld(1),
+        attackRangeMeters = 1.5, attackRange = MetersToWorld(1.5),
         moveSpeed = 0.19, touchDamage = 1,
-        attack = { interval = 1.25, telegraph = 0.30, active = 0.14, recovery = 0.34, range = MetersToWorld(1), arc = 60 },
+        attack = { interval = 1.25, telegraph = 0.30, active = 0.14, recovery = 0.34, range = MetersToWorld(1.5), arc = 60 },
         split = { count = 2, childHpRatio = 0.5, childRadiusRatio = 0.72, offset = 0.04 },
         visual = Visual({ 178, 237, 225 }, { 106, 194, 181 }, { 61, 124, 131 }),
     },
@@ -62,7 +62,7 @@ return {
     },
     mushroom = {
         behavior = "ranged_single", hp = 2, radius = 0.04,
-        attackRangeMeters = 8, attackRange = MetersToWorld(8),
+        attackRangeMeters = 12, attackRange = MetersToWorld(12),
         moveSpeed = 0.1, touchDamage = 1, minimumDistance = 0.2, maximumDistance = 0.43,
         attack = { interval = 0.36, repeatInterval = 0.5, telegraph = 0.07, recovery = 0.07 },
         projectile = { count = 1, speed = 0.48, style = "spore", radius = 0.016, damage = 1 },
@@ -81,9 +81,9 @@ return {
     },
     purple_orb = {
         behavior = "aoe_pulse", hp = 2, radius = 0.043,
-        attackRangeMeters = 3, attackRange = MetersToWorld(3),
-        moveSpeed = 0.18, preferredDistance = MetersToWorld(2.8), touchDamage = 1,
-        attack = { interval = 0.55, repeatInterval = 1, telegraph = 0.25, active = 0.1, recovery = 0.1, range = MetersToWorld(3) },
+        attackRangeMeters = 4, attackRange = MetersToWorld(4),
+        moveSpeed = 0.18, preferredDistance = MetersToWorld(3.8), touchDamage = 1,
+        attack = { interval = 0.55, repeatInterval = 1, telegraph = 0.25, active = 0.1, recovery = 0.1, range = MetersToWorld(4) },
         visual = Visual({ 253, 247, 255 }, { 208, 114, 255 }, { 115, 57, 160 }),
     },
     toxic_moss = {
