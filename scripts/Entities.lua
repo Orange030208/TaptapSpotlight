@@ -125,7 +125,7 @@ function Entities.NewEnemy(kind, spawn, id)
         kind = kind,
         x = spawn.x,
         y = spawn.y,
-        radius = spec.radius,
+        radius = spec.radius * EnemyConfig.sizeMultiplier,
         hp = spec.hp,
         maxHp = spec.hp,
         state = "idle",
@@ -605,44 +605,6 @@ function Entities.CollectEnemyHit(enemy, player)
         return { amount = spec.touchDamage, sourceKind = enemy.kind }
     end
     return nil
-end
-
-function Entities.ResolveEnemySeparation(enemies)
-    for firstIndex = 1, #enemies - 1 do
-        local first = enemies[firstIndex]
-        if not first.dead then
-            for secondIndex = firstIndex + 1, #enemies do
-                local second = enemies[secondIndex]
-                if not second.dead then
-                    local dx = second.x - first.x
-                    local dy = second.y - first.y
-                    local distance = Length(dx, dy)
-                    local minimum = first.radius + second.radius + 0.018
-                    if distance < minimum then
-                        local nx, ny
-                        if distance <= 0.0001 then
-                            nx = first.id < second.id and 1 or -1
-                            ny = 0
-                            distance = 0
-                        else
-                            nx, ny = dx / distance, dy / distance
-                        end
-                        local overlap = minimum - distance
-                        local firstFixed = EnemyConfig[first.kind].immovable
-                        local secondFixed = EnemyConfig[second.kind].immovable
-                        if not (firstFixed and secondFixed) then
-                            local firstPush = firstFixed and 0 or (secondFixed and overlap or overlap * 0.5)
-                            local secondPush = secondFixed and 0 or (firstFixed and overlap or overlap * 0.5)
-                            first.x = Clamp(first.x - nx * firstPush, RoomConfig.minX, RoomConfig.maxX)
-                            first.y = Clamp(first.y - ny * firstPush, RoomConfig.minY, RoomConfig.maxY)
-                            second.x = Clamp(second.x + nx * secondPush, RoomConfig.minX, RoomConfig.maxX)
-                            second.y = Clamp(second.y + ny * secondPush, RoomConfig.minY, RoomConfig.maxY)
-                        end
-                    end
-                end
-            end
-        end
-    end
 end
 
 function Entities.UpdateProjectile(projectile, dt)

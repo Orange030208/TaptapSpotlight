@@ -901,7 +901,6 @@ local function UpdateEnemies(game, dt)
             Entities.UpdateEnemy(enemy, game.player, dt, EmitProjectile)
         end
     end
-    Entities.ResolveEnemySeparation(game.enemies)
 end
 
 local function ResolveEnemyContacts(game)

@@ -698,6 +698,7 @@ end
 
 local function DrawFallbackPlayer(ctx, width, height, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
+    scale = scale * PlayerConfig.sizeMultiplier
     local bodyW = 19 * scale
     local bodyH = 29 * scale
     local flip = player.facing == "left" and -1 or 1
@@ -730,6 +731,7 @@ end
 
 local function DrawSpritePlayer(ctx, width, height, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
+    scale = scale * PlayerConfig.sizeMultiplier
     local displayHeight = 58 * scale
     local displayWidth = displayHeight * playerImageWidth / playerImageHeight
     local drawX = -displayWidth * 0.5
@@ -820,6 +822,7 @@ end
 
 local function DrawSpinePlayer(ctx, width, height, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
+    scale = scale * PlayerConfig.sizeMultiplier
     local displayHeight = 58 * scale
     local flip = player.facing == "left" and -1 or 1
     local bob = math.sin(time * 10) * 1.2 * scale
@@ -932,10 +935,10 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
         DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - arc * 0.5, arc,
             telegraphColor, progress, pulse, scale)
     elseif behavior == "ranged_fan" then
-        if attack.projectile ~= nil and attack.projectile.pattern == "radial_random" then
+        if spec.projectile ~= nil and spec.projectile.pattern == "radial_random" then
             DrawCircleAttackRegion(ctx, x, y, radius, { 202, 174, 235 }, progress, pulse, scale)
         else
-            local spread = math.rad(attack.projectile and attack.projectile.spread or 30)
+            local spread = math.rad(spec.projectile and spec.projectile.spread or 30)
             DrawSectorAttackRegion(ctx, x, y, radius, directionAngle - spread * 0.5, spread,
                 { 202, 174, 235 }, progress, pulse, scale)
         end
@@ -1548,13 +1551,14 @@ end
 
 local function DrawEnemy(ctx, width, height, enemy, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, enemy.x, enemy.y)
+    DrawEnemyMotionTrail(ctx, width, height, enemy)
+    DrawEnemyTelegraph(ctx, width, height, enemy, player)
+    scale = scale * EnemyConfig.sizeMultiplier
     local spec = EnemyConfig[enemy.kind]
     local visual = spec.visual
     local size = 24 * scale
     local pulse = math.sin(time * 7 + enemy.id) * 1.2 * scale
 
-    DrawEnemyMotionTrail(ctx, width, height, enemy)
-    DrawEnemyTelegraph(ctx, width, height, enemy, player)
     if enemy.kind ~= "toxic_moss" then
         DrawShadow(ctx, x, y, scale, size * 0.68, 125)
     end

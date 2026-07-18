@@ -1,6 +1,7 @@
 -- Design-owned enemy roster. World coordinates are normalized to room width.
 local ROOM_WIDTH_METERS = 30
 local DEFAULT_TRACKING_RANGE_METERS = ROOM_WIDTH_METERS * math.sqrt(2)
+local ENEMY_SIZE_MULTIPLIER = 2
 
 local function MetersToWorld(meters)
     return meters / ROOM_WIDTH_METERS
@@ -12,6 +13,7 @@ end
 
 return {
     roomWidthMeters = ROOM_WIDTH_METERS,
+    sizeMultiplier = ENEMY_SIZE_MULTIPLIER,
     defaultTrackingRangeMeters = DEFAULT_TRACKING_RANGE_METERS,
     defaultTrackingRange = MetersToWorld(DEFAULT_TRACKING_RANGE_METERS),
     MetersToWorld = MetersToWorld,

@@ -1,4 +1,5 @@
 local BossConfig = require "Data.BossConfig"
+local EnemyConfig = require "Data.EnemyConfig"
 local Boss = require "Boss"
 
 local BossRenderer = {}
@@ -19,28 +20,40 @@ local function WorldPoint(worldToScreen, width, height, x, y)
     return worldToScreen(width, height, x, y)
 end
 
-local function DrawSector(ctx, width, height, boss, range, arc, reverse, worldToScreen, alpha, debug)
+local function BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
+    nvgBeginPath(ctx)
+    nvgMoveTo(ctx, centerX, centerY)
+    for step = 0, 28 do
+        local angle = startAngle + arcRadians * step / 28
+        nvgLineTo(ctx, centerX + math.cos(angle) * radius, centerY + math.sin(angle) * radius)
+    end
+    nvgClosePath(ctx)
+end
+
+local function DrawSector(ctx, width, height, boss, range, arc, reverse, worldToScreen, alpha, debug, progress)
     local facingAngle = boss.facing == "left" and math.pi or 0
     if reverse then facingAngle = facingAngle + math.pi end
     local half = math.rad(arc * 0.5)
     local centerX, centerY = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
-    nvgBeginPath(ctx)
-    nvgMoveTo(ctx, centerX, centerY)
-    for step = 0, 28 do
-        local angle = facingAngle - half + arc * math.pi / 180 * step / 28
-        local pointX, pointY = WorldPoint(worldToScreen, width, height,
-            boss.x + math.cos(angle) * range, boss.y + math.sin(angle) * range)
-        nvgLineTo(ctx, pointX, pointY)
-    end
-    nvgClosePath(ctx)
+    local radius = range * (worldToScreen(width, height, boss.x + 1, boss.y) - centerX)
+    local startAngle = facingAngle - half
+    local arcRadians = math.rad(arc)
+
+    BuildSectorPath(ctx, centerX, centerY, radius, startAngle, arcRadians)
     Fill(ctx, debug and { 255, 80, 95 } or { 255, 126, 92 }, alpha)
     nvgFill(ctx)
     nvgStrokeWidth(ctx, debug and 2 or 1.4)
     Stroke(ctx, debug and { 255, 235, 120 } or { 255, 186, 118 }, math.min(255, alpha + 95))
     nvgStroke(ctx)
+
+    if progress > 0 then
+        BuildSectorPath(ctx, centerX, centerY, radius * progress, startAngle, arcRadians)
+        Fill(ctx, debug and { 255, 80, 95 } or { 255, 126, 92 }, math.min(150, alpha + 70))
+        nvgFill(ctx)
+    end
 end
 
-local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug)
+local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug, progress)
     local spec = BossConfig.attacks.skewer
     local left, top = WorldPoint(worldToScreen, width, height, boss.x - spec.length, boss.y - spec.halfWidth)
     local right, bottom = WorldPoint(worldToScreen, width, height, boss.x + spec.length, boss.y + spec.halfWidth)
@@ -51,15 +64,25 @@ local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug)
     nvgStrokeWidth(ctx, debug and 2 or 1.4)
     Stroke(ctx, { 255, 215, 130 }, math.min(255, alpha + 100))
     nvgStroke(ctx)
+
+    if progress > 0 then
+        local fillRight = left + (right - left) * progress
+        nvgBeginPath(ctx)
+        nvgRoundedRect(ctx, left, top, fillRight - left, bottom - top, 3)
+        Fill(ctx, { 225, 102, 148 }, math.min(150, alpha + 70))
+        nvgFill(ctx)
+    end
 end
 
 local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
     if boss.state ~= "telegraph" and boss.state ~= "active" then return end
+    local spec = BossConfig.attacks[boss.attack]
+    local progress = boss.state == "telegraph" and Clamp(1 - boss.stateTimer / math.max(0.001, spec.telegraph), 0, 1) or 1
     local alpha = boss.state == "telegraph" and (debug and 58 or 34) or (debug and 86 or 48)
     if boss.attack == "sweep" then
-        DrawSector(ctx, width, height, boss, BossConfig.attacks.sweep.range, 180, false, worldToScreen, alpha, debug)
+        DrawSector(ctx, width, height, boss, BossConfig.attacks.sweep.range, 180, false, worldToScreen, alpha, debug, progress)
     elseif boss.attack == "skewer" then
-        DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug)
+        DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug, progress)
     elseif boss.attack == "charge" then
         local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
         nvgBeginPath(ctx)
@@ -69,11 +92,17 @@ local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
         nvgStrokeWidth(ctx, debug and 2 or 1.5)
         Stroke(ctx, { 255, 220, 120 }, math.min(255, alpha + 110))
         nvgStroke(ctx)
+        if progress > 0 then
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x, y, 24 * scale * progress)
+            Fill(ctx, { 255, 92, 126 }, math.min(150, alpha + 70))
+            nvgFill(ctx)
+        end
     elseif boss.attack == "quake" then
-        DrawSector(ctx, width, height, boss, BossConfig.attacks.quake.range, 270, false, worldToScreen, alpha, debug)
+        DrawSector(ctx, width, height, boss, BossConfig.attacks.quake.range, 270, false, worldToScreen, alpha, debug, progress)
     elseif boss.attack == "feathers" then
         local reverse = boss.state == "telegraph" or boss.featherPulse <= 4
-        DrawSector(ctx, width, height, boss, BossConfig.attacks.feathers.range, 180, reverse, worldToScreen, alpha, debug)
+        DrawSector(ctx, width, height, boss, BossConfig.attacks.feathers.range, 180, reverse, worldToScreen, alpha, debug, progress)
     end
 end
 
@@ -141,7 +170,7 @@ end
 function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
     local purifiedScale = boss.state == "purifying" and (1 - 0.45 * boss.purificationProgress) or 1
-    local size = 48 * scale * purifiedScale
+    local size = 48 * scale * EnemyConfig.sizeMultiplier * purifiedScale
     local phaseTwo = boss.phase == 2
     local body = phaseTwo and { 34, 112, 116 } or { 20, 19, 28 }
     local wing = phaseTwo and { 178, 69, 92 } or { 26, 23, 34 }

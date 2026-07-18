@@ -1,6 +1,9 @@
+local PLAYER_SIZE_MULTIPLIER = 1.5
+
 return {
+    sizeMultiplier = PLAYER_SIZE_MULTIPLIER,
     maxHp = 3,
-    radius = 0.035,
+    radius = 0.035 * PLAYER_SIZE_MULTIPLIER,
     speed = 0.54,
     invulnerabilityDuration = 0.62,
     parryWindow = 0.22,
