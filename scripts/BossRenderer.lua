@@ -1,5 +1,6 @@
 local BossConfig = require "Data.BossConfig"
 local EnemyConfig = require "Data.EnemyConfig"
+local PlayerConfig = require "Data.PlayerConfig"
 local Boss = require "Boss"
 
 local BossRenderer = {}
@@ -139,7 +140,7 @@ end
 
 local function DrawBossSprite(ctx, x, y, boss, time, scale)
     local scaleX, scaleY, offsetX, offsetY, rotation, alpha, glow = GetSpriteMotion(boss, time)
-    local displayHeight = 92 * scale
+    local displayHeight = 138 * scale
     local displayWidth = displayHeight * bossImageWidth / bossImageHeight
     local drawX = -displayWidth * 0.5
     local drawY = -displayHeight
@@ -177,13 +178,16 @@ local function BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAng
 end
 
 local function DrawSector(ctx, width, height, boss, range, arc, reverse, worldToScreen, alpha, debug, progress)
-    local facingAngle = boss.facing == "left" and math.pi or 0
-    if reverse then facingAngle = facingAngle + math.pi end
-    local half = math.rad(arc * 0.5)
+    local facingX = boss.facing == "left" and -1 or 1
+    if reverse then facingX = facingX * -1 end
     local centerX, centerY = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
-    local radiusX = range * (worldToScreen(width, height, boss.x + 1, boss.y) - centerX)
-    local radiusY = range * (worldToScreen(width, height, boss.x, boss.y + 1) - centerY)
-    local startAngle = facingAngle - half
+    local attackRange = range + PlayerConfig.radius
+    local edgeX = WorldPoint(worldToScreen, width, height, boss.x + facingX * attackRange, boss.y)
+    local radiusX = math.abs(edgeX - centerX)
+    local _, verticalY = WorldPoint(worldToScreen, width, height, boss.x, boss.y + attackRange)
+    local radiusY = math.abs(verticalY - centerY)
+    local half = math.rad(arc * 0.5)
+    local startAngle = facingX < 0 and math.pi - half or -half
     local arcRadians = math.rad(arc)
 
     BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
@@ -202,12 +206,21 @@ end
 
 local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug, progress)
     local spec = BossConfig.attacks.skewer
-    local left, top = WorldPoint(worldToScreen, width, height, boss.x - spec.length, boss.y - spec.halfWidth)
-    local right, bottom = WorldPoint(worldToScreen, width, height, boss.x + spec.length, boss.y + spec.halfWidth)
-    if left > right then left, right = right, left end
-    if top > bottom then top, bottom = bottom, top end
+    local facingX = boss.facing == "left" and -1 or 1
+    local centerX, centerY = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    local attackLength = spec.length + PlayerConfig.radius
+    local attackHalfWidth = spec.halfWidth + PlayerConfig.radius
+    local edgeX = WorldPoint(worldToScreen, width, height, boss.x + facingX * attackLength, boss.y)
+    local _, topY = WorldPoint(worldToScreen, width, height, boss.x, boss.y - attackHalfWidth)
+    local _, bottomY = WorldPoint(worldToScreen, width, height, boss.x, boss.y + attackHalfWidth)
+    local halfLength = math.abs(edgeX - centerX)
+    local halfWidth = math.abs(bottomY - topY) * 0.5
+    local left = centerX - halfLength
+    local top = centerY - halfWidth
+    local totalWidth = halfLength * 2
+    local totalHeight = halfWidth * 2
     nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, left, top, right - left, bottom - top, 3)
+    nvgRoundedRect(ctx, left, top, totalWidth, totalHeight, math.min(5, halfWidth))
     Fill(ctx, debug and { 255, 80, 95 } or { 225, 102, 148 }, alpha)
     nvgFill(ctx)
     nvgStrokeWidth(ctx, debug and 2 or 1.4)
@@ -215,9 +228,10 @@ local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug,
     nvgStroke(ctx)
 
     if progress > 0 then
-        local fillRight = left + (right - left) * progress
+        local fillWidth = totalWidth * progress
+        local fillLeft = facingX < 0 and left + totalWidth - fillWidth or left
         nvgBeginPath(ctx)
-        nvgRoundedRect(ctx, left, top, fillRight - left, bottom - top, 3)
+        nvgRoundedRect(ctx, fillLeft, top, fillWidth, totalHeight, math.min(5, halfWidth))
         Fill(ctx, { 225, 102, 148 }, math.min(150, alpha + 70))
         nvgFill(ctx)
     end
@@ -233,9 +247,15 @@ local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
     elseif boss.attack == "skewer" then
         DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug, progress)
     elseif boss.attack == "charge" then
-        local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+        local x, y = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+        local hitRadius = BossConfig.attacks.charge.hitRadius + boss.radius
+        local edgeX = WorldPoint(worldToScreen, width, height, boss.x + hitRadius, boss.y)
+        local _, edgeY = WorldPoint(worldToScreen, width, height, boss.x, boss.y + hitRadius)
+        local radiusX = math.abs(edgeX - x)
+        local radiusY = math.abs(edgeY - y)
+        local radius = math.max(radiusX, radiusY)
         nvgBeginPath(ctx)
-        nvgCircle(ctx, x, y, 24 * scale)
+        nvgCircle(ctx, x, y, radius)
         Fill(ctx, { 255, 92, 126 }, alpha)
         nvgFill(ctx)
         nvgStrokeWidth(ctx, debug and 2 or 1.5)
@@ -243,7 +263,7 @@ local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
         nvgStroke(ctx)
         if progress > 0 then
             nvgBeginPath(ctx)
-            nvgCircle(ctx, x, y, 24 * scale * progress)
+            nvgCircle(ctx, x, y, radius * progress)
             Fill(ctx, { 255, 92, 126 }, math.min(150, alpha + 70))
             nvgFill(ctx)
         end
@@ -251,7 +271,7 @@ local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
         DrawSector(ctx, width, height, boss, BossConfig.attacks.quake.range, 270, false, worldToScreen, alpha, debug, progress)
     elseif boss.attack == "feathers" then
         local reverse = boss.state == "telegraph" or boss.featherPulse <= 4
-        DrawSector(ctx, width, height, boss, BossConfig.attacks.feathers.range, 180, reverse, worldToScreen, alpha, debug, progress)
+        DrawSector(ctx, width, height, boss, BossConfig.attacks.feathers.range, BossConfig.attacks.feathers.arc, reverse, worldToScreen, alpha, debug, progress)
     end
 end
 
