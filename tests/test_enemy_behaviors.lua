@@ -46,8 +46,19 @@ assert(fixedDandelion.x == dandelionStartX and fixedDandelion.y == dandelionStar
 local sap = NewEnemy("sap", 0.4, 0.5, 3)
 local splitChildren = Entities.GetSplitChildren(sap)
 assert(#splitChildren == EnemyConfig.sap.split.count)
+for _, child in ipairs(splitChildren) do
+    assert(child.hp == sap.hp * 0.5, "slime children must receive half of the parent's remaining health")
+end
 sap.splitGeneration = 1
 assert(#Entities.GetSplitChildren(sap) == 0, "sap must split only once")
+
+local sapArc = NewEnemy("sap", 0.5, 0.5, 17)
+sapArc.state, sapArc.attackSerial, sapArc.attackX, sapArc.attackY, sapArc.attackArc = "active", 1, 1, 0, 60
+player.x, player.y = 0.58, 0.5
+assert(Entities.CollectEnemyHit(sapArc, player) ~= nil, "slime must hit inside its forward 1m arc")
+sapArc.attackSerial = 2
+player.x, player.y = 0.5, 0.58
+assert(Entities.CollectEnemyHit(sapArc, player) == nil, "slime's 60 degree attack must not hit beside it")
 
 math.randomseed(137)
 local dandelion = NewEnemy("dandelion", 0.3, 0.5, 4)
@@ -119,6 +130,38 @@ assert(Entities.CollectEnemyHit(moss, player) ~= nil, "moss must reset after lea
 local orb = NewEnemy("purple_orb", 0.5, 0.5, 6)
 orb.state, orb.attackSerial = "active", 1
 assert(Entities.CollectEnemyHit(orb, player) ~= nil)
+
+local blueSwarm = NewEnemy("blue_swarm", 0.45, 0.5, 15)
+blueSwarm.stateTimer = 0
+Entities.UpdateEnemy(blueSwarm, player, 0.01, function() end)
+assert(blueSwarm.state == "telegraph" and math.abs(blueSwarm.stateTimer - 0.2) < 0.000001,
+    "blue swarm must charge for 0.2 seconds before each pulse")
+assert(Entities.CollectEnemyHit(blueSwarm, player) == nil, "blue swarm glow must not deal damage before it ends")
+for _ = 1, 20 do
+    Entities.UpdateEnemy(blueSwarm, player, 0.01, function() end)
+end
+assert(blueSwarm.state == "active", "blue swarm must pulse when its glow ends")
+assert(Entities.CollectEnemyHit(blueSwarm, player) ~= nil, "blue swarm pulse must damage inside its 3m radius")
+assert(Entities.CollectEnemyHit(blueSwarm, player) == nil, "a blue swarm pulse may hit once")
+
+blueSwarm = NewEnemy("blue_swarm", 0.45, 0.5, 16)
+blueSwarm.stateTimer = 0
+local swarmPulseTimes = {}
+local swarmElapsed = 0
+local lastSwarmSerial = blueSwarm.attackSerial
+for _ = 1, 300 do
+    Entities.UpdateEnemy(blueSwarm, player, 0.01, function() end)
+    if blueSwarm.attackSerial ~= lastSwarmSerial then
+        table.insert(swarmPulseTimes, swarmElapsed)
+        lastSwarmSerial = blueSwarm.attackSerial
+    end
+    swarmElapsed = swarmElapsed + 0.01
+end
+assert(#swarmPulseTimes >= 3, "blue swarm must repeatedly pulse")
+for index = 2, #swarmPulseTimes do
+    local cadence = swarmPulseTimes[index] - swarmPulseTimes[index - 1]
+    assert(math.abs(cadence - 0.7) <= 0.021, "blue swarm pulse cadence must be 0.7 seconds")
+end
 assert(Entities.CollectEnemyHit(orb, player) == nil, "one AOE pulse may hit once")
 orb.attackSerial = 2
 assert(Entities.CollectEnemyHit(orb, player) ~= nil)
@@ -156,22 +199,22 @@ player.x, player.y = 0.5, 0.5
 assert(Entities.CollectEnemyHit(stone, player) ~= nil)
 assert(Entities.CollectEnemyHit(stone, player) == nil, "rolling impact may hit once")
 
-local parryGhost = NewEnemy("ghost_a", 0.6, 0.5, 9)
+local parryGhost = NewEnemy("shadow_wraith", 0.6, 0.5, 9)
 player.parryTimer, player.parryDirectionX, player.parryDirectionY = 1, 1, 0
 assert(Entities.TryParryEnemy(player, parryGhost, 1))
 assert(parryGhost.state == "stagger")
 
-local luminousWraith = NewEnemy("luminous_wraith", 0.7, 0.5, 10)
-luminousWraith.stateTimer = 0
-local wraithStartX = luminousWraith.x
-Entities.UpdateEnemy(luminousWraith, player, 0.1, function() end)
-assert(luminousWraith.x < wraithStartX, "luminous wraith must immediately pursue the player")
-luminousWraith.x, luminousWraith.y = player.x, player.y
-assert(Entities.CollectEnemyHit(luminousWraith, player) ~= nil, "luminous wraith must deal contact damage")
-assert(Entities.CollectEnemyHit(luminousWraith, player) == nil, "luminous wraith contact damage must respect cooldown")
+local shadowWraith = NewEnemy("shadow_wraith", 0.7, 0.5, 10)
+shadowWraith.stateTimer = 0
+local wraithStartX = shadowWraith.x
+Entities.UpdateEnemy(shadowWraith, player, 0.1, function() end)
+assert(shadowWraith.x < wraithStartX, "shadow wraith must immediately pursue the player")
+shadowWraith.x, shadowWraith.y = player.x, player.y
+assert(Entities.CollectEnemyHit(shadowWraith, player) ~= nil, "shadow wraith must deal contact damage")
+assert(Entities.CollectEnemyHit(shadowWraith, player) == nil, "shadow wraith contact damage must respect cooldown")
 player.parryTimer, player.parryDirectionX, player.parryDirectionY = 1, 1, 0
-assert(Entities.TryParryEnemy(player, luminousWraith, 1))
-assert(luminousWraith.state == "stagger")
+assert(Entities.TryParryEnemy(player, shadowWraith, 1))
+assert(shadowWraith.state == "stagger")
 
 local fixedMoss = NewEnemy("toxic_moss", 0.5, 0.5, 11)
 local movingSoot = NewEnemy("soot", 0.5, 0.5, 12)
@@ -183,13 +226,15 @@ Game.StartOrRestart(splitGame)
 Game.ConsumeEvents(splitGame)
 splitGame.state = "battle"
 local splitSap = NewEnemy("sap", splitGame.player.x + 0.12, splitGame.player.y, 12)
-splitSap.hp, splitSap.maxHp, splitSap.state, splitSap.stateTimer = 0.5, 0.5, "dash", 1
+splitSap.hp, splitSap.maxHp, splitSap.state, splitSap.stateTimer = 0.5, 0.5, "active", 1
 splitGame.enemies = { splitSap }
 assert(Game.TryParry(splitGame))
 Game.Update(splitGame, 0, 0, 0)
 assert(#splitGame.enemies == EnemyConfig.sap.split.count, "defeated sap must create two children")
 for _, child in ipairs(splitGame.enemies) do
     assert(child.kind == "sap" and child.splitGeneration == 1)
+    assert(child.hp == 0.25 and child.maxHp == 0.25,
+        "split slime children must receive half of the defeated slime's remaining health")
 end
 
 print("PASS test_enemy_behaviors")

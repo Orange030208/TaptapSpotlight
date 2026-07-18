@@ -401,7 +401,12 @@ local function DrawWorldEffects(ctx, game, width, height)
     for _, shard in ipairs(state.orbitShards or {}) do
         if shard.x ~= nil then
             local x, y, scale = Renderer.WorldToScreen(width, height, shard.x, shard.y)
-            DrawDiamond(ctx, x, y, 7 * scale, { 150, 135, 255 }, 245)
+            local fadeDuration = CrystalConfig.orbit.fadeDuration
+            local alpha = 245
+            if shard.remaining ~= nil and shard.remaining < fadeDuration then
+                alpha = math.floor(245 * math.max(0, shard.remaining / fadeDuration))
+            end
+            DrawDiamond(ctx, x, y, 7 * scale, { 150, 135, 255 }, alpha)
         end
     end
     if state.nova ~= nil then

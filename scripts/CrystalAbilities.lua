@@ -1,4 +1,5 @@
 local CrystalConfig = require "Data.CrystalConfig"
+local Entities = require "Entities"
 local RoomConfig = require "Data.RoomConfig"
 
 local CrystalAbilities = {}
@@ -40,6 +41,11 @@ local function DistanceSquaredToSegment(px, py, startX, startY, endX, endY)
     return dx * dx + dy * dy
 end
 
+local function DistanceSquared(first, second)
+    local dx, dy = first.x - second.x, first.y - second.y
+    return dx * dx + dy * dy
+end
+
 local function HasCrystal(player, id)
     return player ~= nil and player.crystals ~= nil and (player.crystals[id] or 0) > 0
 end
@@ -48,7 +54,7 @@ local function Emit(game, name, data)
     table.insert(game.events, { name = name, data = data or {} })
 end
 
-local function DamageEnemy(game, enemy, amount)
+local function DamageEnemy(game, enemy, amount, popupKind)
     if enemy == nil or enemy.dead or enemy.kind == "boss" then
         return 0
     end
@@ -56,6 +62,15 @@ local function DamageEnemy(game, enemy, amount)
     enemy.hp = enemy.hp - applied
     if enemy.hp <= 0 then
         enemy.dead = true
+    end
+    if popupKind ~= nil and applied > 0 then
+        Emit(game, "damage_dealt", {
+            x = enemy.x,
+            y = enemy.y,
+            damage = applied,
+            popupKind = popupKind,
+            killed = enemy.dead,
+        })
     end
     return applied
 end
@@ -98,7 +113,11 @@ function CrystalAbilities.OnPerfectParry(game)
     end
 
     if HasCrystal(player, "orbit_shards") and #state.orbitShards < CrystalConfig.orbit.maxShards then
-        table.insert(state.orbitShards, { hitTimers = {} })
+        table.insert(state.orbitShards, {
+            remaining = CrystalConfig.orbit.duration,
+            duration = CrystalConfig.orbit.duration,
+            radius = CrystalConfig.orbit.shardRadius,
+        })
         Emit(game, "crystal_orbit_gain", { x = player.x, y = player.y })
     end
 
@@ -128,7 +147,7 @@ function CrystalAbilities.OnPerfectParry(game)
     local targetCount = math.min(CrystalConfig.lightning.targetCount, #candidates)
     for index = 1, targetCount do
         local enemy = candidates[index].enemy
-        DamageEnemy(game, enemy, CrystalConfig.lightning.damage)
+        DamageEnemy(game, enemy, CrystalConfig.lightning.damage, "lightning")
         table.insert(points, { x = enemy.x, y = enemy.y })
     end
     if #points > 1 then
@@ -164,11 +183,6 @@ function CrystalAbilities.OnProjectileReflected(game, projectile, perfect)
             reflected = true,
             crystalSplit = true,
             pierceRemaining = 0,
-            chainsRemaining = 0,
-            turnFromX = 0,
-            turnFromY = 0,
-            turnTimer = 0,
-            turnDuration = 0,
             hitEnemies = {},
             dead = false,
         })
@@ -192,7 +206,7 @@ function CrystalAbilities.OnOverdrive(game)
     for _, enemy in ipairs(game.enemies) do
         local dx, dy = enemy.x - player.x, enemy.y - player.y
         if dx * dx + dy * dy <= CrystalConfig.nova.radius * CrystalConfig.nova.radius then
-            DamageEnemy(game, enemy, CrystalConfig.nova.damage)
+            DamageEnemy(game, enemy, CrystalConfig.nova.damage, "nova")
         end
     end
     Emit(game, "crystal_nova", { x = player.x, y = player.y })
@@ -267,7 +281,7 @@ local function UpdateDash(game, state, dt, moveX, moveY)
             local hitRadius = CrystalConfig.dash.radius + enemy.radius
             if DistanceSquaredToSegment(enemy.x, enemy.y, previousX, previousY, player.x, player.y) <= hitRadius * hitRadius then
                 dash.hitEnemies[enemy.id] = true
-                DamageEnemy(game, enemy, CrystalConfig.dash.damage)
+                DamageEnemy(game, enemy, CrystalConfig.dash.damage, "dash")
                 Emit(game, "crystal_dash_hit", { x = enemy.x, y = enemy.y })
             end
         end
@@ -279,37 +293,23 @@ end
 
 local function UpdateOrbitShards(game, state, dt)
     local player = game.player
+    for index = #state.orbitShards, 1, -1 do
+        local shard = state.orbitShards[index]
+        shard.remaining = math.max(0, (shard.remaining or CrystalConfig.orbit.duration) - dt)
+        if shard.remaining <= 0 then
+            table.remove(state.orbitShards, index)
+            Emit(game, "crystal_orbit_expire", { x = player.x, y = player.y })
+        end
+    end
+    local shardCount = #state.orbitShards
     for index, shard in ipairs(state.orbitShards) do
-        local angle = game.time * 5.4 + (index - 1) * math.pi * 2 / #state.orbitShards
+        local angle = game.time * 5.4 + (index - 1) * math.pi * 2 / shardCount
         shard.x = player.x + math.cos(angle) * CrystalConfig.orbit.radius
         shard.y = player.y + math.sin(angle) * CrystalConfig.orbit.radius
-        for enemyId, timer in pairs(shard.hitTimers) do
-            timer = math.max(0, timer - dt)
-            if timer <= 0 then
-                shard.hitTimers[enemyId] = nil
-            else
-                shard.hitTimers[enemyId] = timer
-            end
-        end
-        for _, enemy in ipairs(game.enemies) do
-            if not enemy.dead and enemy.kind ~= "boss" and shard.hitTimers[enemy.id] == nil then
-                local dx, dy = enemy.x - shard.x, enemy.y - shard.y
-                local hitRadius = enemy.radius + 0.028
-                if dx * dx + dy * dy <= hitRadius * hitRadius then
-                    shard.hitTimers[enemy.id] = CrystalConfig.orbit.hitInterval
-                    DamageEnemy(game, enemy, CrystalConfig.orbit.damage)
-                    Emit(game, "crystal_orbit_hit", { x = enemy.x, y = enemy.y })
-                end
-            end
-        end
     end
 end
 
-function CrystalAbilities.Update(game, dt, moveX, moveY)
-    local state = CrystalAbilities.GetState(game)
-    UpdateDash(game, state, dt, moveX, moveY)
-    UpdateOrbitShards(game, state, dt)
-
+local function UpdateTransientEffects(state, dt)
     if state.dashTrail ~= nil then
         state.dashTrail.timer = math.max(0, state.dashTrail.timer - dt)
         if state.dashTrail.timer <= 0 then state.dashTrail = nil end
@@ -327,6 +327,80 @@ function CrystalAbilities.Update(game, dt, moveX, moveY)
         state.timeBreak.timer = math.max(0, state.timeBreak.timer - dt)
         if state.timeBreak.timer <= 0 then state.timeBreak = nil end
     end
+end
+
+function CrystalAbilities.UpdateCombat(game, dt, moveX, moveY)
+    local state = CrystalAbilities.GetState(game)
+    UpdateDash(game, state, dt, moveX, moveY)
+end
+
+function CrystalAbilities.UpdatePassive(game, dt)
+    local state = CrystalAbilities.GetState(game)
+    UpdateOrbitShards(game, state, dt)
+    UpdateTransientEffects(state, dt)
+end
+
+local function ReflectProjectileFromOrbit(shard, projectile)
+    local speed = Length(projectile.vx, projectile.vy)
+    if speed <= 0.0001 then
+        projectile.vx, projectile.vy = 0, -0.4
+    else
+        projectile.vx = -projectile.vx / speed * speed * CrystalConfig.orbit.reflectionSpeedMultiplier
+        projectile.vy = -projectile.vy / speed * speed * CrystalConfig.orbit.reflectionSpeedMultiplier
+    end
+    projectile.owner = "player"
+    projectile.sourceKind = "orbit_guard"
+    projectile.reflected = true
+    projectile.crystalGuard = true
+    projectile.damage = CrystalConfig.orbit.guardDamage
+    projectile.pierceRemaining = 0
+    projectile.hitEnemies = {}
+    projectile.lifetime = math.min(projectile.lifetime, 1.8)
+end
+
+function CrystalAbilities.ResolveOrbitGuards(game)
+    local state = CrystalAbilities.GetState(game)
+    for shardIndex = #state.orbitShards, 1, -1 do
+        local shard = state.orbitShards[shardIndex]
+        if shard.x ~= nil then
+            local blocked = false
+            for _, projectile in ipairs(game.projectiles) do
+                if projectile.owner == "enemy" and not projectile.dead
+                    and DistanceSquared(shard, projectile) <= (shard.radius + projectile.radius) ^ 2 then
+                    ReflectProjectileFromOrbit(shard, projectile)
+                    table.remove(state.orbitShards, shardIndex)
+                    Emit(game, "crystal_orbit_block", {
+                        x = shard.x,
+                        y = shard.y,
+                        kind = "projectile",
+                    })
+                    blocked = true
+                    break
+                end
+            end
+            if not blocked then
+                for _, enemy in ipairs(game.enemies) do
+                    local parried, damage = Entities.TryOrbitGuardEnemy(
+                        shard, enemy, game.player, CrystalConfig.orbit.guardDamage)
+                    if parried then
+                        table.remove(state.orbitShards, shardIndex)
+                        Emit(game, "crystal_orbit_block", {
+                            x = shard.x,
+                            y = shard.y,
+                            kind = "enemy",
+                            damage = damage,
+                        })
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
+function CrystalAbilities.Update(game, dt, moveX, moveY)
+    CrystalAbilities.UpdateCombat(game, dt, moveX, moveY)
+    CrystalAbilities.UpdatePassive(game, dt)
 end
 
 function CrystalAbilities.IsDashing(game)

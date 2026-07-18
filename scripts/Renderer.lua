@@ -5,7 +5,9 @@ local BossRenderer = require "BossRenderer"
 
 local Renderer = {}
 local SOOT_SPRITE_PATH = "image/soot_monster.png"
-local LUMINOUS_WRAITH_SPRITE_PATH = "image/luminous_wraith_enemy.png"
+local BLUE_SWARM_SPRITE_PATH = "image/blue_swarm.png"
+local SHADOW_WRAITH_SPRITE_PATH = "image/shadow_wraith.png"
+local HARD_SLIME_SPRITE_PATH = "image/hard_slime.png"
 local STONE_SPRITE_PATH = "image/stone_golem.png"
 local MUSHROOM_SPRITE_PATH = "image/spore_mushroom.png"
 local DANDELION_SPRITE_PATH = "image/dark_dandelion.png"
@@ -26,9 +28,15 @@ local playerImageHeight = 1
 local sootImageHandle = 0
 local sootImageWidth = 1
 local sootImageHeight = 1
-local luminousWraithImageHandle = 0
-local luminousWraithImageWidth = 1
-local luminousWraithImageHeight = 1
+local blueSwarmImageHandle = 0
+local blueSwarmImageWidth = 1
+local blueSwarmImageHeight = 1
+local shadowWraithImageHandle = 0
+local shadowWraithImageWidth = 1
+local shadowWraithImageHeight = 1
+local hardSlimeImageHandle = 0
+local hardSlimeImageWidth = 1
+local hardSlimeImageHeight = 1
 local stoneImageHandle = 0
 local stoneImageWidth = 1
 local stoneImageHeight = 1
@@ -44,6 +52,10 @@ local purpleOrbImageHeight = 1
 local toxicMossImageHandle = 0
 local toxicMossImageWidth = 1
 local toxicMossImageHeight = 1
+local projectileSprites = {
+    spore = { path = "image/projectile_spore.png", handle = 0, width = 1, height = 1 },
+    seed = { path = "image/projectile_seed.png", handle = 0, width = 1, height = 1 },
+}
 local spawnRoomGuideImageHandle = 0
 local spawnRoomGuideImageWidth = 1
 local spawnRoomGuideImageHeight = 1
@@ -113,20 +125,54 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    local luminousWraithLoaded = true
-    luminousWraithImageHandle = nvgCreateImage(ctx, LUMINOUS_WRAITH_SPRITE_PATH, 0)
-    if luminousWraithImageHandle == nil or luminousWraithImageHandle <= 0 then
-        luminousWraithImageHandle = 0
-        luminousWraithLoaded = false
-        print("WARNING: Failed to load luminous wraith sprite: " .. LUMINOUS_WRAITH_SPRITE_PATH .. "; using vector fallback")
+    local blueSwarmLoaded = true
+    blueSwarmImageHandle = nvgCreateImage(ctx, BLUE_SWARM_SPRITE_PATH, 0)
+    if blueSwarmImageHandle == nil or blueSwarmImageHandle <= 0 then
+        blueSwarmImageHandle = 0
+        blueSwarmLoaded = false
+        print("WARNING: Failed to load blue swarm sprite: " .. BLUE_SWARM_SPRITE_PATH .. "; using vector fallback")
     else
-        luminousWraithImageWidth, luminousWraithImageHeight = nvgImageSize(ctx, luminousWraithImageHandle)
-        if luminousWraithImageWidth <= 0 or luminousWraithImageHeight <= 0 then
-            nvgDeleteImage(ctx, luminousWraithImageHandle)
-            luminousWraithImageHandle = 0
-            luminousWraithImageWidth, luminousWraithImageHeight = 1, 1
-            luminousWraithLoaded = false
-            print("WARNING: Luminous wraith sprite has invalid dimensions; using vector fallback")
+        blueSwarmImageWidth, blueSwarmImageHeight = nvgImageSize(ctx, blueSwarmImageHandle)
+        if blueSwarmImageWidth <= 0 or blueSwarmImageHeight <= 0 then
+            nvgDeleteImage(ctx, blueSwarmImageHandle)
+            blueSwarmImageHandle = 0
+            blueSwarmImageWidth, blueSwarmImageHeight = 1, 1
+            blueSwarmLoaded = false
+            print("WARNING: Blue swarm sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
+    local shadowWraithLoaded = true
+    shadowWraithImageHandle = nvgCreateImage(ctx, SHADOW_WRAITH_SPRITE_PATH, 0)
+    if shadowWraithImageHandle == nil or shadowWraithImageHandle <= 0 then
+        shadowWraithImageHandle = 0
+        shadowWraithLoaded = false
+        print("WARNING: Failed to load shadow wraith sprite: " .. SHADOW_WRAITH_SPRITE_PATH .. "; using vector fallback")
+    else
+        shadowWraithImageWidth, shadowWraithImageHeight = nvgImageSize(ctx, shadowWraithImageHandle)
+        if shadowWraithImageWidth <= 0 or shadowWraithImageHeight <= 0 then
+            nvgDeleteImage(ctx, shadowWraithImageHandle)
+            shadowWraithImageHandle = 0
+            shadowWraithImageWidth, shadowWraithImageHeight = 1, 1
+            shadowWraithLoaded = false
+            print("WARNING: Shadow wraith sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
+    local hardSlimeLoaded = true
+    hardSlimeImageHandle = nvgCreateImage(ctx, HARD_SLIME_SPRITE_PATH, 0)
+    if hardSlimeImageHandle == nil or hardSlimeImageHandle <= 0 then
+        hardSlimeImageHandle = 0
+        hardSlimeLoaded = false
+        print("WARNING: Failed to load hard slime sprite: " .. HARD_SLIME_SPRITE_PATH .. "; using vector fallback")
+    else
+        hardSlimeImageWidth, hardSlimeImageHeight = nvgImageSize(ctx, hardSlimeImageHandle)
+        if hardSlimeImageWidth <= 0 or hardSlimeImageHeight <= 0 then
+            nvgDeleteImage(ctx, hardSlimeImageHandle)
+            hardSlimeImageHandle = 0
+            hardSlimeImageWidth, hardSlimeImageHeight = 1, 1
+            hardSlimeLoaded = false
+            print("WARNING: Hard slime sprite has invalid dimensions; using vector fallback")
         end
     end
 
@@ -215,6 +261,42 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
+    local projectileSporeLoaded = true
+    local projectileSpore = projectileSprites.spore
+    projectileSpore.handle = nvgCreateImage(ctx, projectileSpore.path, 0)
+    if projectileSpore.handle == nil or projectileSpore.handle <= 0 then
+        projectileSpore.handle = 0
+        projectileSporeLoaded = false
+        print("WARNING: Failed to load spore projectile sprite: " .. projectileSpore.path .. "; using vector fallback")
+    else
+        projectileSpore.width, projectileSpore.height = nvgImageSize(ctx, projectileSpore.handle)
+        if projectileSpore.width <= 0 or projectileSpore.height <= 0 then
+            nvgDeleteImage(ctx, projectileSpore.handle)
+            projectileSpore.handle = 0
+            projectileSpore.width, projectileSpore.height = 1, 1
+            projectileSporeLoaded = false
+            print("WARNING: Spore projectile sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
+    local projectileSeedLoaded = true
+    local projectileSeed = projectileSprites.seed
+    projectileSeed.handle = nvgCreateImage(ctx, projectileSeed.path, 0)
+    if projectileSeed.handle == nil or projectileSeed.handle <= 0 then
+        projectileSeed.handle = 0
+        projectileSeedLoaded = false
+        print("WARNING: Failed to load seed projectile sprite: " .. projectileSeed.path .. "; using vector fallback")
+    else
+        projectileSeed.width, projectileSeed.height = nvgImageSize(ctx, projectileSeed.handle)
+        if projectileSeed.width <= 0 or projectileSeed.height <= 0 then
+            nvgDeleteImage(ctx, projectileSeed.handle)
+            projectileSeed.handle = 0
+            projectileSeed.width, projectileSeed.height = 1, 1
+            projectileSeedLoaded = false
+            print("WARNING: Seed projectile sprite has invalid dimensions; using vector fallback")
+        end
+    end
+
     local spawnRoomGuideLoaded = true
     spawnRoomGuideImageHandle = nvgCreateImage(ctx, SPAWN_ROOM_GUIDE_SPRITE_PATH, 0)
     if spawnRoomGuideImageHandle == nil or spawnRoomGuideImageHandle <= 0 then
@@ -266,7 +348,7 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
-    return playerLoaded and sootLoaded and luminousWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and spawnRoomGuideLoaded
+    return playerLoaded and sootLoaded and blueSwarmLoaded and shadowWraithLoaded and hardSlimeLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and projectileSporeLoaded and projectileSeedLoaded and spawnRoomGuideLoaded
         and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded
 end
 
@@ -289,11 +371,21 @@ function Renderer.UnloadAssets(ctx)
     end
     sootImageHandle = 0
     sootImageWidth, sootImageHeight = 1, 1
-    if luminousWraithImageHandle ~= nil and luminousWraithImageHandle > 0 then
-        nvgDeleteImage(ctx, luminousWraithImageHandle)
+    if blueSwarmImageHandle ~= nil and blueSwarmImageHandle > 0 then
+        nvgDeleteImage(ctx, blueSwarmImageHandle)
     end
-    luminousWraithImageHandle = 0
-    luminousWraithImageWidth, luminousWraithImageHeight = 1, 1
+    blueSwarmImageHandle = 0
+    blueSwarmImageWidth, blueSwarmImageHeight = 1, 1
+    if shadowWraithImageHandle ~= nil and shadowWraithImageHandle > 0 then
+        nvgDeleteImage(ctx, shadowWraithImageHandle)
+    end
+    shadowWraithImageHandle = 0
+    shadowWraithImageWidth, shadowWraithImageHeight = 1, 1
+    if hardSlimeImageHandle ~= nil and hardSlimeImageHandle > 0 then
+        nvgDeleteImage(ctx, hardSlimeImageHandle)
+    end
+    hardSlimeImageHandle = 0
+    hardSlimeImageWidth, hardSlimeImageHeight = 1, 1
     if stoneImageHandle ~= nil and stoneImageHandle > 0 then
         nvgDeleteImage(ctx, stoneImageHandle)
     end
@@ -319,6 +411,13 @@ function Renderer.UnloadAssets(ctx)
     end
     toxicMossImageHandle = 0
     toxicMossImageWidth, toxicMossImageHeight = 1, 1
+    for _, projectileSprite in pairs(projectileSprites) do
+        if projectileSprite.handle ~= nil and projectileSprite.handle > 0 then
+            nvgDeleteImage(ctx, projectileSprite.handle)
+        end
+        projectileSprite.handle = 0
+        projectileSprite.width, projectileSprite.height = 1, 1
+    end
     if spawnRoomGuideImageHandle ~= nil and spawnRoomGuideImageHandle > 0 then
         nvgDeleteImage(ctx, spawnRoomGuideImageHandle)
     end
@@ -744,18 +843,19 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
     local pulse = 120 + math.floor(100 * math.abs(math.sin(enemy.stateTimer * 13)))
     local directionX, directionY = enemy.attackX or 1, enemy.attackY or 0
     local behavior = spec and spec.behavior or ""
+    local telegraphColor = enemy.kind == "blue_swarm" and { 70, 225, 255 } or { 255, 230, 120 }
 
-    if behavior == "aoe_pulse" then
+    if behavior == "aoe_pulse" or behavior == "melee_arc" then
         radius = (spec.attack.range * 180 + 6) * scale
     end
     nvgBeginPath(ctx)
     nvgCircle(ctx, x, y, radius)
     nvgStrokeWidth(ctx, 2 * scale)
-    StrokeColor(ctx, { 255, 230, 120 }, pulse)
+    StrokeColor(ctx, telegraphColor, pulse)
     nvgStroke(ctx)
 
-    if behavior == "tree_swing" then
-        local arc = math.rad(enemy.attackArc or spec.attack.narrowArc)
+    if behavior == "tree_swing" or behavior == "melee_arc" then
+        local arc = math.rad(enemy.attackArc or spec.attack.arc or spec.attack.narrowArc or 360)
         local startAngle = Atan2(directionY, directionX) - arc * 0.5
         for index = 0, 5 do
             local angle = startAngle + arc * index / 5
@@ -897,23 +997,107 @@ local function DrawSpriteSoot(ctx, x, y, enemy, time, scale)
     nvgRestore(ctx)
 end
 
-local function GetLuminousWraithSpriteHeight(scale)
-    return 46 * scale
+local function GetBlueSwarmSpriteHeight(scale)
+    return 52 * scale
 end
 
-local function DrawSpriteLuminousWraith(ctx, x, y, enemy, time, scale)
-    local displayHeight = GetLuminousWraithSpriteHeight(scale)
-    local displayWidth = displayHeight * luminousWraithImageWidth / luminousWraithImageHeight
+local function DrawSpriteBlueSwarm(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetBlueSwarmSpriteHeight(scale)
+    local displayWidth = displayHeight * blueSwarmImageWidth / blueSwarmImageHeight
     local drawX = -displayWidth * 0.5
-    local drawY = -displayHeight + 3 * scale
-    local breathe = 1 + math.sin(time * 4.2 + enemy.id * 0.73) * 0.025
+    local drawY = -displayHeight + 4 * scale
+    local sway = math.sin(time * 11 + enemy.id * 0.83)
+
+    if enemy.state == "telegraph" then
+        local attack = EnemyConfig.blue_swarm.attack
+        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
+        local glowRadius = math.max(displayWidth, displayHeight) * (0.68 + progress * 0.32)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y - displayHeight * 0.52, glowRadius)
+        nvgFillPaint(ctx, nvgRadialGradient(ctx, x, y - displayHeight * 0.52, glowRadius * 0.18, glowRadius,
+            nvgRGBA(54, 222, 255, math.floor(75 + progress * 150)), nvgRGBA(54, 222, 255, 0)))
+        nvgFill(ctx)
+    end
 
     nvgSave(ctx)
-    nvgTranslate(ctx, x, y)
-    nvgScale(ctx, breathe, breathe)
+    nvgTranslate(ctx, x + sway * 0.6 * scale, y + math.cos(time * 9 + enemy.id) * 0.35 * scale)
+    nvgScale(ctx, 1 + sway * 0.022, 1 - sway * 0.018)
     nvgBeginPath(ctx)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
-    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, luminousWraithImageHandle, 1.0))
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, blueSwarmImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
+local function GetShadowWraithSpriteHeight(scale)
+    return 54 * scale
+end
+
+local function DrawSpriteShadowWraith(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetShadowWraithSpriteHeight(scale)
+    local displayWidth = displayHeight * shadowWraithImageWidth / shadowWraithImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 2 * scale
+    local speed = math.sqrt(enemy.vx * enemy.vx + enemy.vy * enemy.vy)
+    local motion = Clamp(speed / math.max(0.001, EnemyConfig.shadow_wraith.moveSpeed), 0, 1)
+    local wave = math.sin(time * (4.2 + motion * 10) + enemy.id * 0.71)
+
+    if motion > 0.01 then
+        for index = 1, 2 do
+            local offset = wave * index * 1.2 * scale
+            nvgSave(ctx)
+            nvgTranslate(ctx, x - offset, y + index * 0.25 * scale)
+            nvgBeginPath(ctx)
+            nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+            nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0,
+                shadowWraithImageHandle, 0.09 * motion))
+            nvgFill(ctx)
+            nvgRestore(ctx)
+        end
+    end
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x + wave * (0.5 + motion * 1.1) * scale, y)
+    nvgScale(ctx, 1 + wave * (0.012 + motion * 0.025), 1 - wave * (0.01 + motion * 0.018))
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, shadowWraithImageHandle, 1.0))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+end
+
+local function GetHardSlimeSpriteHeight(scale)
+    return 42 * scale
+end
+
+local function DrawSpriteHardSlime(ctx, x, y, enemy, time, scale)
+    local displayHeight = GetHardSlimeSpriteHeight(scale)
+    local displayWidth = displayHeight * hardSlimeImageWidth / hardSlimeImageHeight
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight + 3 * scale
+    local wobble = math.sin(time * 5.2 + enemy.id * 0.57)
+    local scaleX = 1 + wobble * 0.025
+    local scaleY = 1 - wobble * 0.02
+
+    if enemy.state == "telegraph" then
+        local attack = EnemyConfig.sap.attack
+        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
+        scaleX = scaleX + progress * 0.10
+        scaleY = scaleY - progress * 0.08
+    elseif enemy.state == "active" then
+        scaleX = scaleX + 0.055
+        scaleY = scaleY - 0.045
+    end
+
+    local pivotY = drawY + displayHeight
+    nvgSave(ctx)
+    nvgTranslate(ctx, x, y)
+    nvgTranslate(ctx, 0, pivotY)
+    nvgScale(ctx, scaleX, scaleY)
+    nvgTranslate(ctx, 0, -pivotY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, hardSlimeImageHandle, 1.0))
     nvgFill(ctx)
     nvgRestore(ctx)
 end
@@ -1261,19 +1445,25 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
             DrawSoot(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
         end
     elseif enemy.kind == "blue_swarm" then
-        DrawBlueSwarm(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
+        if blueSwarmImageHandle ~= nil and blueSwarmImageHandle > 0 then
+            DrawSpriteBlueSwarm(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawBlueSwarm(ctx, x, y + pulse, size, scale, time, visual.primary, visual.secondary)
+        end
     elseif enemy.kind == "tree" then
         DrawTree(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary)
     elseif enemy.kind == "sap" then
-        DrawSap(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
-    elseif enemy.kind == "luminous_wraith" then
-        if luminousWraithImageHandle ~= nil and luminousWraithImageHandle > 0 then
-            DrawSpriteLuminousWraith(ctx, x, y + pulse, enemy, time, scale)
+        if hardSlimeImageHandle ~= nil and hardSlimeImageHandle > 0 then
+            DrawSpriteHardSlime(ctx, x, y + pulse, enemy, time, scale)
+        else
+            DrawSap(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
+        end
+    elseif enemy.kind == "shadow_wraith" then
+        if shadowWraithImageHandle ~= nil and shadowWraithImageHandle > 0 then
+            DrawSpriteShadowWraith(ctx, x, y + pulse, enemy, time, scale)
         else
             DrawGhost(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
         end
-    elseif enemy.kind == "ghost_a" or enemy.kind == "ghost_b" then
-        DrawGhost(ctx, x, y + pulse, size, scale, visual.primary, visual.secondary, visual.outline)
     elseif enemy.kind == "stone" then
         if stoneImageHandle ~= nil and stoneImageHandle > 0 then
             DrawSpriteStone(ctx, x, y + pulse, enemy, time, scale)
@@ -1316,8 +1506,12 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     local healthY = y - size * 1.18
     if enemy.kind == "soot" and sootImageHandle ~= nil and sootImageHandle > 0 then
         healthY = y - GetSootSpriteHeight(scale) - 5 * scale
-    elseif enemy.kind == "luminous_wraith" and luminousWraithImageHandle ~= nil and luminousWraithImageHandle > 0 then
-        healthY = y - GetLuminousWraithSpriteHeight(scale) - 2 * scale
+    elseif enemy.kind == "blue_swarm" and blueSwarmImageHandle ~= nil and blueSwarmImageHandle > 0 then
+        healthY = y - GetBlueSwarmSpriteHeight(scale) - 3 * scale
+    elseif enemy.kind == "shadow_wraith" and shadowWraithImageHandle ~= nil and shadowWraithImageHandle > 0 then
+        healthY = y - GetShadowWraithSpriteHeight(scale) - 2 * scale
+    elseif enemy.kind == "sap" and hardSlimeImageHandle ~= nil and hardSlimeImageHandle > 0 then
+        healthY = y - GetHardSlimeSpriteHeight(scale) - 4 * scale
     elseif enemy.kind == "stone" and stoneImageHandle ~= nil and stoneImageHandle > 0 then
         healthY = y - GetStoneSpriteHeight(scale) - 4 * scale
     elseif enemy.kind == "mushroom" and mushroomImageHandle ~= nil and mushroomImageHandle > 0 then
@@ -1339,12 +1533,30 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
     nvgFill(ctx)
 end
 
+local function DrawProjectileSprite(ctx, x, y, radius, imageHandle, imageWidth, imageHeight)
+    if imageHandle == nil or imageHandle <= 0 or imageWidth <= 0 or imageHeight <= 0 then
+        return false
+    end
+
+    local displayWidth = radius * 4.0
+    local displayHeight = displayWidth * imageHeight / imageWidth
+    local drawX = x - displayWidth * 0.5
+    local drawY = y - displayHeight * 0.5
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, imageHandle, 1.0))
+    nvgFill(ctx)
+    return true
+end
+
 local function DrawProjectile(ctx, width, height, projectile, combo)
     local x, y, scale = Renderer.WorldToScreen(width, height, projectile.x, projectile.y)
     ---@type number[]
     local color = projectile.owner == "player" and { 125, 238, 255 } or { 255, 135, 205 }
     if projectile.crystalSplit then
         color = { 247, 171, 255 }
+    elseif projectile.crystalGuard then
+        color = { 150, 135, 255 }
     end
 
     if projectile.owner == "enemy" and projectile.style == "spore" then
@@ -1391,22 +1603,6 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
         nvgFill(ctx)
     end
 
-    if projectile.turnTimer ~= nil and projectile.turnTimer > 0 and projectile.turnDuration > 0 and speed > 0.0001 then
-        local turnRatio = Clamp(projectile.turnTimer / projectile.turnDuration, 0, 1)
-        local fromX = projectile.turnFromX or directionX
-        local fromY = projectile.turnFromY or directionY
-        local arcRadius = radius * (3.2 + turnRatio * 1.6)
-        nvgBeginPath(ctx)
-        nvgMoveTo(ctx, x - fromX * arcRadius, y - fromY * arcRadius)
-        nvgBezierTo(ctx,
-            x - fromX * arcRadius * 0.18, y - fromY * arcRadius * 0.18,
-            x + directionX * arcRadius * 0.22, y + directionY * arcRadius * 0.22,
-            x + directionX * arcRadius, y + directionY * arcRadius)
-        nvgStrokeWidth(ctx, math.max(1, radius * 0.34))
-        StrokeColor(ctx, color, math.floor(215 * turnRatio))
-        nvgStroke(ctx)
-    end
-
     if projectile.style == "spore" and not projectile.reflected then
         local sporeGlow = nvgRadialGradient(ctx, x, y, radius * 0.2, radius * 2.5,
             nvgRGBA(255, 255, 255, 170), nvgRGBA(255, 255, 255, 0))
@@ -1415,14 +1611,19 @@ local function DrawProjectile(ctx, width, height, projectile, combo)
         nvgFillPaint(ctx, sporeGlow)
         nvgFill(ctx)
     end
-    nvgBeginPath(ctx)
-    if projectile.style == "seed" and not projectile.reflected then
-        nvgEllipse(ctx, x, y, radius * 0.72, radius)
-    else
-        nvgCircle(ctx, x, y, radius)
+    local sprite = projectileSprites[projectile.style]
+    if not DrawProjectileSprite(ctx, x, y, radius, sprite and sprite.handle or 0,
+            sprite and sprite.width or 1, sprite and sprite.height or 1) then
+        nvgBeginPath(ctx)
+        if projectile.style == "seed" and not projectile.reflected then
+            nvgEllipse(ctx, x, y, radius * 0.72, radius)
+        else
+            nvgCircle(ctx, x, y, radius)
+        end
+        Color(ctx, color, 255)
+        nvgFill(ctx)
     end
-    Color(ctx, color, 255)
-    nvgFill(ctx)
+
     if projectile.reflected then
         nvgBeginPath(ctx)
         nvgCircle(ctx, x - directionX * radius * 0.14, y - directionY * radius * 0.14, radius * 0.42)
@@ -1741,6 +1942,7 @@ local function DrawFeedbackWorld(ctx, width, height, feedback)
     for _, floatingText in ipairs(feedback.floatingTexts) do
         local progress = 1 - Clamp(floatingText.life / math.max(0.001, floatingText.maxLife), 0, 1)
         local x, y, scale = Renderer.WorldToScreen(width, height, floatingText.x, floatingText.y)
+        x = x + (floatingText.offsetX or 0) * scale
         local alpha = math.floor(255 * (1 - progress) * (1 - progress))
         nvgFontSize(ctx, floatingText.size * scale * (1 + 0.18 * (1 - progress)))
         nvgFillColor(ctx, nvgRGBA(8, 8, 18, math.floor(alpha * 0.72)))

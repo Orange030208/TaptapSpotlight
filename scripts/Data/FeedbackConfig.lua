@@ -51,7 +51,7 @@ return {
         shakeMax = 16,
         shakeDuration = 0.15,
     },
-    luminousWraithHit = {
+    shadowWraithHit = {
         burstKind = "wraith_touch",
         burstColor = { 218, 255, 86 },
         burstStart = 8,
@@ -177,5 +177,22 @@ return {
     floatingText = {
         duration = 0.48,
         rise = 24,
+    },
+    damagePopup = {
+        duration = 0.62,
+        rise = 30,
+        laneOffsets = { -14, 0, 14 },
+        profiles = {
+            perfect = { textColor = { 255, 232, 136 }, textSize = 25 },
+            reflect = { textColor = { 128, 241, 255 }, textSize = 19 },
+            crystal = { textColor = { 247, 171, 255 }, textSize = 18 },
+            dash = { textColor = { 104, 232, 255 }, textSize = 20 },
+            lightning = { textColor = { 255, 224, 104 }, textSize = 20 },
+            nova = { textColor = { 255, 117, 152 }, textSize = 21 },
+        },
+    },
+    orbitGuard = {
+        textColor = { 181, 162, 255 },
+        textSize = 17,
     },
 }

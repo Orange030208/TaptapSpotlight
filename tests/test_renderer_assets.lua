@@ -24,15 +24,19 @@ assert(Renderer.LoadAssets({}))
 assert(spineCreateCalls == 0, "incompatible Spine 3.8 asset must not be loaded by the 4.2 runtime")
 assert(imagePaths[1] == "Characters/player.png")
 assert(imagePaths[2] == "image/soot_monster.png")
-assert(imagePaths[3] == "image/luminous_wraith_enemy.png")
-assert(imagePaths[4] == "image/stone_golem.png")
-assert(imagePaths[5] == "image/spore_mushroom.png")
-assert(imagePaths[6] == "image/dark_dandelion.png")
-assert(imagePaths[7] == "image/purple_glow_orb.png")
-assert(imagePaths[8] == "image/toxic_moss.png")
-assert(imagePaths[9] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
-assert(imagePaths[10] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
-assert(imagePaths[11] == "image/ui/lightning.png", "perfect streak lightning must load once with the renderer assets")
+assert(imagePaths[3] == "image/blue_swarm.png")
+assert(imagePaths[4] == "image/shadow_wraith.png")
+assert(imagePaths[5] == "image/hard_slime.png")
+assert(imagePaths[6] == "image/stone_golem.png")
+assert(imagePaths[7] == "image/spore_mushroom.png")
+assert(imagePaths[8] == "image/dark_dandelion.png")
+assert(imagePaths[9] == "image/purple_glow_orb.png")
+assert(imagePaths[10] == "image/toxic_moss.png")
+assert(imagePaths[11] == "image/projectile_spore.png")
+assert(imagePaths[12] == "image/projectile_seed.png")
+assert(imagePaths[13] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
+assert(imagePaths[14] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
+assert(imagePaths[15] == "image/ui/lightning.png", "perfect streak lightning must load once with the renderer assets")
 
 Renderer.UnloadAssets({})
 
@@ -78,6 +82,46 @@ soot.facing = "right"
 Renderer.Draw({}, game, 960, 540, nil)
 assert(scaleCalls[#scaleCalls].x < 0, "right-facing soot must mirror the source sprite")
 
+local blueSwarm = {
+    kind = "blue_swarm", id = 7, x = 0.5, y = 0.5,
+    vx = 0.34, vy = 0, facing = "right", state = "telegraph", stateTimer = 0.1,
+    hp = 2, maxHp = 2, radius = 0.04,
+}
+local gradientCount = #radialGradients
+local scaleCount = #scaleCalls
+game.enemies = { blueSwarm }
+Renderer.Draw({}, game, 960, 540, nil)
+assert(#scaleCalls > scaleCount, "blue swarm must animate as a sprite")
+local hasBlueSwarmGlow = false
+for index = gradientCount + 1, #radialGradients do
+    local gradient = radialGradients[index]
+    if gradient.inner[1] == 54 and gradient.inner[2] == 222 and gradient.inner[3] == 255 then
+        hasBlueSwarmGlow = true
+        break
+    end
+end
+assert(hasBlueSwarmGlow, "blue swarm must gain a blue glow before its pulse")
+
+local shadowWraith = {
+    kind = "shadow_wraith", id = 8, x = 0.5, y = 0.5,
+    vx = 0.2, vy = 0, facing = "right", state = "idle", stateTimer = 0,
+    hp = 2, maxHp = 2, radius = 0.043,
+}
+scaleCount = #scaleCalls
+game.enemies = { shadowWraith }
+Renderer.Draw({}, game, 960, 540, nil)
+assert(#scaleCalls > scaleCount, "shadow wraith must wave at its edges while moving")
+
+local hardSlime = {
+    kind = "sap", id = 18, x = 0.5, y = 0.5,
+    vx = 0, vy = 0, facing = "right", state = "telegraph", stateTimer = 0.15,
+    hp = 3, maxHp = 3, radius = 0.043,
+}
+scaleCount = #scaleCalls
+game.enemies = { hardSlime }
+Renderer.Draw({}, game, 960, 540, nil)
+assert(#scaleCalls > scaleCount, "hard slime must compress before its melee arc attack")
+
 local stone = {
     kind = "stone", id = 2, x = 0.5, y = 0.5,
     vx = 1.45, vy = 0, dashX = 1, dashY = 0,
@@ -93,7 +137,7 @@ local mushroom = {
     vx = 0, vy = 0, facing = "right", state = "telegraph", stateTimer = 0.035,
     hp = 2, maxHp = 2, radius = 0.04,
 }
-local scaleCount = #scaleCalls
+scaleCount = #scaleCalls
 game.enemies = { mushroom }
 game.projectiles = {
     {

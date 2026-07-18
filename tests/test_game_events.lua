@@ -206,6 +206,7 @@ Game.ConsumeEvents(parry)
 Game.Update(parry, 0, 0, 0)
 events = Game.ConsumeEvents(parry)
 assert(HasEvent(events, "perfect_parry"))
+assert(HasEvent(events, "damage_dealt"), "perfect melee parries must emit a damage popup event")
 assert(HasEvent(events, "enemy_defeat"))
 assert(HasEvent(events, "room_clear"))
 assert(FindEvent(events, "perfect_parry").data.damage > 0)
@@ -219,14 +220,14 @@ Game.StartOrRestart(wraithContact)
 Game.ConsumeEvents(wraithContact)
 wraithContact.state = "battle"
 wraithContact.enemies = {
-    Entities.NewEnemy("luminous_wraith", { x = wraithContact.player.x + 0.05, y = wraithContact.player.y }, 2002),
+    Entities.NewEnemy("shadow_wraith", { x = wraithContact.player.x + 0.05, y = wraithContact.player.y }, 2002),
 }
 Game.Update(wraithContact, 0, 0, 0)
 events = Game.ConsumeEvents(wraithContact)
-local wraithEffect = FindEvent(events, "luminous_wraith_hit")
-assert(wraithEffect ~= nil, "luminous wraith contact must emit an effect event")
+local wraithEffect = FindEvent(events, "shadow_wraith_hit")
+assert(wraithEffect ~= nil, "shadow wraith contact must emit an effect event")
 assert(wraithEffect.data.originX > wraithEffect.data.x and wraithEffect.data.directionX < 0,
-    "luminous wraith effect must point from the attacker toward the player")
+    "shadow wraith effect must point from the attacker toward the player")
 
 local reflect = Game.New()
 Game.StartOrRestart(reflect)
@@ -258,51 +259,35 @@ assert(Game.TryParry(perfectReflect, perfectReflect.player.x + 1, perfectReflect
 Game.Update(perfectReflect, 0, 0, 0)
 assert(perfectReflect.projectiles[1].damage == ProjectileConfig.perfectReflectedDamage,
     "a perfect reflection must use the configured base damage")
-assert(perfectReflect.projectiles[1].chainsRemaining == ProjectileConfig.perfectReflectionChains,
-    "a perfect reflection must receive its base chain count")
 
-local chain = Game.New()
-Game.StartOrRestart(chain)
-Game.ConsumeEvents(chain)
-chain.state = "battle"
+local reflectedShot = Game.New()
+Game.StartOrRestart(reflectedShot)
+Game.ConsumeEvents(reflectedShot)
+reflectedShot.state = "battle"
 for _, definition in ipairs(CrystalConfig.definitions) do
-    chain.player.crystals[definition.id] = definition.maxStacks
+    reflectedShot.player.crystals[definition.id] = definition.maxStacks
 end
 local firstTarget = Entities.NewEnemy("soot", { x = 0.35, y = 0.5 }, 3101)
-local secondTarget = Entities.NewEnemy("soot", { x = 0.55, y = 0.5 }, 3102)
-local thirdTarget = Entities.NewEnemy("soot", { x = 0.75, y = 0.5 }, 3103)
-for _, enemy in ipairs({ firstTarget, secondTarget, thirdTarget }) do
+local secondTarget = Entities.NewEnemy("soot", { x = 0.55, y = 0.7 }, 3102)
+for _, enemy in ipairs({ firstTarget, secondTarget }) do
     enemy.hp = 1
     enemy.stateTimer = 99
 end
-chain.enemies = { firstTarget, secondTarget, thirdTarget }
-local chainedProjectile = Entities.NewProjectile(firstTarget.x, firstTarget.y, 0.2, 0, "player", 2, "mushroom")
-chainedProjectile.chainsRemaining = 1
-chainedProjectile.pierceRemaining = 1
-chain.projectiles = { chainedProjectile }
-local impactX, impactY = chainedProjectile.x, chainedProjectile.y
-Game.Update(chain, 0, 0, 0)
-assert(chainedProjectile.x == impactX and chainedProjectile.y == impactY,
-    "retargeting must change velocity without teleporting the projectile")
-assert(chainedProjectile.chainsRemaining == 0 and chainedProjectile.pierceRemaining == 1,
-    "a kill chain must consume tracking without consuming penetration")
-assert(chainedProjectile.hitEnemies[firstTarget.id], "the first target must remain excluded from later chains")
-assert(chainedProjectile.vx > 0 and math.abs(chainedProjectile.vy) < 0.0001,
-    "the chain must aim at the nearest unhit enemy")
-assert(math.abs(math.sqrt(chainedProjectile.vx ^ 2 + chainedProjectile.vy ^ 2) - 0.2) < 0.000001,
-    "retargeting must preserve projectile speed")
+reflectedShot.enemies = { firstTarget, secondTarget }
+local reflectedProjectile = Entities.NewProjectile(firstTarget.x, firstTarget.y, 0.2, 0, "player", 2, "mushroom")
+reflectedProjectile.reflected = true
+reflectedProjectile.pierceRemaining = 1
+reflectedShot.projectiles = { reflectedProjectile }
+Game.Update(reflectedShot, 0, 0, 0)
+assert(reflectedProjectile.vx == 0.2 and reflectedProjectile.vy == 0,
+    "a reflected projectile must keep its original direction after a kill")
+assert(reflectedProjectile.pierceRemaining == 0 and reflectedProjectile.hitEnemies[firstTarget.id],
+    "a reflected projectile must consume penetration without tracking another target")
 
-chainedProjectile.x, chainedProjectile.y = secondTarget.x, secondTarget.y
-Game.Update(chain, 0, 0, 0)
-assert(chainedProjectile.chainsRemaining == 0 and chainedProjectile.pierceRemaining == 0,
-    "the next kill must consume penetration after tracking is exhausted")
-assert(not chainedProjectile.dead and chainedProjectile.hitEnemies[secondTarget.id],
-    "penetration must keep the projectile alive without allowing a repeated hit")
-
-chainedProjectile.x, chainedProjectile.y = thirdTarget.x, thirdTarget.y
-Game.Update(chain, 0, 0, 0)
-assert(chainedProjectile.dead and #chain.projectiles == 0,
-    "the projectile must expire when both tracking and penetration are exhausted")
+reflectedProjectile.x, reflectedProjectile.y = secondTarget.x, secondTarget.y
+Game.Update(reflectedShot, 0, 0, 0)
+assert(reflectedProjectile.dead and #reflectedShot.projectiles == 0,
+    "a reflected projectile must expire after its penetration is exhausted")
 
 local comboGame = Game.New()
 Game.StartOrRestart(comboGame)

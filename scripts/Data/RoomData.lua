@@ -48,8 +48,8 @@ return {
                 { x = 0.5, y = 0.72 },
             },
             groups = {
-                { "luminous_wraith", "blue_swarm", "ghost_b", "mushroom", "toxic_moss" },
-                { "luminous_wraith", "soot", "ghost_b", "sap", "toxic_moss" },
+                { "shadow_wraith", "blue_swarm", "mushroom", "toxic_moss" },
+                { "shadow_wraith", "soot", "sap", "toxic_moss" },
             },
         },
         crypt = {
@@ -61,7 +61,7 @@ return {
             },
             groups = {
                 { "tree", "sap", "dandelion", "toxic_moss" },
-                { "ghost_b", "ghost_a", "mushroom", "purple_orb" },
+                { "shadow_wraith", "mushroom", "purple_orb" },
             },
         },
         treasury = {

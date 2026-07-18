@@ -24,10 +24,10 @@ return {
         visual = Visual({ 55, 58, 68 }, { 136, 140, 154 }, { 18, 20, 30 }),
     },
     blue_swarm = {
-        behavior = "melee_lunge", hp = 2, radius = 0.04,
-        attackRangeMeters = 5, attackRange = MetersToWorld(5),
+        behavior = "aoe_pulse", hp = 2, radius = 0.04,
+        attackRangeMeters = 3, attackRange = MetersToWorld(3),
         moveSpeed = 0.34, touchDamage = 1,
-        attack = { interval = 0.9, telegraph = 0.24, active = 0.22, recovery = 0.34, dashSpeed = 1.1, arc = 110 },
+        attack = { interval = 0.7, repeatInterval = 0.7, telegraph = 0.2, active = 0.01, recovery = 0.09, range = MetersToWorld(3) },
         visual = Visual({ 82, 166, 255 }, { 169, 225, 255 }, { 22, 69, 142 }),
     },
     tree = {
@@ -41,26 +41,15 @@ return {
         visual = Visual({ 29, 31, 39 }, { 75, 65, 86 }, { 7, 9, 16 }),
     },
     sap = {
-        behavior = "melee_lunge", hp = 3, radius = 0.043,
-        attackRangeMeters = 5, attackRange = MetersToWorld(5),
+        behavior = "melee_arc", hp = 3, radius = 0.043,
+        attackRangeMeters = 1, attackRange = MetersToWorld(1),
         moveSpeed = 0.19, touchDamage = 1,
-        attack = { interval = 1.45, telegraph = 0.46, active = 0.26, recovery = 0.55, dashSpeed = 0.76, arc = 105 },
+        attack = { interval = 1.25, telegraph = 0.30, active = 0.14, recovery = 0.34, range = MetersToWorld(1), arc = 60 },
         split = { count = 2, childHpRatio = 0.5, childRadiusRatio = 0.72, offset = 0.04 },
         visual = Visual({ 178, 237, 225 }, { 106, 194, 181 }, { 61, 124, 131 }),
     },
-    ghost_a = {
-        behavior = "contact_chase", hp = 2, radius = 0.04,
-        moveSpeed = 0.2, touchDamage = 1, contactCooldown = 2.25, parryStagger = 0.62,
-        visual = Visual({ 255, 250, 238 }, { 251, 238, 111 }, { 197, 252, 72 }),
-    },
-    ghost_b = {
-        behavior = "contact_chase", hp = 2, radius = 0.04,
-        moveSpeed = 0.2, touchDamage = 1, contactCooldown = 2.25, parryStagger = 0.62,
-        visual = Visual({ 244, 250, 255 }, { 92, 219, 255 }, { 64, 162, 255 }),
-    },
-    luminous_wraith = {
+    shadow_wraith = {
         behavior = "contact_chase", hp = 2, radius = 0.043,
-        -- Medium pursuit, low contact damage, and a slow repeat hit interval.
         moveSpeed = 0.2, touchDamage = 1, contactCooldown = 2.45, parryStagger = 0.65,
         visual = Visual({ 248, 252, 250 }, { 232, 255, 142 }, { 211, 255, 72 }),
     },

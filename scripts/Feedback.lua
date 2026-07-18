@@ -28,20 +28,49 @@ local function AddImpact(state, profile, data)
     return true
 end
 
-local function AddFloatingText(state, profile, data, text)
+local function AddFloatingText(state, profile, data, text, options)
     if text == nil or not HasPosition(data) then
         return
     end
+
+    options = options or {}
 
     table.insert(state.floatingTexts, {
         x = data.x,
         y = data.y,
         text = text,
-        life = FeedbackConfig.floatingText.duration,
-        maxLife = FeedbackConfig.floatingText.duration,
-        rise = FeedbackConfig.floatingText.rise,
+        life = options.duration or FeedbackConfig.floatingText.duration,
+        maxLife = options.duration or FeedbackConfig.floatingText.duration,
+        rise = options.rise or FeedbackConfig.floatingText.rise,
         size = profile.textSize,
         color = CopyColor(profile.textColor),
+        offsetX = options.offsetX or 0,
+    })
+end
+
+local function FormatDamage(amount)
+    if math.abs(amount - math.floor(amount + 0.5)) <= 0.001 then
+        return tostring(math.floor(amount + 0.5))
+    end
+    return string.format("%.1f", amount)
+end
+
+local function AddDamagePopup(state, data)
+    if not HasPosition(data) or type(data.damage) ~= "number" or data.damage <= 0 then
+        return
+    end
+    local config = FeedbackConfig.damagePopup
+    local profile = config.profiles[data.popupKind] or config.profiles.reflect
+    state.damagePopupSerial = (state.damagePopupSerial or 0) + 1
+    local laneIndex = (state.damagePopupSerial - 1) % #config.laneOffsets + 1
+    local text = FormatDamage(data.damage)
+    if data.killed then
+        text = text .. " 击破"
+    end
+    AddFloatingText(state, profile, data, text, {
+        duration = config.duration,
+        rise = config.rise,
+        offsetX = config.laneOffsets[laneIndex],
     })
 end
 
@@ -173,6 +202,7 @@ function Feedback.New()
         bursts = {},
         floatingTexts = {},
         perfectStreakDisplay = nil,
+        damagePopupSerial = 0,
     }
 end
 
@@ -186,10 +216,14 @@ function Feedback.ProcessEvents(state, events)
             ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, nil)
             AddBurst(state, FeedbackConfig.perfectParry, data)
             StartPerfectStreakDisplay(state, data)
+        elseif name == "damage_dealt" then
+            AddDamagePopup(state, data)
+        elseif name == "crystal_orbit_block" then
+            AddFloatingText(state, FeedbackConfig.orbitGuard, data, "格挡")
         elseif name == "player_hurt" then
             ApplyScreenProfile(state, FeedbackConfig.playerHurt)
-        elseif name == "luminous_wraith_hit" then
-            AddBurst(state, FeedbackConfig.luminousWraithHit, data)
+        elseif name == "shadow_wraith_hit" then
+            AddBurst(state, FeedbackConfig.shadowWraithHit, data)
         elseif name == "boss_defeat" then
             ApplyWorldProfile(state, FeedbackConfig.bossDefeat, data, "净化")
         elseif name == "boss_phase_changed" then
