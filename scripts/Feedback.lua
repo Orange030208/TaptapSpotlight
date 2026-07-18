@@ -63,6 +63,44 @@ local function AddShockwave(state, profile, data)
     return true
 end
 
+local function AddBurst(state, profile, data)
+    if not HasPosition(data) or profile.burstDuration == nil then
+        return false
+    end
+
+    local directionX = type(data.directionX) == "number" and data.directionX or 1
+    local directionY = type(data.directionY) == "number" and data.directionY or 0
+    local directionLength = math.sqrt(directionX * directionX + directionY * directionY)
+    if directionLength <= 0.0001 and type(data.originX) == "number" and type(data.originY) == "number" then
+        directionX = data.x - data.originX
+        directionY = data.y - data.originY
+        directionLength = math.sqrt(directionX * directionX + directionY * directionY)
+    end
+    if directionLength <= 0.0001 then
+        directionX, directionY = 1, 0
+    else
+        directionX, directionY = directionX / directionLength, directionY / directionLength
+    end
+
+    table.insert(state.bursts, {
+        kind = profile.burstKind,
+        x = data.x,
+        y = data.y,
+        originX = data.originX,
+        originY = data.originY,
+        directionX = directionX,
+        directionY = directionY,
+        life = profile.burstDuration,
+        maxLife = profile.burstDuration,
+        startRadius = profile.burstStart,
+        endRadius = profile.burstEnd,
+        stroke = profile.burstStroke,
+        arcDegrees = profile.burstArcDegrees,
+        color = CopyColor(profile.burstColor),
+    })
+    return true
+end
+
 local function ApplyScreenProfile(state, profile)
     local hitStop = profile.hitStop or 0
     if hitStop > 0 then
@@ -102,11 +140,24 @@ local function ApplyWorldProfile(state, profile, data, text)
     AddFloatingText(state, profile, data, text)
 end
 
-local function FormatDamage(data)
-    if type(data) ~= "table" or data.defenseOnly or type(data.damage) ~= "number" then
-        return nil
+local function StartPerfectStreakDisplay(state, data)
+    local profile = FeedbackConfig.perfectStreak
+    local count = type(data) == "table" and math.max(1, math.floor(data.perfectStreak or 1)) or 1
+    state.perfectStreakDisplay = {
+        count = count,
+        focusIndex = math.min(count, profile.iconLimit),
+        life = profile.displayDuration,
+        maxLife = profile.displayDuration,
+    }
+
+    local strength = math.min(profile.shakeMax, profile.shakeBase + (count - 1) * profile.shakePerStack)
+    if state.shake == nil or strength >= state.shake.strength then
+        state.shake = {
+            timer = profile.shakeDuration,
+            maxTimer = profile.shakeDuration,
+            strength = strength,
+        }
     end
-    return string.format("%.1f", data.damage)
 end
 
 function Feedback.New()
@@ -119,7 +170,9 @@ function Feedback.New()
         hudPulseDuration = 0,
         impacts = {},
         shockwaves = {},
+        bursts = {},
         floatingTexts = {},
+        perfectStreakDisplay = nil,
     }
 end
 
@@ -127,13 +180,16 @@ function Feedback.ProcessEvents(state, events)
     for _, event in ipairs(events or {}) do
         local name = event.name
         local data = event.data
-        if name == "parry_success" then
-            ApplyWorldProfile(state, FeedbackConfig.normalParry, data, nil)
+        if name == "parry_start" then
+            AddBurst(state, FeedbackConfig.parryStart, data)
         elseif name == "perfect_parry" then
-            local damage = FormatDamage(data)
-            ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, damage ~= nil and ("完美 " .. damage) or "完美")
+            ApplyWorldProfile(state, FeedbackConfig.perfectParry, data, nil)
+            AddBurst(state, FeedbackConfig.perfectParry, data)
+            StartPerfectStreakDisplay(state, data)
         elseif name == "player_hurt" then
             ApplyScreenProfile(state, FeedbackConfig.playerHurt)
+        elseif name == "luminous_wraith_hit" then
+            AddBurst(state, FeedbackConfig.luminousWraithHit, data)
         elseif name == "boss_defeat" then
             ApplyWorldProfile(state, FeedbackConfig.bossDefeat, data, "净化")
         elseif name == "boss_phase_changed" then
@@ -177,6 +233,12 @@ function Feedback.Update(state, dt)
             state.flash = nil
         end
     end
+    if state.perfectStreakDisplay ~= nil then
+        state.perfectStreakDisplay.life = state.perfectStreakDisplay.life - dt
+        if state.perfectStreakDisplay.life <= 0 then
+            state.perfectStreakDisplay = nil
+        end
+    end
 
     for index = #state.impacts, 1, -1 do
         local impact = state.impacts[index]
@@ -190,6 +252,13 @@ function Feedback.Update(state, dt)
         shockwave.life = shockwave.life - dt
         if shockwave.life <= 0 then
             table.remove(state.shockwaves, index)
+        end
+    end
+    for index = #state.bursts, 1, -1 do
+        local burst = state.bursts[index]
+        burst.life = burst.life - dt
+        if burst.life <= 0 then
+            table.remove(state.bursts, index)
         end
     end
     for index = #state.floatingTexts, 1, -1 do
@@ -223,6 +292,10 @@ function Feedback.GetHudPulse(state)
         return 0
     end
     return math.max(0, state.hudPulseTimer / state.hudPulseDuration)
+end
+
+function Feedback.GetPerfectStreakDisplay(state)
+    return state ~= nil and state.perfectStreakDisplay or nil
 end
 
 return Feedback

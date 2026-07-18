@@ -1,0 +1,12 @@
+{
+  "maxDimension": 1024,
+  "assets": [
+    "assets/image/soot_monster.png",
+    "assets/image/luminous_wraith_enemy.png",
+    "assets/image/stone_golem.png",
+    "assets/image/spore_mushroom.png",
+    "assets/image/dark_dandelion.png",
+    "assets/image/purple_glow_orb.png",
+    "assets/image/toxic_moss.png"
+  ]
+}

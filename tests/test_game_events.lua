@@ -6,12 +6,12 @@ local BossConfig = require "Data.BossConfig"
 local PlayerConfig = require "Data.PlayerConfig"
 local ProjectileConfig = require "Data.ProjectileConfig"
 local RoomConfig = require "Data.RoomConfig"
-local UpgradeConfig = require "Data.UpgradeConfig"
+local CrystalConfig = require "Data.CrystalConfig"
 local Entities = require "Entities"
 local Game = require "Game"
 
-for _, definition in ipairs(UpgradeConfig.definitions) do
-    assert(type(definition.icon) == "string" and definition.icon ~= "", "every upgrade needs an icon")
+for _, definition in ipairs(CrystalConfig.definitions) do
+    assert(type(definition.iconKind) == "string" and definition.iconKind ~= "", "every crystal needs an icon kind")
 end
 
 local function HasEvent(events, name)
@@ -118,17 +118,59 @@ assert(not Game.TryParry(tooEarly, tooEarly.player.x, tooEarly.player.y - 1),
 
 game.state = "chest_select"
 game.stateBeforeChest = "battle"
-game.chestOptions = { UpgradeConfig.definitions[1] }
-assert(Game.SelectUpgrade(game, 1))
+game.chestOptions = { CrystalConfig.definitions[1] }
+assert(Game.SelectCrystal(game, 1))
 assert(game.state == "battle" and game.stateBeforeChest == nil)
 events = Game.ConsumeEvents(game)
-assert(HasEvent(events, "upgrade_select"))
+assert(HasEvent(events, "crystal_acquired"))
 
 local battle = Game.New()
 Game.StartOrRestart(battle)
 Game.ConsumeEvents(battle)
-Game.Update(battle, RoomConfig.introDuration + 0.01, 0, 0)
-assert(HasEvent(Game.ConsumeEvents(battle), "battle_start"))
+assert(battle.currentRoomId == "threshold")
+assert(battle.state == "clear" and not battle.roomCleared, "the birth room must lock exits until its tutorial is complete")
+assert(#battle.enemies == 0 and battle.clearedRoomCount == 0, "the birth room must not spawn or count combat")
+assert(battle.spawnGuideAlpha == 1, "the birth room must expose its WASD floor guide")
+local birthX = battle.player.x
+Game.Update(battle, 0.1, 1, 0)
+assert(battle.player.x > birthX and battle.spawnGuideAlpha < 1, "movement must dismiss the floor guide")
+assert(battle.spawnParryGuideAlpha == 1, "movement must reveal the mouse parry guide")
+assert(Game.TryParry(battle, battle.player.x + 1, battle.player.y, true), "the left-click tutorial must allow a parry")
+assert(battle.spawnParryGuideAlpha == 0, "the mouse parry guide must disappear immediately after a successful click")
+assert(battle.roomCleared, "movement and parry must unlock the birth room exits")
+battle.player.x, battle.player.y = 0.5, RoomConfig.minY
+Game.Update(battle, 0, 0, 0)
+assert(HasEvent(Game.ConsumeEvents(battle), "room_transition"), "the birth room north door must be usable")
+battle.transition = nil
+battle.doorCooldown = 0
+
+local reflectTutorial = Game.New()
+Game.StartOrRestart(reflectTutorial)
+Game.ConsumeEvents(reflectTutorial)
+Game.Update(reflectTutorial, 0.1, 1, 0)
+assert(Game.TryParry(reflectTutorial, reflectTutorial.player.x + 1, reflectTutorial.player.y, true))
+reflectTutorial.player.x, reflectTutorial.player.y = 0.5, RoomConfig.minY
+Game.Update(reflectTutorial, 0, 0, 0)
+assert(reflectTutorial.state == "room_transition")
+Game.Update(reflectTutorial, RoomConfig.transitionDuration * 0.5, 0, 0)
+
+local reflectRoom = reflectTutorial.room
+local tutorialSpawn = reflectRoom.tutorialSpawn
+assert(reflectRoom.id == "crossfire" and reflectRoom.isReflectTutorial)
+assert(#reflectRoom.spawns == 0 and tutorialSpawn.randomized, "the reflection tutorial must not use fixed spawn points")
+assert(#reflectTutorial.enemies == tutorialSpawn.count and tutorialSpawn.count == 2)
+for index, enemy in ipairs(reflectTutorial.enemies) do
+    assert(enemy.kind == tutorialSpawn.kind and tutorialSpawn.kind == "soot")
+    assert(enemy.x >= tutorialSpawn.area.minX and enemy.x <= tutorialSpawn.area.maxX)
+    assert(enemy.y >= tutorialSpawn.area.minY and enemy.y <= tutorialSpawn.area.maxY)
+    local playerDistance = math.sqrt((enemy.x - reflectTutorial.player.x) ^ 2 + (enemy.y - reflectTutorial.player.y) ^ 2)
+    assert(playerDistance >= tutorialSpawn.minPlayerDistance)
+    for previous = 1, index - 1 do
+        local other = reflectTutorial.enemies[previous]
+        local separation = math.sqrt((enemy.x - other.x) ^ 2 + (enemy.y - other.y) ^ 2)
+        assert(separation >= tutorialSpawn.minSeparation)
+    end
+end
 
 battle.state = "battle"
 battle.enemies = { Entities.NewEnemy("mushroom", { x = 0.2, y = 0.2 }, 1001) }
@@ -167,8 +209,24 @@ assert(HasEvent(events, "perfect_parry"))
 assert(HasEvent(events, "enemy_defeat"))
 assert(HasEvent(events, "room_clear"))
 assert(FindEvent(events, "perfect_parry").data.damage > 0)
+assert(FindEvent(events, "perfect_parry").data.originX == parry.player.x)
+assert(FindEvent(events, "perfect_parry").data.directionX > 0)
 assert(FindEvent(events, "enemy_defeat").data.kind == "soot")
 assert(parry.gauge.value == GaugeConfig.perfectGain, "killing an enemy must preserve gauge progress")
+
+local wraithContact = Game.New()
+Game.StartOrRestart(wraithContact)
+Game.ConsumeEvents(wraithContact)
+wraithContact.state = "battle"
+wraithContact.enemies = {
+    Entities.NewEnemy("luminous_wraith", { x = wraithContact.player.x + 0.05, y = wraithContact.player.y }, 2002),
+}
+Game.Update(wraithContact, 0, 0, 0)
+events = Game.ConsumeEvents(wraithContact)
+local wraithEffect = FindEvent(events, "luminous_wraith_hit")
+assert(wraithEffect ~= nil, "luminous wraith contact must emit an effect event")
+assert(wraithEffect.data.originX > wraithEffect.data.x and wraithEffect.data.directionX < 0,
+    "luminous wraith effect must point from the attacker toward the player")
 
 local reflect = Game.New()
 Game.StartOrRestart(reflect)
@@ -207,8 +265,8 @@ local chain = Game.New()
 Game.StartOrRestart(chain)
 Game.ConsumeEvents(chain)
 chain.state = "battle"
-for _, definition in ipairs(UpgradeConfig.definitions) do
-    chain.player.abilities[definition.id] = definition.maxStacks
+for _, definition in ipairs(CrystalConfig.definitions) do
+    chain.player.crystals[definition.id] = definition.maxStacks
 end
 local firstTarget = Entities.NewEnemy("soot", { x = 0.35, y = 0.5 }, 3101)
 local secondTarget = Entities.NewEnemy("soot", { x = 0.55, y = 0.5 }, 3102)
@@ -265,13 +323,18 @@ end
 
 local comboEvents = PerformPerfectComboParry(3201)
 assert(comboGame.combo.count == ComboConfig.perfectGain and comboGame.combo.tier == 0)
+assert(FindEvent(comboEvents, "perfect_parry").data.perfectStreak == 1,
+    "the first perfect parry must begin a separate visual streak")
 comboEvents = PerformPerfectComboParry(3202)
 assert(comboGame.combo.count == ComboConfig.perfectGain * 2 and comboGame.combo.tier == 1)
 assert(HasEvent(comboEvents, "combo_tier_up"))
+assert(FindEvent(comboEvents, "perfect_parry").data.perfectStreak == 2,
+    "each consecutive perfect parry must increment the visual streak by one")
 comboEvents = PerformPerfectComboParry(3203)
 assert(comboGame.combo.tier == 2)
 assert(HasEvent(comboEvents, "combo_tier_up") and HasEvent(comboEvents, "combo_shockwave"),
     "tier two perfect parries must create a shockwave event")
+assert(FindEvent(comboEvents, "perfect_parry").data.perfectStreak == 3)
 PerformPerfectComboParry(3204)
 comboEvents = PerformPerfectComboParry(3205)
 assert(comboGame.combo.count == ComboConfig.overdriveThreshold)
@@ -280,9 +343,11 @@ assert(HasEvent(comboEvents, "overdrive_start"))
 local comboHud = Game.GetHud(comboGame).combo
 assert(comboHud.count == ComboConfig.overdriveThreshold and comboHud.tier == 3)
 assert(comboHud.overdriveRemaining == ComboConfig.overdriveDuration)
+assert(comboGame.perfectStreak.count == 5, "perfect streak count must stay independent from combo points")
 
 Game.Update(comboGame, ComboConfig.overdriveDuration + 0.01, 0, 0)
 assert(comboGame.combo.overdriveRemaining == 0, "overdrive must expire after its configured duration")
+assert(comboGame.perfectStreak.count == 0, "three seconds without a perfect parry must reset the visual streak")
 comboGame.player.invulnerabilityTimer = 0
 comboGame.projectiles = { Entities.NewProjectile(comboGame.player.x, comboGame.player.y, 0, 0, "enemy", 1) }
 Game.Update(comboGame, 0, 0, 0)
@@ -319,6 +384,7 @@ sharedGauge.enemies[1].stateTimer = 0.5
 assert(Game.TryParry(sharedGauge))
 Game.Update(sharedGauge, 0, 0, 0)
 assert(sharedGauge.gauge.value == GaugeConfig.perfectGain, "melee parries must fill the shared gauge")
+assert(sharedGauge.perfectStreak.count == 1)
 
 sharedGauge.player.parryTimer = 0
 sharedGauge.player.parryCooldown = 0
@@ -330,6 +396,7 @@ sharedGauge.player.parryElapsed = PlayerConfig.perfectParryWindow + 0.01
 Game.Update(sharedGauge, 0, 0, 0)
 assert(sharedGauge.gauge.value == GaugeConfig.perfectGain + GaugeConfig.normalGain,
     "ranged reflections must continue filling the same gauge")
+assert(sharedGauge.perfectStreak.count == 0, "a normal parry must break the strict perfect streak")
 
 local gauge = Game.New()
 Game.StartOrRestart(gauge)
@@ -381,10 +448,12 @@ Game.StartOrRestart(transition)
 Game.ConsumeEvents(transition)
 transition.state = "clear"
 transition.roomCleared = true
+transition.perfectStreak = { count = 2, timer = ComboConfig.perfectStreakWindow }
 transition.player.x = 0.5
 transition.player.y = RoomConfig.minY
 Game.Update(transition, 0, 0, 0)
 assert(HasEvent(Game.ConsumeEvents(transition), "room_transition"))
+assert(transition.perfectStreak.count == 0, "crossing a doorway must immediately reset the perfect streak")
 
 local boss = Game.New()
 Game.StartOrRestart(boss)
@@ -418,8 +487,8 @@ clearProjectile.enemies[1].hp = 0.1
 clearProjectile.enemies[1].stateTimer = 99
 clearProjectile.projectiles = { Entities.NewProjectile(0.5, 0.5, 0.2, 0, "player", 1) }
 clearProjectile.projectiles[1].pierceRemaining = 1
-for _, definition in ipairs(UpgradeConfig.definitions) do
-    clearProjectile.player.abilities[definition.id] = definition.maxStacks
+for _, definition in ipairs(CrystalConfig.definitions) do
+    clearProjectile.player.crystals[definition.id] = definition.maxStacks
 end
 Game.Update(clearProjectile, 0, 0, 0)
 assert(clearProjectile.state == "clear",

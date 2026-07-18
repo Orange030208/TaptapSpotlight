@@ -4,29 +4,27 @@ return {
     startRoomId = "threshold",
     rooms = {
         threshold = {
-            id = "threshold", name = "门槛之间", mapX = 0, mapY = 0,
+            id = "threshold", name = "初醒之间", mapX = 0, mapY = 0,
+            -- The birth room is deliberately non-combat: it teaches movement before the first encounter.
+            isBirthRoom = true,
             connections = { north = "crossfire", east = "pressure" },
-            spawns = {
-                { x = 0.22, y = 0.31 }, { x = 0.78, y = 0.31 }, { x = 0.5, y = 0.27 },
-                { x = 0.34, y = 0.55 }, { x = 0.66, y = 0.55 },
-            },
-            groups = {
-                { "soot", "mushroom", "blue_swarm" },
-                { "soot", "soot", "mushroom" },
-            },
+            spawns = {},
+            groups = {},
         },
         crossfire = {
-            id = "crossfire", name = "交叉火力", mapX = 0, mapY = -1,
+            id = "crossfire", name = "反弹试炼", mapX = 0, mapY = -1,
+            isReflectTutorial = true,
             connections = { north = "warden", east = "ambush", south = "threshold", west = "crypt" },
-            spawns = {
-                { x = 0.22, y = 0.29 }, { x = 0.78, y = 0.29 },
-                { x = 0.32, y = 0.48 }, { x = 0.68, y = 0.48 },
-                { x = 0.5, y = 0.66 },
+            tutorialSpawn = {
+                kind = "soot",
+                count = 2,
+                randomized = true,
+                area = { minX = 0.20, maxX = 0.80, minY = 0.20, maxY = 0.54 },
+                minPlayerDistance = 0.32,
+                minSeparation = 0.20,
             },
-            groups = {
-                { "blue_swarm", "mushroom", "dandelion", "sap", "soot" },
-                { "sap", "soot", "mushroom", "blue_swarm", "dandelion" },
-            },
+            spawns = {},
+            groups = {},
         },
         pressure = {
             id = "pressure", name = "重压之间", mapX = 1, mapY = 0,
@@ -50,8 +48,8 @@ return {
                 { x = 0.5, y = 0.72 },
             },
             groups = {
-                { "ghost_a", "blue_swarm", "ghost_b", "mushroom", "toxic_moss" },
-                { "ghost_a", "soot", "ghost_b", "sap", "toxic_moss" },
+                { "luminous_wraith", "blue_swarm", "ghost_b", "mushroom", "toxic_moss" },
+                { "luminous_wraith", "soot", "ghost_b", "sap", "toxic_moss" },
             },
         },
         crypt = {

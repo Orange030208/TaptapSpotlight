@@ -5,7 +5,7 @@ local RoomData = require "Data.RoomData"
 
 local expectedKinds = {
     "soot", "blue_swarm", "tree", "sap", "ghost_a", "ghost_b", "stone",
-    "mushroom", "dandelion", "purple_orb", "toxic_moss",
+    "mushroom", "dandelion", "purple_orb", "toxic_moss", "luminous_wraith",
 }
 
 assert(EnemyConfig.roomWidthMeters == 30)
@@ -32,12 +32,36 @@ end
 
 assert(EnemyConfig.soot.attackRangeMeters == 5)
 assert(EnemyConfig.tree.attackRangeMeters == 8)
-assert(EnemyConfig.mushroom.attackRangeMeters == 15)
-assert(EnemyConfig.dandelion.projectile.count == 5)
+assert(EnemyConfig.mushroom.attackRangeMeters == 8)
+assert(EnemyConfig.mushroom.moveSpeed <= 0.1, "mushroom movement must stay low")
+assert(EnemyConfig.mushroom.attack.repeatInterval == 0.5, "mushroom must fire every 0.5 seconds")
+assert(EnemyConfig.mushroom.projectile.count == 1, "mushroom must fire one spore")
+assert(EnemyConfig.mushroom.projectile.style == "spore")
+assert(EnemyConfig.mushroom.projectile.damage == 1, "mushroom spore damage must stay low")
+assert(EnemyConfig.dandelion.moveSpeed == 0, "dark dandelion must not move")
+assert(EnemyConfig.dandelion.attack.repeatInterval == 1.2, "dark dandelion must fire every 1.2 seconds")
+assert(EnemyConfig.dandelion.projectile.count == 10, "dark dandelion must fire ten seeds")
+assert(EnemyConfig.dandelion.projectile.pattern == "radial_random")
+assert(EnemyConfig.dandelion.projectile.minRadius < EnemyConfig.dandelion.projectile.maxRadius)
+assert(EnemyConfig.dandelion.projectile.style == "seed")
+assert(EnemyConfig.dandelion.projectile.damage == 1, "dark dandelion seed damage must stay low")
+assert(EnemyConfig.purple_orb.attackRangeMeters == 3)
+assert(EnemyConfig.purple_orb.attack.range == EnemyConfig.MetersToWorld(3))
+assert(EnemyConfig.purple_orb.attack.repeatInterval == 1, "purple orb must pulse every second")
+assert(EnemyConfig.purple_orb.moveSpeed == 0.18, "purple orb must use medium movement speed")
+assert(EnemyConfig.purple_orb.touchDamage == 1, "purple orb damage must stay low")
 assert(EnemyConfig.sap.split.count == 2)
 assert(EnemyConfig.dandelion.immovable)
 assert(EnemyConfig.toxic_moss.immovable)
 assert(not EnemyConfig.stone.immovable)
+assert(EnemyConfig.stone.behavior == "rolling")
+assert(EnemyConfig.stone.moveSpeed >= 0.25, "stone must quickly pursue the player")
+assert(EnemyConfig.stone.attack.telegraph == 0, "stone charge must start immediately")
+assert(EnemyConfig.stone.attack.dashSpeed >= 1.4, "stone charge must be fast")
+assert(EnemyConfig.luminous_wraith.behavior == "contact_chase")
+assert(EnemyConfig.luminous_wraith.moveSpeed == 0.2)
+assert(EnemyConfig.luminous_wraith.touchDamage == 1)
+assert(EnemyConfig.luminous_wraith.contactCooldown == 2.45)
 
 local encountered = {}
 for _, room in pairs(RoomData.rooms) do

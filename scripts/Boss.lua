@@ -40,6 +40,7 @@ local function IsInsideArc(boss, target, range, arcDegrees, reverse)
     local distance = Length(dx, dy)
     if distance > range + (target.radius or 0) then return false end
     if distance <= 0.0001 then return true end
+    ---@type number
     local facingX = boss.facing == "left" and -1 or 1
     if reverse then facingX = -facingX end
     local halfAngle = math.rad(arcDegrees * 0.5)

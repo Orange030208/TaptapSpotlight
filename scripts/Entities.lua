@@ -3,7 +3,7 @@ local EnemyConfig = require "Data.EnemyConfig"
 local PlayerConfig = require "Data.PlayerConfig"
 local ProjectileConfig = require "Data.ProjectileConfig"
 local RoomConfig = require "Data.RoomConfig"
-local UpgradeConfig = require "Data.UpgradeConfig"
+local CrystalConfig = require "Data.CrystalConfig"
 local Boss = require "Boss"
 
 local Entities = {}
@@ -69,10 +69,29 @@ local function MoveEnemy(enemy, moveX, moveY, speed, dt)
     end
 end
 
+local function GetInitialAttackTimer(spec)
+    local attack = spec.attack
+    if attack == nil then
+        return 0.8
+    end
+    if attack.repeatInterval ~= nil then
+        return math.max(0, attack.repeatInterval - (attack.telegraph or 0))
+    end
+    return attack.interval * (0.55 + math.random() * 0.25)
+end
+
+local function GetRecoveryAttackTimer(spec)
+    local attack = spec.attack
+    if attack.repeatInterval ~= nil then
+        return math.max(0, attack.repeatInterval - (attack.telegraph or 0) - (attack.active or 0) - (attack.recovery or 0))
+    end
+    return attack.interval * (0.8 + math.random() * 0.25)
+end
+
 function Entities.NewPlayer()
-    local abilities = {}
-    for _, definition in ipairs(UpgradeConfig.definitions) do
-        abilities[definition.id] = 0
+    local crystals = {}
+    for _, definition in ipairs(CrystalConfig.definitions) do
+        crystals[definition.id] = 0
     end
 
     return {
@@ -93,7 +112,8 @@ function Entities.NewPlayer()
         bufferedParryDirectionY = 0,
         invulnerabilityTimer = 0,
         parryHalfAngleCos = PlayerConfig.parryHalfAngleCos,
-        abilities = abilities,
+        crystals = crystals,
+        crystalOrder = {},
     }
 end
 
@@ -109,7 +129,7 @@ function Entities.NewEnemy(kind, spawn, id)
         hp = spec.hp,
         maxHp = spec.hp,
         state = "idle",
-        stateTimer = (spec.attack and spec.attack.interval or 0.8) * (0.55 + math.random() * 0.25),
+        stateTimer = GetInitialAttackTimer(spec),
         vx = 0,
         vy = 0,
         facing = "right",
@@ -207,8 +227,7 @@ function Entities.UpdatePlayerTimers(player, dt)
         player.parryTimer = PlayerConfig.parryWindow
         player.parryElapsed = 0
         player.parrySerial = (player.parrySerial or 0) + 1
-        player.parryCooldown = PlayerConfig.parryCooldown - player.abilities.quick_hands * 0.06
-        player.parryCooldown = math.max(0.2, player.parryCooldown)
+        player.parryCooldown = PlayerConfig.parryCooldown
         return true
     end
     return false
@@ -253,8 +272,7 @@ function Entities.BeginParry(player, targetX, targetY)
     player.parryTimer = PlayerConfig.parryWindow
     player.parryElapsed = 0
     player.parrySerial = (player.parrySerial or 0) + 1
-    player.parryCooldown = PlayerConfig.parryCooldown - player.abilities.quick_hands * 0.06
-    player.parryCooldown = math.max(0.2, player.parryCooldown)
+    player.parryCooldown = PlayerConfig.parryCooldown
     return true, true
 end
 
@@ -366,6 +384,21 @@ end
 local function EmitConfiguredProjectiles(enemy, spec, emitProjectile)
     local projectile = spec.projectile
     local count = projectile.count
+    if projectile.pattern == "radial_random" then
+        local minRadius = projectile.minRadius or projectile.radius
+        local maxRadius = projectile.maxRadius or projectile.radius
+        for _ = 1, count do
+            local angle = math.random() * math.pi * 2
+            local radius = minRadius + (maxRadius - minRadius) * math.random()
+            emitProjectile(Entities.NewProjectile(
+                enemy.x, enemy.y,
+                math.cos(angle) * projectile.speed, math.sin(angle) * projectile.speed,
+                "enemy", projectile.damage, enemy.kind, projectile.style, radius
+            ))
+        end
+        return
+    end
+
     for index = 1, count do
         local offset = 0
         if count > 1 then
@@ -479,7 +512,7 @@ function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
         enemy.stateTimer = enemy.stateTimer - dt
         if enemy.stateTimer <= 0 then
             enemy.state = "idle"
-            enemy.stateTimer = spec.attack.interval * (0.8 + math.random() * 0.25)
+            enemy.stateTimer = GetRecoveryAttackTimer(spec)
         end
     end
 end
@@ -638,7 +671,7 @@ function Entities.TryParryEnemy(player, enemy, damage)
         enemy.state = "recovery"
         enemy.stateTimer = spec.attack.recovery + 0.3
     end
-    local knockback = PlayerConfig.meleeKnockback + player.abilities.repulse * 0.12
+    local knockback = PlayerConfig.meleeKnockback
     local directionX = player.parryDirectionX or (player.facing == "left" and -1 or 1)
     local directionY = player.parryDirectionY or 0
     directionX, directionY = Normalize(directionX, directionY)
@@ -674,8 +707,8 @@ function Entities.TryParryProjectile(player, projectile, damageMultiplier, perfe
     if perfect then
         baseDamage = math.max(baseDamage, ProjectileConfig.perfectReflectedDamage)
     end
-    projectile.damage = (baseDamage + player.abilities.heavy_return) * damageMultiplier
-    projectile.pierceRemaining = player.abilities.piercing_echo
+    projectile.damage = baseDamage * damageMultiplier
+    projectile.pierceRemaining = 0
     projectile.chainsRemaining = perfect and ProjectileConfig.perfectReflectionChains or 0
     projectile.hitEnemies = {}
     projectile.lifetime = ProjectileConfig.lifetime
@@ -697,16 +730,15 @@ function Entities.ProjectileHitsEnemy(projectile, enemy)
         and DistanceSquared(projectile, enemy) <= (projectile.radius + enemy.radius) ^ 2
 end
 
-function Entities.ApplyUpgrade(player, definition)
-    local current = player.abilities[definition.id]
+function Entities.ApplyCrystal(player, definition)
+    local current = player.crystals[definition.id]
     if current >= definition.maxStacks then
         return false
     end
 
-    player.abilities[definition.id] = current + 1
-    if definition.id == "wide_guard" then
-        local halfAngle = math.rad(60 + (current + 1) * 12)
-        player.parryHalfAngleCos = math.cos(halfAngle)
+    player.crystals[definition.id] = current + 1
+    if current == 0 then
+        table.insert(player.crystalOrder, definition.id)
     end
     return true
 end
