@@ -47,12 +47,6 @@ local bossPanel = nil
 local bossNameLabel = nil
 ---@type Widget|nil
 local bossObjectiveLabel = nil
----@type Widget|nil
-local roomLabel = nil
----@type Widget|nil
-local roomProgressLabel = nil
----@type Widget|nil
-local gaugeStatusLabel = nil
 ---@type ProgressBar|nil
 local bossProgressBar = nil
 ---@type Widget|nil
@@ -654,6 +648,7 @@ local function CreateHud()
         width = "40%",
         minWidth = 150,
         maxWidth = 282,
+        paddingLeft = 28,
         pointerEvents = "none",
         children = { gaugeProgressBar },
     }
