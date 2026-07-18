@@ -25,7 +25,7 @@ return {
         strafeStrength = 0.8,
     },
     boss = {
-        hp = 8,
+        hp = 4,
         radius = 0.075,
         telegraphDuration = 0.75,
         dashDuration = 0.42,

@@ -45,6 +45,24 @@ local function AddFloatingText(state, profile, data, text)
     })
 end
 
+local function AddShockwave(state, profile, data)
+    if not HasPosition(data) or profile.shockwaveDuration == nil then
+        return false
+    end
+
+    table.insert(state.shockwaves, {
+        x = data.x,
+        y = data.y,
+        life = profile.shockwaveDuration,
+        maxLife = profile.shockwaveDuration,
+        startRadius = profile.shockwaveStart,
+        endRadius = profile.shockwaveEnd,
+        stroke = profile.shockwaveStroke,
+        color = CopyColor(profile.shockwaveColor),
+    })
+    return true
+end
+
 local function ApplyScreenProfile(state, profile)
     local hitStop = profile.hitStop or 0
     if hitStop > 0 then
@@ -100,6 +118,7 @@ function Feedback.New()
         hudPulseTimer = 0,
         hudPulseDuration = 0,
         impacts = {},
+        shockwaves = {},
         floatingTexts = {},
     }
 end
@@ -121,6 +140,21 @@ function Feedback.ProcessEvents(state, events)
             ApplyWorldProfile(state, FeedbackConfig.bossPhase, data, "诅咒显形")
         elseif name == "boss_mechanism_completed" then
             ApplyScreenProfile(state, FeedbackConfig.mechanismComplete)
+        elseif name == "combo_tier_up" then
+            local profile = FeedbackConfig.comboTiers[data ~= nil and data.tier or 0]
+            if profile ~= nil then
+                ApplyScreenProfile(state, profile)
+                AddShockwave(state, profile, data)
+                AddFloatingText(state, profile, data, "连击 " .. tostring(data.count or ""))
+            end
+        elseif name == "combo_shockwave" then
+            local profile = FeedbackConfig.comboTiers[data ~= nil and data.tier or 0]
+                or FeedbackConfig.comboShockwave
+            AddShockwave(state, profile, data)
+        elseif name == "overdrive_start" then
+            ApplyScreenProfile(state, FeedbackConfig.overdrive)
+            AddShockwave(state, FeedbackConfig.overdrive, data)
+            AddFloatingText(state, FeedbackConfig.overdrive, data, "超载")
         end
     end
 end
@@ -149,6 +183,13 @@ function Feedback.Update(state, dt)
         impact.life = impact.life - dt
         if impact.life <= 0 then
             table.remove(state.impacts, index)
+        end
+    end
+    for index = #state.shockwaves, 1, -1 do
+        local shockwave = state.shockwaves[index]
+        shockwave.life = shockwave.life - dt
+        if shockwave.life <= 0 then
+            table.remove(state.shockwaves, index)
         end
     end
     for index = #state.floatingTexts, 1, -1 do

@@ -6,6 +6,8 @@ return {
     parryWindow = 0.22,
     perfectParryWindow = 0.10,
     parryCooldown = 0.45,
+    successfulParryCooldown = 0.16,
+    parryInputBuffer = 0.08,
     parryRange = 0.19,
     parryHalfAngleCos = math.cos(math.rad(60)), -- 120 degree cone
     meleeKnockback = 0.48,

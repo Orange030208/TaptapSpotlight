@@ -60,6 +60,17 @@ Feedback.ProcessEvents(defense, {
 })
 assert(defense.floatingTexts[1].text == "完美", "defensive parries must not display zero damage")
 
+local combo = Feedback.New()
+Feedback.ProcessEvents(combo, {
+    { name = "combo_tier_up", data = { x = 0.5, y = 0.5, tier = 2, count = 6 } },
+    { name = "combo_shockwave", data = { x = 0.5, y = 0.5, tier = 2 } },
+    { name = "overdrive_start", data = { x = 0.5, y = 0.5, tier = 3 } },
+})
+assert(#combo.shockwaves == 3, "combo events must create layered world shockwaves")
+assert(Feedback.GetSimulationDelta(combo, 0.016) == 0, "tier upgrades need a brief hit stop")
+Feedback.Update(combo, 1.0)
+assert(#combo.shockwaves == 0, "shockwaves must clean themselves up")
+
 local phase = Feedback.New()
 Feedback.ProcessEvents(phase, {
     { name = "boss_phase_changed", data = { x = 0.5, y = 0.5, phase = 2 } },

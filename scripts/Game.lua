@@ -1,4 +1,5 @@
 local ChestConfig = require "Data.ChestConfig"
+local ComboConfig = require "Data.ComboConfig"
 local EnemyConfig = require "Data.EnemyConfig"
 local GaugeConfig = require "Data.GaugeConfig"
 local PlayerConfig = require "Data.PlayerConfig"
@@ -69,6 +70,117 @@ local function CreateGauge()
         threshold = GaugeConfig.threshold,
         pulse = 0,
     }
+end
+
+local function CreateCombo()
+    return {
+        count = 0,
+        tier = 0,
+        timeout = 0,
+        overdriveRemaining = 0,
+    }
+end
+
+local function GetComboTier(count)
+    local tier = 0
+    for index, definition in ipairs(ComboConfig.tiers) do
+        if count >= definition.threshold then
+            tier = index
+        end
+    end
+    return tier
+end
+
+local function EmitComboChanged(game)
+    local combo = game.combo
+    local definition = ComboConfig.tiers[combo.tier]
+    EmitEvent(game, "combo_changed", {
+        count = combo.count,
+        tier = combo.tier,
+        tierName = definition ~= nil and definition.name or nil,
+        color = definition ~= nil and CopyColor(definition.color) or { 190, 196, 218 },
+        overdriveRemaining = combo.overdriveRemaining,
+    })
+end
+
+local function ResetCombo(game)
+    local combo = game.combo
+    if combo == nil or combo.count <= 0 then
+        return
+    end
+    local hadOverdrive = combo.overdriveRemaining > 0
+    combo.count = 0
+    combo.tier = 0
+    combo.timeout = 0
+    combo.overdriveRemaining = 0
+    if hadOverdrive then
+        EmitEvent(game, "overdrive_end", { x = game.player.x, y = game.player.y })
+    end
+    EmitComboChanged(game)
+end
+
+local function UpdateCombo(game, dt)
+    local combo = game.combo
+    if combo == nil or combo.count <= 0 then
+        return
+    end
+
+    if combo.overdriveRemaining > 0 then
+        combo.overdriveRemaining = math.max(0, combo.overdriveRemaining - dt)
+        if combo.overdriveRemaining <= 0 then
+            combo.timeout = ComboConfig.decayDuration
+            EmitEvent(game, "overdrive_end", { x = game.player.x, y = game.player.y })
+            EmitComboChanged(game)
+        end
+        return
+    end
+
+    combo.timeout = math.max(0, combo.timeout - dt)
+    if combo.timeout <= 0 then
+        ResetCombo(game)
+    end
+end
+
+local function AddComboProgress(game, perfect, x, y, canShockwave)
+    local combo = game.combo
+    local previousTier = combo.tier
+    combo.count = combo.count + (perfect and ComboConfig.perfectGain or ComboConfig.normalGain)
+    combo.timeout = ComboConfig.decayDuration
+    combo.tier = GetComboTier(combo.count)
+
+    if combo.tier > previousTier then
+        for tier = previousTier + 1, combo.tier do
+            local definition = ComboConfig.tiers[tier]
+            EmitEvent(game, "combo_tier_up", {
+                x = x,
+                y = y,
+                tier = tier,
+                count = combo.count,
+                color = CopyColor(definition.color),
+            })
+        end
+    end
+
+    if combo.count >= ComboConfig.overdriveThreshold and combo.overdriveRemaining <= 0 then
+        combo.overdriveRemaining = ComboConfig.overdriveDuration
+        EmitEvent(game, "overdrive_start", {
+            x = x,
+            y = y,
+            tier = combo.tier,
+            count = combo.count,
+            color = CopyColor(ComboConfig.tiers[combo.tier].color),
+        })
+    end
+
+    if perfect and canShockwave and combo.tier >= ComboConfig.shockwaveTier then
+        EmitEvent(game, "combo_shockwave", {
+            x = x,
+            y = y,
+            tier = combo.tier,
+            color = CopyColor(ComboConfig.tiers[combo.tier].color),
+        })
+    end
+    EmitComboChanged(game)
 end
 
 local function GetActiveBuffMultiplier(game, field)
@@ -263,6 +375,7 @@ local function StartRun(game)
     game.stateBeforeChest = nil
     game.particles = {}
     game.gauge = CreateGauge()
+    game.combo = CreateCombo()
     game.activeBuffs = {}
     game.currentRoomId = nil
     game.roomStates = {}
@@ -405,11 +518,64 @@ local function RemoveDeadProjectiles(game)
     end
 end
 
+local function FindNearestChainTarget(game, projectile)
+    local nearest = nil
+    local nearestDistanceSquared = math.huge
+    for _, enemy in ipairs(game.enemies) do
+        if not enemy.dead and not projectile.hitEnemies[enemy.id] then
+            local dx = enemy.x - projectile.x
+            local dy = enemy.y - projectile.y
+            local distanceSquared = dx * dx + dy * dy
+            if distanceSquared < nearestDistanceSquared then
+                nearest = enemy
+                nearestDistanceSquared = distanceSquared
+            end
+        end
+    end
+    return nearest
+end
+
+local function RedirectProjectile(projectile, target)
+    local speed = math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy)
+    local dx = target.x - projectile.x
+    local dy = target.y - projectile.y
+    local distance = math.sqrt(dx * dx + dy * dy)
+    if speed <= 0.0001 or distance <= 0.0001 then
+        return false
+    end
+    projectile.turnFromX = projectile.vx / speed
+    projectile.turnFromY = projectile.vy / speed
+    projectile.turnDuration = 0.22
+    projectile.turnTimer = projectile.turnDuration
+    projectile.vx = dx / distance * speed
+    projectile.vy = dy / distance * speed
+    return true
+end
+
+local function ResolveProjectileContinuation(game, projectile, enemy, killed)
+    projectile.hitEnemies[enemy.id] = true
+
+    if killed and projectile.chainsRemaining > 0 then
+        local target = FindNearestChainTarget(game, projectile)
+        if target ~= nil and RedirectProjectile(projectile, target) then
+            projectile.chainsRemaining = projectile.chainsRemaining - 1
+            return
+        end
+    end
+
+    if projectile.pierceRemaining > 0 then
+        projectile.pierceRemaining = projectile.pierceRemaining - 1
+        return
+    end
+    projectile.dead = true
+end
+
 local function ResolveProjectileContacts(game)
     for _, projectile in ipairs(game.projectiles) do
         if Entities.ProjectileHitsPlayer(projectile, game.player) then
             projectile.dead = true
             if Entities.DamagePlayer(game.player, ProjectileConfig.playerDamage) then
+                ResetCombo(game)
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                 SetMessage(game, "受到伤害", 0.5)
                 EmitEvent(game, "player_hurt", {
@@ -425,7 +591,7 @@ local function ResolveProjectileContacts(game)
             for _, enemy in ipairs(game.enemies) do
                 if Entities.ProjectileHitsEnemy(projectile, enemy) then
                     if enemy.kind == "boss" then
-                        Entities.RegisterProjectileHit(projectile, enemy)
+                        ResolveProjectileContinuation(game, projectile, enemy, false)
                         EmitEvent(game, "projectile_hit", {
                             x = enemy.x, y = enemy.y, damage = 0, sourceKind = projectile.sourceKind,
                         })
@@ -433,7 +599,6 @@ local function ResolveProjectileContacts(game)
                     end
                     local appliedDamage = math.min(enemy.hp, projectile.damage)
                     enemy.hp = enemy.hp - appliedDamage
-                    Entities.RegisterProjectileHit(projectile, enemy)
                     AddParticles(game, enemy.x, enemy.y, { 255, 230, 115 }, 9)
                     EmitEvent(game, "projectile_hit", {
                         x = enemy.x,
@@ -444,6 +609,7 @@ local function ResolveProjectileContacts(game)
                     if enemy.hp <= 0 then
                         enemy.dead = true
                     end
+                    ResolveProjectileContinuation(game, projectile, enemy, enemy.dead)
                     break
                 end
             end
@@ -487,6 +653,17 @@ local function FormatParryMessage(perfect, damage)
     return prefix .. " - " .. string.format("%.2f", damage) .. " 伤害"
 end
 
+local function AnnounceParryStart(game)
+    game.perfectRepairConsumed = false
+    AddParticles(game, game.player.x, game.player.y, { 110, 215, 255 }, 5)
+    EmitEvent(game, "parry_start", {
+        x = game.player.x,
+        y = game.player.y,
+        directionX = game.player.parryDirectionX,
+        directionY = game.player.parryDirectionY,
+    })
+end
+
 local function ResolveParries(game)
     if not Entities.IsParrying(game.player) then
         return
@@ -495,12 +672,16 @@ local function ResolveParries(game)
     local perfect = Entities.IsPerfectParry(game.player)
     local damage = GetParryDamage(game, perfect)
     local gain = GetGaugeGain(game, perfect)
+    local parriedAnything = false
+    local parriedMelee = false
 
     for _, enemy in ipairs(game.enemies) do
         local hitX, hitY = enemy.x, enemy.y
         if enemy.kind == "boss" then
             local result = Boss.TryParry(enemy, game.player, damage)
             if result ~= nil then
+                parriedAnything = true
+                parriedMelee = parriedMelee or result.kind == "attack"
                 local eventData = {
                     x = result.x or hitX, y = result.y or hitY, damage = result.damage,
                     sourceKind = enemy.kind, defenseOnly = result.damage <= 0,
@@ -533,6 +714,8 @@ local function ResolveParries(game)
         else
             local parried, appliedDamage = Entities.TryParryEnemy(game.player, enemy, damage)
             if parried then
+                parriedAnything = true
+                parriedMelee = true
                 EmitEvent(game, perfect and "perfect_parry" or "parry_success", {
                     x = hitX, y = hitY, damage = appliedDamage, sourceKind = enemy.kind,
                 })
@@ -548,7 +731,9 @@ local function ResolveParries(game)
 
     for _, projectile in ipairs(game.projectiles) do
         local hitX, hitY = projectile.x, projectile.y
-        if Entities.TryParryProjectile(game.player, projectile, GetActiveBuffMultiplier(game, "parryDamageMultiplier")) then
+        if Entities.TryParryProjectile(game.player, projectile,
+                GetActiveBuffMultiplier(game, "parryDamageMultiplier"), perfect) then
+            parriedAnything = true
             local eventData = {
                 x = hitX,
                 y = hitY,
@@ -564,6 +749,10 @@ local function ResolveParries(game)
                 SetMessage(game, "反射成功", 0.65)
             end
         end
+    end
+    if parriedAnything then
+        Entities.RegisterParrySuccess(game.player)
+        AddComboProgress(game, perfect, game.player.x, game.player.y, parriedMelee)
     end
 end
 
@@ -588,6 +777,7 @@ local function ResolveEnemyContacts(game)
         if enemy.kind == "boss" then
             for _, hit in ipairs(Boss.CollectPlayerHits(enemy, game.player)) do
                 if Entities.DamagePlayer(game.player, hit.amount, hit.invulnerability) then
+                    ResetCombo(game)
                     AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                     SetMessage(game, hit.source == "thorns" and "遭到荆棘鞭打" or "受到伤害", 0.5)
                     EmitEvent(game, "player_hurt", {
@@ -597,6 +787,7 @@ local function ResolveEnemyContacts(game)
             end
         elseif Entities.EnemyTouchesPlayer(enemy, game.player) then
             if Entities.DamagePlayer(game.player, EnemyConfig[enemy.kind].touchDamage) then
+                ResetCombo(game)
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                 SetMessage(game, "受到伤害", 0.5)
                 EmitEvent(game, "player_hurt", {
@@ -611,7 +802,9 @@ local function ResolveEnemyContacts(game)
 end
 
 local function UpdateBattle(game, dt, moveX, moveY)
-    Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
+    if Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier")) then
+        AnnounceParryStart(game)
+    end
     UpdateEnemies(game, dt)
     MoveProjectiles(game, dt)
     ResolveParries(game)
@@ -660,6 +853,7 @@ function Game.New()
         stateBeforeChest = nil,
         particles = {},
         gauge = CreateGauge(),
+        combo = CreateCombo(),
         activeBuffs = {},
         message = "按回车开始",
         messageTimer = 999,
@@ -674,18 +868,16 @@ function Game.StartOrRestart(game)
     EmitEvent(game, "run_start")
 end
 
-function Game.TryParry(game)
+function Game.TryParry(game, targetX, targetY)
     if game.state ~= "battle" then
         return false
     end
 
-    local started = Entities.BeginParry(game.player)
+    local accepted, started = Entities.BeginParry(game.player, targetX, targetY)
     if started then
-        game.perfectRepairConsumed = false
-        AddParticles(game, game.player.x, game.player.y, { 110, 215, 255 }, 5)
-        EmitEvent(game, "parry_start", { x = game.player.x, y = game.player.y })
+        AnnounceParryStart(game)
     end
-    return started
+    return accepted
 end
 
 function Game.SelectUpgrade(game, index)
@@ -726,6 +918,10 @@ function Game.Update(game, dt, moveX, moveY, realDt)
         UpdateTemporaryBuffs(game, dt)
     end
 
+    if game.state == "battle" then
+        UpdateCombo(game, dt)
+    end
+
     if game.doorCooldown > 0 then
         game.doorCooldown = math.max(0, game.doorCooldown - dt)
     end
@@ -734,7 +930,9 @@ function Game.Update(game, dt, moveX, moveY, realDt)
     -- invulnerability timers keep using real time so combat windows do not grow.
     if dt <= 0 and realDt > 0 then
         if game.player ~= nil then
-            Entities.UpdatePlayerTimers(game.player, realDt)
+            if Entities.UpdatePlayerTimers(game.player, realDt) then
+                AnnounceParryStart(game)
+            end
         end
         return
     end
@@ -814,6 +1012,8 @@ function Game.GetHud(game)
     local healthRatio = math.max(0, math.min(1, game.player.hp / PlayerConfig.maxHp))
     local gaugeRatio = math.max(0, math.min(1, game.gauge.value / game.gauge.threshold))
     local hudVisible = game.state ~= "menu" and game.state ~= "dead" and game.state ~= "victory"
+    local combo = game.combo or CreateCombo()
+    local comboDefinition = ComboConfig.tiers[combo.tier]
 
     return {
         hudVisible = hudVisible,
@@ -827,6 +1027,13 @@ function Game.GetHud(game)
         upgrades = #upgradeLines > 0 and table.concat(upgradeLines, "\n") or "暂无强化",
         buffs = #buffLines > 0 and table.concat(buffLines, "\n") or "暂无临时增益",
         boss = bossHud,
+        combo = {
+            count = combo.count,
+            tier = combo.tier,
+            tierName = comboDefinition ~= nil and comboDefinition.name or "蓄势",
+            color = comboDefinition ~= nil and CopyColor(comboDefinition.color) or { 190, 196, 218 },
+            overdriveRemaining = combo.overdriveRemaining,
+        },
     }
 end
 

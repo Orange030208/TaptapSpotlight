@@ -1,8 +1,10 @@
 package.path = "./scripts/?.lua;./scripts/?/init.lua;" .. package.path
 
 local GaugeConfig = require "Data.GaugeConfig"
+local ComboConfig = require "Data.ComboConfig"
 local BossConfig = require "Data.BossConfig"
 local PlayerConfig = require "Data.PlayerConfig"
+local ProjectileConfig = require "Data.ProjectileConfig"
 local RoomConfig = require "Data.RoomConfig"
 local UpgradeConfig = require "Data.UpgradeConfig"
 local Entities = require "Entities"
@@ -187,6 +189,106 @@ assert(FindEvent(events, "projectile_reflect").data.sourceKind == "ranged")
 assert(reflect.projectiles[1].vx > 0 and math.abs(reflect.projectiles[1].vy) < 0.0001,
     "a reflected projectile must travel along the clicked guard direction")
 
+local perfectReflect = Game.New()
+Game.StartOrRestart(perfectReflect)
+Game.ConsumeEvents(perfectReflect)
+perfectReflect.state = "battle"
+perfectReflect.projectiles = {
+    Entities.NewProjectile(perfectReflect.player.x + 0.04, perfectReflect.player.y, -0.1, 0, "enemy", 1, "ranged"),
+}
+assert(Game.TryParry(perfectReflect, perfectReflect.player.x + 1, perfectReflect.player.y))
+Game.Update(perfectReflect, 0, 0, 0)
+assert(perfectReflect.projectiles[1].damage == ProjectileConfig.perfectReflectedDamage,
+    "a perfect reflection must use the configured base damage")
+assert(perfectReflect.projectiles[1].chainsRemaining == ProjectileConfig.perfectReflectionChains,
+    "a perfect reflection must receive its base chain count")
+
+local chain = Game.New()
+Game.StartOrRestart(chain)
+Game.ConsumeEvents(chain)
+chain.state = "battle"
+for _, definition in ipairs(UpgradeConfig.definitions) do
+    chain.player.abilities[definition.id] = definition.maxStacks
+end
+local firstTarget = Entities.NewEnemy("melee", { x = 0.35, y = 0.5 }, 3101)
+local secondTarget = Entities.NewEnemy("melee", { x = 0.55, y = 0.5 }, 3102)
+local thirdTarget = Entities.NewEnemy("melee", { x = 0.75, y = 0.5 }, 3103)
+for _, enemy in ipairs({ firstTarget, secondTarget, thirdTarget }) do
+    enemy.hp = 1
+    enemy.stateTimer = 99
+end
+chain.enemies = { firstTarget, secondTarget, thirdTarget }
+local chainedProjectile = Entities.NewProjectile(firstTarget.x, firstTarget.y, 0.2, 0, "player", 2, "ranged")
+chainedProjectile.chainsRemaining = 1
+chainedProjectile.pierceRemaining = 1
+chain.projectiles = { chainedProjectile }
+local impactX, impactY = chainedProjectile.x, chainedProjectile.y
+Game.Update(chain, 0, 0, 0)
+assert(chainedProjectile.x == impactX and chainedProjectile.y == impactY,
+    "retargeting must change velocity without teleporting the projectile")
+assert(chainedProjectile.chainsRemaining == 0 and chainedProjectile.pierceRemaining == 1,
+    "a kill chain must consume tracking without consuming penetration")
+assert(chainedProjectile.hitEnemies[firstTarget.id], "the first target must remain excluded from later chains")
+assert(chainedProjectile.vx > 0 and math.abs(chainedProjectile.vy) < 0.0001,
+    "the chain must aim at the nearest unhit enemy")
+assert(math.abs(math.sqrt(chainedProjectile.vx ^ 2 + chainedProjectile.vy ^ 2) - 0.2) < 0.000001,
+    "retargeting must preserve projectile speed")
+
+chainedProjectile.x, chainedProjectile.y = secondTarget.x, secondTarget.y
+Game.Update(chain, 0, 0, 0)
+assert(chainedProjectile.chainsRemaining == 0 and chainedProjectile.pierceRemaining == 0,
+    "the next kill must consume penetration after tracking is exhausted")
+assert(not chainedProjectile.dead and chainedProjectile.hitEnemies[secondTarget.id],
+    "penetration must keep the projectile alive without allowing a repeated hit")
+
+chainedProjectile.x, chainedProjectile.y = thirdTarget.x, thirdTarget.y
+Game.Update(chain, 0, 0, 0)
+assert(chainedProjectile.dead and #chain.projectiles == 0,
+    "the projectile must expire when both tracking and penetration are exhausted")
+
+local comboGame = Game.New()
+Game.StartOrRestart(comboGame)
+Game.ConsumeEvents(comboGame)
+comboGame.state = "battle"
+
+local function PerformPerfectComboParry(id)
+    comboGame.player.parryTimer = 0
+    comboGame.player.parryCooldown = 0
+    local enemy = Entities.NewEnemy("melee", { x = comboGame.player.x + 0.12, y = comboGame.player.y }, id)
+    enemy.hp = 10
+    enemy.state, enemy.stateTimer = "dash", 0.5
+    comboGame.enemies = { enemy }
+    assert(Game.TryParry(comboGame, comboGame.player.x + 1, comboGame.player.y))
+    Game.Update(comboGame, 0, 0, 0)
+    return Game.ConsumeEvents(comboGame)
+end
+
+local comboEvents = PerformPerfectComboParry(3201)
+assert(comboGame.combo.count == ComboConfig.perfectGain and comboGame.combo.tier == 0)
+comboEvents = PerformPerfectComboParry(3202)
+assert(comboGame.combo.count == ComboConfig.perfectGain * 2 and comboGame.combo.tier == 1)
+assert(HasEvent(comboEvents, "combo_tier_up"))
+comboEvents = PerformPerfectComboParry(3203)
+assert(comboGame.combo.tier == 2)
+assert(HasEvent(comboEvents, "combo_tier_up") and HasEvent(comboEvents, "combo_shockwave"),
+    "tier two perfect parries must create a shockwave event")
+PerformPerfectComboParry(3204)
+comboEvents = PerformPerfectComboParry(3205)
+assert(comboGame.combo.count == ComboConfig.overdriveThreshold)
+assert(comboGame.combo.overdriveRemaining == ComboConfig.overdriveDuration)
+assert(HasEvent(comboEvents, "overdrive_start"))
+local comboHud = Game.GetHud(comboGame).combo
+assert(comboHud.count == ComboConfig.overdriveThreshold and comboHud.tier == 3)
+assert(comboHud.overdriveRemaining == ComboConfig.overdriveDuration)
+
+Game.Update(comboGame, ComboConfig.overdriveDuration + 0.01, 0, 0)
+assert(comboGame.combo.overdriveRemaining == 0, "overdrive must expire after its configured duration")
+comboGame.player.invulnerabilityTimer = 0
+comboGame.projectiles = { Entities.NewProjectile(comboGame.player.x, comboGame.player.y, 0, 0, "enemy", 1) }
+Game.Update(comboGame, 0, 0, 0)
+assert(comboGame.combo.count == 0 and comboGame.combo.tier == 0,
+    "taking damage must reset the active combo")
+
 local hit = Game.New()
 Game.StartOrRestart(hit)
 Game.ConsumeEvents(hit)
@@ -316,8 +418,13 @@ clearProjectile.enemies[1].hp = 0.1
 clearProjectile.enemies[1].stateTimer = 99
 clearProjectile.projectiles = { Entities.NewProjectile(0.5, 0.5, 0.2, 0, "player", 1) }
 clearProjectile.projectiles[1].pierceRemaining = 1
+for _, definition in ipairs(UpgradeConfig.definitions) do
+    clearProjectile.player.abilities[definition.id] = definition.maxStacks
+end
 Game.Update(clearProjectile, 0, 0, 0)
-assert(clearProjectile.state == "clear")
+assert(clearProjectile.state == "clear",
+    "piercing projectile should clear the room, state=" .. tostring(clearProjectile.state)
+        .. " enemies=" .. tostring(#clearProjectile.enemies))
 assert(#clearProjectile.projectiles == 1, "piercing projectile must survive its final hit")
 local clearProjectileX = clearProjectile.projectiles[1].x
 Game.Update(clearProjectile, 0.1, 0, 0)
