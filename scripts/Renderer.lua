@@ -27,22 +27,25 @@ local PLAYER_MOVE_ANIMATION = "move/MOVE"
 -- 当前资源由 Spine 3.8.75 导出，但运行时要求 Spine 4.2。
 -- 在用 Spine 4.2 重新导出骨骼前，使用序列帧角色，并保留静态图作为加载失败回退。
 local ENABLE_SPINE_PLAYER = false
+local PLAYER_FRAME_FPS = 30
+-- The artwork's visible feet sit at pixel 441 of its 512px-tall frame.
+local PLAYER_FRAME_FOOT_RATIO = 441 / 512
 local playerFrames = {
     definitions = {
         idle = {
             pathPrefix = "Characters/player_animations/idle/idle_",
             frameCount = 30,
-            framesPerSecond = 12,
+            framesPerSecond = PLAYER_FRAME_FPS,
         },
         move = {
             pathPrefix = "Characters/player_animations/move/move_frame_",
             frameCount = 30,
-            framesPerSecond = 18,
+            framesPerSecond = PLAYER_FRAME_FPS,
         },
         block = {
             pathPrefix = "Characters/player_animations/block/block_",
             frameCount = 30,
-            framesPerSecond = 24,
+            framesPerSecond = PLAYER_FRAME_FPS,
         },
     },
     order = { "idle", "move", "block" },
@@ -750,13 +753,13 @@ local function DrawSpawnRoomWallLights(ctx, width, height, game, arena)
         { x = arena.right - (arena.right - arena.left) * 0.14, y = arena.top + 24 },
     }) do
         nvgBeginPath(ctx)
-        nvgCircle(ctx, light.x, light.y, 22 * scale)
-        nvgFillPaint(ctx, nvgRadialGradient(ctx, light.x, light.y, 2, 22 * scale,
-            nvgRGBA(255, 205, 126, math.floor(72 * pulse)), nvgRGBA(255, 168, 100, 0)))
+        nvgCircle(ctx, light.x, light.y, 34 * scale)
+        nvgFillPaint(ctx, nvgRadialGradient(ctx, light.x, light.y, 2, 34 * scale,
+            nvgRGBA(255, 205, 126, math.floor(130 * pulse)), nvgRGBA(255, 168, 100, 0)))
         nvgFill(ctx)
         nvgBeginPath(ctx)
-        nvgCircle(ctx, light.x, light.y, math.max(2, 3 * scale))
-        nvgFillColor(ctx, nvgRGBA(255, 231, 175, math.floor(190 + 45 * pulse)))
+        nvgCircle(ctx, light.x, light.y, math.max(2, 4 * scale))
+        nvgFillColor(ctx, nvgRGBA(255, 231, 175, math.floor(220 + 35 * pulse)))
         nvgFill(ctx)
     end
 end
@@ -849,17 +852,20 @@ local function DrawShadow(ctx, x, y, scale, width, alpha)
     nvgFill(ctx)
 end
 
+local function DrawGroundedPlayerShadow(ctx, x, y, scale, width, alpha)
+    DrawShadow(ctx, x, y - 10 * scale, scale, width, alpha)
+end
+
 local function DrawFallbackPlayer(ctx, width, height, player, time)
     local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
     scale = scale * PlayerConfig.sizeMultiplier
     local bodyW = 19 * scale
     local bodyH = 29 * scale
     local flip = player.facing == "left" and -1 or 1
-    local bob = math.sin(time * 10) * 1.2 * scale
 
-    DrawShadow(ctx, x, y, scale, 16, 125)
+    DrawGroundedPlayerShadow(ctx, x, y, scale, 16, 125)
     nvgSave(ctx)
-    nvgTranslate(ctx, x, y + bob)
+    nvgTranslate(ctx, x, y)
     nvgScale(ctx, flip, 1)
 
     nvgBeginPath(ctx)
@@ -909,20 +915,20 @@ local function GetPlayerFrame(player, time)
     return animation.handles[frameIndex], animation.width, animation.height, animationName
 end
 
-local function DrawPlayerImage(ctx, width, height, player, time, imageHandle, imageWidth, imageHeight)
+local function DrawPlayerImage(ctx, width, height, player, time, imageHandle, imageWidth, imageHeight, footRatio)
     local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
     scale = scale * PlayerConfig.sizeMultiplier
     local displayHeight = 58 * scale
     local displayWidth = displayHeight * imageWidth / imageHeight
     local drawX = -displayWidth * 0.5
-    local drawY = -displayHeight
+    local drawY = -displayHeight * (footRatio or 1)
     local flip = player.facing == "left" and -1 or 1
     local imageAlpha = 1.0
     if player.invulnerabilityTimer > 0 then
         imageAlpha = 0.42 + 0.38 * math.abs(math.sin(time * 24))
     end
 
-    DrawShadow(ctx, x, y, scale, 23, 135)
+    DrawGroundedPlayerShadow(ctx, x, y, scale, 23, 135)
     nvgSave(ctx)
     nvgTranslate(ctx, x, y)
     nvgScale(ctx, flip, 1)
@@ -954,7 +960,7 @@ local function DrawFramePlayer(ctx, width, height, player, time)
         DrawFallbackPlayer(ctx, width, height, player, time)
         return
     end
-    DrawPlayerImage(ctx, width, height, player, time, imageHandle, imageWidth, imageHeight)
+    DrawPlayerImage(ctx, width, height, player, time, imageHandle, imageWidth, imageHeight, PLAYER_FRAME_FOOT_RATIO)
 end
 
 local function DrawSpritePlayer(ctx, width, height, player, time)
@@ -1021,16 +1027,15 @@ local function DrawSpinePlayer(ctx, width, height, player, time)
     scale = scale * PlayerConfig.sizeMultiplier
     local displayHeight = 58 * scale
     local flip = player.facing == "left" and -1 or 1
-    local bob = math.sin(time * 10) * 1.2 * scale
     local alpha = 1.0
     if player.invulnerabilityTimer > 0 then
         alpha = 0.42 + 0.38 * math.abs(math.sin(time * 24))
     end
 
     UpdatePlayerSpineAnimation(player, time)
-    DrawShadow(ctx, x, y, scale, 23, 135)
+    DrawGroundedPlayerShadow(ctx, x, y, scale, 23, 135)
     nvgSave(ctx)
-    nvgTranslate(ctx, x, y + bob)
+    nvgTranslate(ctx, x, y)
     if player.parryTimer > 0 then
         DrawSpinePose(ctx, displayHeight * 1.08, flip, 110 / 255, 235 / 255, 1.0, 0.49)
     end

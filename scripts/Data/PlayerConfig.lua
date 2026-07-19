@@ -1,4 +1,4 @@
-local PLAYER_SIZE_MULTIPLIER = 1.5
+local PLAYER_SIZE_MULTIPLIER = 2.25
 
 return {
     sizeMultiplier = PLAYER_SIZE_MULTIPLIER,
