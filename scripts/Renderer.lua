@@ -799,26 +799,6 @@ local function DrawArena(ctx, width, height, game)
     end
 end
 
-local function DrawSpawnMarkers(ctx, width, height, game)
-    if game.room == nil then
-        return
-    end
-
-    local spawns = game.room.fixedSpawns or game.room.spawns
-    if spawns == nil then
-        return
-    end
-
-    for _, spawn in ipairs(spawns) do
-        local x, y, scale = Renderer.WorldToScreen(width, height, spawn.x, spawn.y)
-        nvgBeginPath(ctx)
-        nvgCircle(ctx, x, y, 20 * scale)
-        nvgStrokeWidth(ctx, 2)
-        StrokeColor(ctx, { 255, 210, 115 }, 180)
-        nvgStroke(ctx)
-    end
-end
-
 local function DrawShadow(ctx, x, y, scale, width, alpha)
     nvgBeginPath(ctx)
     nvgEllipse(ctx, x, y + 10 * scale, width * scale, 5 * scale)
@@ -2488,10 +2468,6 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     DrawArena(ctx, width, height, game)
     DrawSpawnRoomGuide(ctx, width, height, game)
     DrawSpawnRoomParryGuide(ctx, width, height, game)
-    if game.state == "intro" then
-        DrawSpawnMarkers(ctx, width, height, game)
-    end
-
     local boss = nil
     for _, enemy in ipairs(game.enemies) do
         if enemy.kind == "boss" then boss = enemy; break end

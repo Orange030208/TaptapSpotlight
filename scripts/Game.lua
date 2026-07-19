@@ -1302,7 +1302,6 @@ function Game.GetHud(game)
         gaugeRatio = gaugeRatio,
         room = game.room ~= nil and game.room.name or "尚未开始",
         roomProgress = "探索 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount),
-        message = game.messageTimer > 0 and game.message or "",
         crystals = game.player.crystalOrder,
         buffs = #buffLines > 0 and table.concat(buffLines, "\n") or "暂无临时增益",
         boss = bossHud,

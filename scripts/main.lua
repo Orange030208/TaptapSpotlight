@@ -38,11 +38,6 @@ local buffLabel = nil
 ---@type Widget|nil
 ---@type ProgressBar|nil
 local gaugeProgressBar = nil
----@type Widget|nil
-local messagePanel = nil
----@type Widget|nil
-local messageLabel = nil
----@type Widget|nil
 local bossPanel = nil
 ---@type Widget|nil
 local bossNameLabel = nil
@@ -762,28 +757,6 @@ local function CreateHud()
         },
     }
 
-    messageLabel = UI.Label {
-        text = "",
-        fontSize = 14,
-        fontWeight = "bold",
-        textAlign = "center",
-        whiteSpace = "normal",
-        fontColor = COLORS.cream,
-        textShadow = { offsetX = 0, offsetY = 2, blur = 4, color = { 0, 0, 0, 175 } },
-    }
-    messagePanel = UI.Panel {
-        visible = false,
-        maxWidth = 520,
-        padding = { 9, 18, 11, 18 },
-        borderRadius = 0,
-        borderWidth = { 2, 4, 5, 2 },
-        borderColor = { 255, 199, 58, 190 },
-        backgroundColor = { 8, 22, 52, 242 },
-        boxShadow = HUD_SHADOW,
-        pointerEvents = "none",
-        children = { messageLabel },
-    }
-
     combatHud = UI.SafeAreaView {
         visible = false,
         width = "100%",
@@ -798,10 +771,6 @@ local function CreateHud()
             UI.Panel {
                 position = "absolute", top = 30, left = 0, right = 0,
                 alignItems = "center", pointerEvents = "none", children = { bossPanel },
-            },
-            UI.Panel {
-                position = "absolute", top = 108, left = 0, right = 0,
-                alignItems = "center", pointerEvents = "none", children = { messagePanel },
             },
         },
     }
@@ -1145,8 +1114,6 @@ local function UpdateHud()
         backgroundColor = combo.overdriveRemaining > 0 and { 57, 24, 49, 235 } or { 20, 24, 41, 225 },
     })
     buffLabel:SetText(hud.buffs == "暂无临时增益" and "暂无回响" or hud.buffs)
-    messagePanel:SetVisible(hud.message ~= "")
-    messageLabel:SetText(hud.message)
     gaugeProgressBar:SetValue(hud.gaugeRatio)
     local boss = hud.boss
     bossPanel:SetVisible(boss ~= nil)
