@@ -665,12 +665,12 @@ local function CreateHud()
         letterSpacing = 1, textAlign = "center", fontColor = { 214, 202, 225, 235 },
     }
     bossProgressBar = UI.ProgressBar {
-        value = 100, max = 100, width = "100%", height = 10, borderRadius = 5,
+        value = 100, max = 100, width = "100%", height = 14, borderRadius = 5,
         showLabel = false,
-        backgroundColor = { 8, 8, 17, 220 },
-        borderColor = { 243, 190, 126, 95 }, borderWidth = 1,
+        backgroundColor = { 184, 45, 45, 255 },
+        borderColor = { 20, 20, 20, 255 }, borderWidth = 2,
         fillGradient = {
-            direction = "to-right", from = { 105, 42, 66, 255 }, to = { 220, 98, 104, 255 },
+            direction = "to-right", from = { 48, 166, 58, 255 }, to = { 88, 221, 80, 255 },
         },
         transition = "value 0.16s easeOut",
     }
@@ -1184,7 +1184,9 @@ local function UpdateHud()
             bossObjectiveLabel:SetText("第一阶段 · 黑影")
             bossProgressBar:SetMax(100)
             bossProgressBar:SetStyle({
-                fillGradient = { direction = "to-right", from = { 105, 42, 66, 255 }, to = { 220, 98, 104, 255 } },
+                backgroundColor = { 184, 45, 45, 255 },
+                borderColor = { 20, 20, 20, 255 },
+                fillGradient = { direction = "to-right", from = { 48, 166, 58, 255 }, to = { 88, 221, 80, 255 } },
             })
             bossProgressBar:SetValue(boss.healthRatio * 100)
         else
@@ -1192,6 +1194,8 @@ local function UpdateHud()
             bossObjectiveLabel:SetText("第二阶段 · " .. (boss.targetName or "净化"))
             bossProgressBar:SetMax(target)
             bossProgressBar:SetStyle({
+                backgroundColor = { 8, 8, 17, 220 },
+                borderColor = { 243, 190, 126, 95 },
                 fillGradient = { direction = "to-right", from = { 33, 139, 142, 255 }, to = { 231, 183, 91, 255 } },
             })
             bossProgressBar:SetValue(boss.current or 0)

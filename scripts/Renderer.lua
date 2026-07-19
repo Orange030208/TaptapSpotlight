@@ -1727,11 +1727,10 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         DrawMoss(ctx, x, y, size, scale, visual.primary, visual.secondary, visual.outline)
     end
 
-    if enemy.kind == "toxic_moss" then
-        return
-    end
-    local healthWidth = size * 1.06
-    local healthHeight = 3.5 * scale
+    -- Use one high-contrast health-bar treatment for every normal enemy.
+    local healthWidth = size * 1.32
+    local healthHeight = 6 * scale
+    local healthBorder = math.max(1, 1.25 * scale)
     local healthY = y - size * 1.18
     if enemy.kind == "soot" and sootImageHandle ~= nil and sootImageHandle > 0 then
         healthY = y - GetSootSpriteHeight(scale) - 5 * scale
@@ -1753,15 +1752,27 @@ local function DrawEnemy(ctx, width, height, enemy, player, time)
         healthY = y - GetPurpleOrbSpriteHeight(scale) - 4 * scale
     end
     local healthRatio = math.max(0, enemy.hp / math.max(0.001, enemy.maxHp))
+    local innerWidth = healthWidth - healthBorder * 2
+    local innerHeight = math.max(1, healthHeight - healthBorder * 2)
+    local innerX = x - healthWidth * 0.5 + healthBorder
+    local innerY = healthY + healthBorder
+
+    -- Dark frame, red missing-health base, then the classic green current-health fill.
     nvgBeginPath(ctx)
     nvgRoundedRect(ctx, x - healthWidth * 0.5, healthY, healthWidth, healthHeight, healthHeight * 0.5)
-    Color(ctx, { 28, 21, 43 }, 225)
+    Color(ctx, { 20, 20, 20 }, 255)
     nvgFill(ctx)
     nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x - healthWidth * 0.5 + scale, healthY + scale,
-        math.max(0, (healthWidth - scale * 2) * healthRatio), math.max(1, healthHeight - scale * 2), healthHeight * 0.4)
-    Color(ctx, visual.primary, 255)
+    nvgRoundedRect(ctx, innerX, innerY, innerWidth, innerHeight, innerHeight * 0.35)
+    Color(ctx, { 184, 45, 45 }, 255)
     nvgFill(ctx)
+    local fillWidth = math.max(0, innerWidth * healthRatio)
+    if fillWidth > 0 then
+        nvgBeginPath(ctx)
+        nvgRoundedRect(ctx, innerX, innerY, fillWidth, innerHeight, innerHeight * 0.35)
+        Color(ctx, { 71, 205, 70 }, 255)
+        nvgFill(ctx)
+    end
 end
 
 local function DrawProjectileSprite(ctx, x, y, radius, imageHandle, imageWidth, imageHeight)
