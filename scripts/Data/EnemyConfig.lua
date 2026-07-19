@@ -80,10 +80,12 @@ return {
         visual = Visual({ 56, 52, 73 }, { 133, 119, 158 }, { 22, 20, 35 }),
     },
     purple_orb = {
-        behavior = "aoe_pulse", hp = 2, radius = 0.043,
-        attackRangeMeters = 4, attackRange = MetersToWorld(4),
-        moveSpeed = 0.18, preferredDistance = MetersToWorld(3.8), touchDamage = 1,
-        attack = { interval = 0.55, repeatInterval = 1, telegraph = 0.21, active = 0.1, recovery = 0.1, range = MetersToWorld(4) },
+        -- A low-pressure ranged target: one slow bolt, a long tell, and one parry to defeat.
+        behavior = "ranged_single", hp = 1, radius = 0.04,
+        attackRangeMeters = 8, attackRange = MetersToWorld(8),
+        moveSpeed = 0.08, minimumDistance = MetersToWorld(5.5), maximumDistance = MetersToWorld(7.8), touchDamage = 1,
+        attack = { interval = 1.75, repeatInterval = 1.75, telegraph = 0.65, recovery = 0.18 },
+        projectile = { count = 1, speed = 0.28, style = "bolt", radius = 0.013, damage = 1 },
         visual = Visual({ 253, 247, 255 }, { 208, 114, 255 }, { 115, 57, 160 }),
     },
     toxic_moss = {

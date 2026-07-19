@@ -1155,7 +1155,27 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
     local directionAngle = Atan2(directionY, directionX)
     local telegraphColor = enemy.kind == "blue_swarm" and { 70, 225, 255 } or { 255, 230, 120 }
     local behavior = spec.behavior or ""
-    if behavior == "ranged_single" or behavior == "ranged_fan" then
+    if behavior == "ranged_single" then
+        if enemy.kind == "purple_orb" then
+            local aimDistance = math.min(spec.attackRange, EnemyConfig.MetersToWorld(4.5))
+            local endX, endY = Renderer.WorldToScreen(width, height,
+                enemy.x + directionX * aimDistance, enemy.y + directionY * aimDistance)
+            local aimAlpha = math.floor(70 + progress * 150)
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, x, y)
+            nvgLineTo(ctx, endX, endY)
+            nvgStrokeWidth(ctx, math.max(1.5, 2.3 * scale))
+            StrokeColor(ctx, { 241, 207, 255 }, aimAlpha)
+            nvgStroke(ctx)
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, endX, endY, math.max(3 * scale, 6 * scale * progress))
+            nvgStrokeWidth(ctx, math.max(1, 1.5 * scale))
+            StrokeColor(ctx, { 241, 207, 255 }, aimAlpha)
+            nvgStroke(ctx)
+        end
+        return
+    end
+    if behavior == "ranged_fan" then
         return
     end
     local attackRange = attack.range or spec.attackRange or enemy.radius * 2
@@ -1550,6 +1570,14 @@ local function DrawSpritePurpleOrb(ctx, x, y, enemy, time, scale)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
     nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, purpleOrbImageHandle, 1.0))
     nvgFill(ctx)
+    if enemy.state == "telegraph" then
+        local charge = 1 - Clamp(enemy.stateTimer / EnemyConfig.purple_orb.attack.telegraph, 0, 1)
+        local coreY = drawY + displayHeight * 0.5
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, 0, coreY, (2.5 + charge * 2.5) * scale)
+        nvgFillColor(ctx, nvgRGBA(255, 255, 255, math.floor(120 + charge * 135)))
+        nvgFill(ctx)
+    end
     nvgRestore(ctx)
 end
 

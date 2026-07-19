@@ -127,18 +127,16 @@ assert(Entities.CollectEnemyHit(moss, player) == nil)
 player.x = 0.5
 assert(Entities.CollectEnemyHit(moss, player) ~= nil, "moss must reset after leaving")
 
-local orb = NewEnemy("purple_orb", 0.5, 0.5, 6)
-orb.state, orb.attackSerial = "active", 1
-assert(Entities.CollectEnemyHit(orb, player) ~= nil)
-
 local blueSwarm = NewEnemy("blue_swarm", 0.45, 0.5, 15)
 blueSwarm.stateTimer = 0
 Entities.UpdateEnemy(blueSwarm, player, 0.01, function() end)
-assert(blueSwarm.state == "telegraph" and math.abs(blueSwarm.stateTimer - 0.2) < 0.000001,
-    "blue swarm must charge for 0.2 seconds before each pulse")
+assert(blueSwarm.state == "telegraph" and math.abs(blueSwarm.stateTimer - 0.17) < 0.000001,
+    "blue swarm must charge for its configured telegraph duration before each pulse")
 assert(Entities.CollectEnemyHit(blueSwarm, player) == nil, "blue swarm glow must not deal damage before it ends")
-for _ = 1, 20 do
+local blueSwarmChargeElapsed = 0
+while blueSwarm.state == "telegraph" and blueSwarmChargeElapsed < 1 do
     Entities.UpdateEnemy(blueSwarm, player, 0.01, function() end)
+    blueSwarmChargeElapsed = blueSwarmChargeElapsed + 0.01
 end
 assert(blueSwarm.state == "active", "blue swarm must pulse when its glow ends")
 assert(Entities.CollectEnemyHit(blueSwarm, player) ~= nil, "blue swarm pulse must damage inside its 3m radius")
@@ -162,28 +160,37 @@ for index = 2, #swarmPulseTimes do
     local cadence = swarmPulseTimes[index] - swarmPulseTimes[index - 1]
     assert(math.abs(cadence - 0.7) <= 0.021, "blue swarm pulse cadence must be 0.7 seconds")
 end
-assert(Entities.CollectEnemyHit(orb, player) == nil, "one AOE pulse may hit once")
-orb.attackSerial = 2
-assert(Entities.CollectEnemyHit(orb, player) ~= nil)
-
-local pulsingOrb = NewEnemy("purple_orb", 0.5, 0.5, 14)
-pulsingOrb.stateTimer = 0
-local orbPulseTimes = {}
+local orb = NewEnemy("purple_orb", 0.3, 0.5, 14)
+orb.stateTimer = 0
+player.x, player.y = 0.5, 0.5
+local orbShotTimes = {}
+local orbShots = {}
 local elapsedOrb = 0
-local lastAttackSerial = pulsingOrb.attackSerial
-for _ = 1, 340 do
-    Entities.UpdateEnemy(pulsingOrb, player, 0.01, function() end)
-    if pulsingOrb.attackSerial ~= lastAttackSerial then
-        table.insert(orbPulseTimes, elapsedOrb)
-        lastAttackSerial = pulsingOrb.attackSerial
-    end
+for _ = 1, 700 do
+    Entities.UpdateEnemy(orb, player, 0.01, function(projectile)
+        table.insert(orbShotTimes, elapsedOrb)
+        table.insert(orbShots, projectile)
+    end)
     elapsedOrb = elapsedOrb + 0.01
 end
-assert(#orbPulseTimes >= 3, "purple orb must repeatedly emit AOE pulses")
-for index = 2, #orbPulseTimes do
-    local cadence = orbPulseTimes[index] - orbPulseTimes[index - 1]
-    assert(math.abs(cadence - 1) <= 0.021, "purple orb AOE cadence must be one second")
+assert(#orbShots >= 3, "purple orb must repeatedly fire single bolts")
+for _, projectile in ipairs(orbShots) do
+    assert(projectile.style == "bolt" and projectile.damage == 1)
+    local speed = math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy)
+    assert(math.abs(speed - 0.28) < 0.000001, "purple orb bolts must remain slow")
 end
+for index = 2, #orbShotTimes do
+    local cadence = orbShotTimes[index] - orbShotTimes[index - 1]
+    assert(math.abs(cadence - 1.75) <= 0.021, "purple orb shots must leave a long dodge window")
+end
+assert(Entities.CollectEnemyHit(orb, player) == nil, "purple orb must not deal direct area damage")
+local reflectedOrbBolt = orbShots[1]
+reflectedOrbBolt.x, reflectedOrbBolt.y = player.x - 0.02, player.y
+player.parryTimer, player.parryDirectionX, player.parryDirectionY = 1, -1, 0
+assert(Entities.TryParryProjectile(player, reflectedOrbBolt, 1), "purple orb bolt must be parryable")
+assert(reflectedOrbBolt.owner == "player" and reflectedOrbBolt.reflected,
+    "a parried purple orb bolt must return to the enemy")
+assert(reflectedOrbBolt.vx < 0, "a reflected purple orb bolt must travel back toward the purple orb")
 
 local tree = NewEnemy("tree", 0.5, 0.5, 7)
 tree.state, tree.attackSerial, tree.attackX, tree.attackY, tree.attackArc = "active", 1, 1, 0, 60

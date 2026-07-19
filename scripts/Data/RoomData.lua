@@ -86,7 +86,7 @@ return {
             -- Toxic moss stays outside it, so hazards never seal the route to the next door.
             fixedSpawns = {
                 Spawn("purple_orb", 0.22, 0.24), Spawn("purple_orb", 0.78, 0.24),
-                Spawn("purple_orb", 0.22, 0.76), Spawn("purple_orb", 0.78, 0.76),
+                Spawn("purple_orb", 0.22, 0.76),
                 Spawn("toxic_moss", 0.12, 0.18), Spawn("toxic_moss", 0.28, 0.18),
                 Spawn("toxic_moss", 0.72, 0.18), Spawn("toxic_moss", 0.88, 0.18),
                 Spawn("toxic_moss", 0.14, 0.36), Spawn("toxic_moss", 0.86, 0.36),

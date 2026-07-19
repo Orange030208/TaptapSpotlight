@@ -66,6 +66,10 @@ local titleMotePanel = nil
 local titleSpiritPanel = nil
 ---@type Widget|nil
 local titleButterflyPanel = nil
+---@type Widget|nil
+local titleStartButtonFloatPanel = nil
+---@type Widget|nil
+local titleQuitButtonFloatPanel = nil
 local stateOverlayWasVisible = false
 ---@type Widget|nil
 local creditsOverlay = nil
@@ -264,6 +268,32 @@ local function StartTitleIdleMotion()
             duration = 4.8,
             easing = "easeInOut",
             loop = true,
+            fillMode = "both",
+        })
+    end
+    if titleStartButtonFloatPanel ~= nil then
+        titleStartButtonFloatPanel:Animate({
+            keyframes = {
+                [0] = { translateY = 0 },
+                [1] = { translateY = -6 },
+            },
+            duration = 2.8,
+            easing = "easeInOut",
+            loop = true,
+            direction = "alternate",
+            fillMode = "both",
+        })
+    end
+    if titleQuitButtonFloatPanel ~= nil then
+        titleQuitButtonFloatPanel:Animate({
+            keyframes = {
+                [0] = { translateY = 0 },
+                [1] = { translateY = -4 },
+            },
+            duration = 3.5,
+            easing = "easeInOut",
+            loop = true,
+            direction = "alternate",
             fillMode = "both",
         })
     end
@@ -973,168 +1003,90 @@ local function CreateHud()
         whiteSpace = "normal",
         fontColor = { 204, 225, 237, 235 },
     }
-    stateActionButton = UI.Button {
-        text = "踏入回响",
-        variant = "primary",
-        width = 184,
-        height = 52,
-        fontSize = 16,
-        textColor = { 235, 255, 255, 255 },
-        backgroundGradient = {
-            type = "linear", direction = "to-right",
-            from = { 24, 160, 177, 255 }, to = { 37, 97, 199, 255 },
-        },
-        hoverBackgroundColor = { 54, 194, 203, 255 },
-        pressedBackgroundColor = { 18, 114, 151, 255 },
-        borderRadius = 6,
-        borderWidth = 1,
-        borderColor = { 169, 252, 248, 178 },
-        boxShadow = { { x = 0, y = 7, blur = 16, spread = 0, color = { 7, 139, 170, 110 } } },
-        transition = "scale 0.14s easeOutBack, translateY 0.14s easeOut, backgroundColor 0.14s easeOut",
-        onPointerEnter = function(_, widget)
-            widget:SetStyle({ scale = 1.035, translateY = -2 })
-        end,
-        onPointerLeave = function(_, widget)
-            widget:SetStyle({ scale = 1.0, translateY = 0 })
-        end,
-        onClick = function()
-            StartOrRestartRun()
-        end,
-    }
+    local function CreateImageMenuButton(imagePath, hoverRotate, onClick)
+        return UI.Button {
+            text = "",
+            position = "absolute",
+            top = 0, left = 0, right = 0, bottom = 0,
+            backgroundImage = imagePath,
+            backgroundFit = "cover",
+            borderWidth = 0,
+            borderRadius = 0,
+            boxShadow = false,
+            transition = "scale 0.14s easeOutBack, translateX 0.14s easeOut, translateY 0.12s easeOut, rotate 0.14s easeOut",
+            onPointerEnter = function(_, widget)
+                widget:SetStyle({ scale = 1.055, translateX = 7, translateY = -4, rotate = hoverRotate })
+            end,
+            onPointerLeave = function(_, widget)
+                widget:SetStyle({ scale = 1.0, translateX = 0, translateY = 0, rotate = 0 })
+            end,
+            onPointerDown = function(_, widget)
+                widget:SetStyle({ scale = 0.96, translateX = 3, translateY = 5, rotate = hoverRotate * 0.35 })
+            end,
+            onPointerUp = function(_, widget)
+                widget:SetStyle({ scale = 1.055, translateX = 7, translateY = -4, rotate = hoverRotate })
+            end,
+            onPointerCancel = function(_, widget)
+                widget:SetStyle({ scale = 1.0, translateX = 0, translateY = 0, rotate = 0 })
+            end,
+            onClick = onClick,
+        }
+    end
 
-    titleLogoFloatPanel = UI.Panel {
+    stateActionButton = CreateImageMenuButton(
+        "image/sekimio_start_button.png",
+        -1.2,
+        function() StartOrRestartRun() end
+    )
+    local quitButton = CreateImageMenuButton(
+        "image/sekimio_quit_button.png",
+        1.0,
+        function() engine:Exit() end
+    )
+
+    titleStartButtonFloatPanel = UI.Panel {
         width = "100%",
-        height = 188,
-        maxWidth = 510,
-        flexShrink = 1,
-        backgroundImage = "image/sekimio_logo_20260719044729.png",
-        backgroundFit = "cover",
-        pointerEvents = "none",
+        maxWidth = 360,
+        aspectRatio = 2.35,
+        overflow = "visible",
+        pointerEvents = "box-none",
+        children = { stateActionButton },
     }
-    titleButterflyPanel = UI.Panel {
-        position = "absolute",
-        top = "11%",
-        right = "3%",
-        width = "39%",
-        height = "72%",
-        backgroundImage = "image/blue-wing-swarm-v3.png",
-        backgroundFit = "contain",
-        opacity = 0.34,
-        pointerEvents = "none",
-    }
-    titleSpiritPanel = UI.Panel {
-        position = "absolute",
-        top = "27%",
-        right = "11%",
-        width = "29%",
-        height = "46%",
-        backgroundImage = "image/coal-dust-monster-v2.png",
-        backgroundFit = "contain",
-        pointerEvents = "none",
-    }
-    titleMotePanel = UI.Panel {
-        position = "absolute",
-        top = "20%",
-        right = "26%",
-        width = "10%",
-        height = "18%",
-        backgroundImage = "image/purple_glow_orb.png",
-        backgroundFit = "contain",
-        opacity = 0.34,
-        pointerEvents = "none",
+    titleQuitButtonFloatPanel = UI.Panel {
+        width = "100%",
+        maxWidth = 360,
+        aspectRatio = 2.35,
+        overflow = "visible",
+        pointerEvents = "box-none",
+        children = { quitButton },
     }
     stateContentPanel = UI.Panel {
         position = "absolute",
-        left = "8%",
-        top = "12%",
-        bottom = "11%",
-        width = "46%",
-        maxWidth = 540,
+        left = "5.5%",
+        top = "46%",
+        bottom = "8%",
+        width = "30%",
+        maxWidth = 390,
         justifyContent = "center",
         alignItems = "flex-start",
-        gap = 14,
-        pointerEvents = "auto",
-        children = {
-            titleLogoFloatPanel,
-            stateKickerLabel,
-            UI.Panel {
-                width = 74,
-                height = 2,
-                backgroundColor = { 126, 237, 235, 210 },
-                pointerEvents = "none",
-            },
-            stateTitleLabel,
-            stateSubtitleLabel,
-            UI.Panel {
-                flexDirection = "row",
-                flexWrap = "wrap",
-                alignItems = "center",
-                gap = 12,
-                paddingTop = 6,
-                children = {
-                    stateActionButton,
-                    UI.Button {
-                        text = "制作人员",
-                        variant = "secondary",
-                        width = 142,
-                        height = 46,
-                        borderRadius = 6,
-                        borderWidth = 1,
-                        borderColor = { 188, 225, 239, 132 },
-                        backgroundColor = { 6, 20, 38, 152 },
-                        hoverBackgroundColor = { 18, 53, 78, 228 },
-                        onClick = function() ShowCredits() end,
-                    },
-                },
-            },
-        },
+        gap = 4,
+        overflow = "visible",
+        pointerEvents = "box-none",
+        children = { titleStartButtonFloatPanel, titleQuitButtonFloatPanel },
     }
 
     stateOverlay = UI.Panel {
         visible = true,
         position = "absolute",
         top = 0, left = 0, right = 0, bottom = 0,
-        backgroundImage = "image/forest_room.png",
+        backgroundImage = "image/sekimio_menu_background.png",
         backgroundFit = "cover",
         pointerEvents = "auto",
         children = {
-            UI.Panel {
-                position = "absolute", top = 0, left = 0, right = 0, bottom = 0,
-                backgroundGradient = {
-                    type = "linear", direction = "to-right",
-                    from = { 3, 10, 25, 238 }, to = { 6, 20, 42, 92 },
-                },
-                pointerEvents = "none",
-            },
-            titleButterflyPanel,
-            titleSpiritPanel,
-            titleMotePanel,
             UI.SafeAreaView {
                 width = "100%", height = "100%",
                 pointerEvents = "box-none",
-                children = {
-                    UI.Panel {
-                        position = "absolute", top = 24, left = 30,
-                        gap = 2, pointerEvents = "none",
-                        children = {
-                            UI.Label { text = "SEKIMIO", fontSize = 12, fontWeight = "bold", letterSpacing = 4, fontColor = { 219, 255, 255, 242 } },
-                            UI.Label { text = "MOONLIT ECHOES", fontSize = 9, letterSpacing = 2, fontColor = { 164, 211, 229, 210 } },
-                        },
-                    },
-                    UI.Label {
-                        text = "PRELUDE  ·  01",
-                        position = "absolute", top = 27, right = 30,
-                        fontSize = 10, fontWeight = "bold", letterSpacing = 2,
-                        fontColor = { 170, 233, 239, 222 }, pointerEvents = "none",
-                    },
-                    UI.Label {
-                        text = "THE FOREST REMEMBERS",
-                        position = "absolute", bottom = 25, left = 30,
-                        fontSize = 9, letterSpacing = 2,
-                        fontColor = { 166, 211, 225, 196 }, pointerEvents = "none",
-                    },
-                    stateContentPanel,
-                },
+                children = { stateContentPanel },
             },
         },
     }
@@ -1246,11 +1198,7 @@ local function RefreshChestPanel()
 end
 
 local function RefreshStateOverlay()
-    if game == nil or stateOverlay == nil
-        or stateKickerLabel == nil
-        or stateTitleLabel == nil
-        or stateSubtitleLabel == nil
-        or stateActionButton == nil then
+    if game == nil or stateOverlay == nil then
         return
     end
 
@@ -1262,17 +1210,6 @@ local function RefreshStateOverlay()
         return
     end
 
-    if game.state == "menu" then
-        stateKickerLabel:SetText("CHAPTER 01  ·  THE ECHOING GROVE")
-        stateTitleLabel:SetText("回声在深林中苏醒。")
-        stateSubtitleLabel:SetText("循着微光，把迷失的回声归还给森林。")
-        stateActionButton:SetText("踏入回响")
-    else
-        stateKickerLabel:SetText("旅途暂歇 · 节奏尚未终止")
-        stateTitleLabel:SetText("回响未尽")
-        stateSubtitleLabel:SetText("这次失手只是一枚休止符。重新握紧节拍，把袭来的诅咒一一弹回。")
-        stateActionButton:SetText("再次前行")
-    end
     if not stateOverlayWasVisible then
         stateOverlayWasVisible = true
         PlayStateOverlayEntrance()
