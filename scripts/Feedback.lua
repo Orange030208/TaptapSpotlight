@@ -242,6 +242,14 @@ function Feedback.ProcessEvents(state, events)
             AddBurst(state, FeedbackConfig.shadowWraithHit, data)
         elseif name == "boss_defeat" then
             ApplyWorldProfile(state, FeedbackConfig.bossDefeat, data, "净化")
+        elseif name == "boss_attack_hit" then
+            local attack = data ~= nil and data.attack or nil
+            local profile = FeedbackConfig.bossAttack[attack]
+            if profile ~= nil then
+                ApplyWorldProfile(state, profile, data, nil)
+            elseif data ~= nil and data.sourceKind == "thorns" then
+                ApplyWorldProfile(state, FeedbackConfig.bossAttack.quake, data, nil)
+            end
         elseif name == "boss_phase_changed" then
             ApplyWorldProfile(state, FeedbackConfig.bossPhase, data, "诅咒显形")
         elseif name == "boss_mechanism_completed" then

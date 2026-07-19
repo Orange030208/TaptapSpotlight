@@ -18,6 +18,7 @@ local logicalWidth = 0
 local logicalHeight = 0
 local hudTimer = 0
 local chestPanelWasVisible = false
+local chestPanelIsFadingOut = false
 local feedback = nil
 
 ---@type Widget|nil
@@ -76,15 +77,71 @@ local CHEST_CARD_IDLE_DURATIONS = { 3.4, 3.8, 3.6 }
 local CHEST_CARD_MAX_POINTER_TILT = 3.2
 
 local COLORS = {
-    panelTop = { 28, 31, 50, 238 },
-    panelBottom = { 13, 16, 31, 246 },
-    cream = { 255, 244, 218, 255 },
-    muted = { 190, 196, 218, 235 },
-    gold = { 239, 190, 105, 255 },
-    coral = { 244, 112, 112, 255 },
-    cyan = { 105, 225, 221, 255 },
-    violet = { 170, 142, 238, 255 },
+    panelTop = { 28, 55, 104, 246 },
+    panelBottom = { 9, 18, 38, 250 },
+    cream = { 246, 250, 255, 255 },
+    muted = { 188, 210, 239, 238 },
+    gold = { 255, 199, 58, 255 },
+    coral = { 255, 82, 92, 255 },
+    cyan = { 54, 207, 255, 255 },
+    violet = { 204, 80, 255, 255 },
+    border = { 6, 12, 27, 255 },
+    surface = { 19, 48, 101, 246 },
+    surfaceDeep = { 8, 22, 52, 250 },
 }
+
+local HUD_SHADOW = {
+    { x = 6, y = 6, blur = 0, spread = 0, color = { 0, 0, 0, 78 } },
+}
+
+local EchoCombatTheme = UI.Theme.ExtendTheme(UI.Theme.defaultTheme, {
+    fonts = {
+        { family = "sans", weights = {
+            normal = "Fonts/NotoSansSC-Black.ttf",
+            bold = "Fonts/NotoSansSC-Black.ttf",
+        } },
+    },
+    colors = {
+        primary = { 31, 162, 255, 255 },
+        primaryHover = { 70, 183, 255, 255 },
+        primaryPressed = { 13, 126, 230, 255 },
+        secondary = { 204, 80, 255, 255 },
+        secondaryHover = { 220, 112, 255, 255 },
+        secondaryPressed = { 157, 42, 207, 255 },
+        background = { 8, 22, 52, 255 },
+        surface = { 19, 48, 101, 255 },
+        surfaceHover = { 30, 75, 145, 255 },
+        text = { 246, 250, 255, 255 },
+        textSecondary = { 188, 210, 239, 255 },
+        border = { 6, 12, 27, 255 },
+        borderFocus = { 101, 232, 255, 255 },
+        success = { 69, 226, 157, 255 },
+        warning = { 255, 199, 58, 255 },
+        error = { 255, 82, 92, 255 },
+        info = { 54, 207, 255, 255 },
+        overlay = { 4, 10, 25, 210 },
+    },
+    componentDefaults = {
+        borderRadius = 0,
+        fontWeight = "bold",
+    },
+    components = {
+        Button = {
+            borderRadius = 0,
+            borderWidth = { 2, 4, 5, 2 },
+            borderColor = { 6, 12, 27, 255 },
+            fontWeight = "bold",
+            boxShadow = HUD_SHADOW,
+        },
+        Card = {
+            borderRadius = 0,
+            borderWidth = 2,
+            boxShadow = HUD_SHADOW,
+        },
+        Chip = { borderRadius = 0, borderWidth = 2, fontWeight = "bold" },
+        ProgressBar = { borderRadius = 0, height = 10 },
+    },
+})
 
 local function RefreshCanvasMetrics()
     physicalWidth = graphics:GetWidth()
@@ -334,9 +391,8 @@ local function CreateChestCard(index)
     local optionIndex = index
     local accent = UI.Panel {
         width = "100%",
-        height = 3,
-        borderRadius = 2,
-        backgroundColor = { 236, 202, 105, 255 },
+        height = 5,
+        backgroundColor = COLORS.gold,
         pointerEvents = "none",
     }
     local icon = UI.Label {
@@ -346,8 +402,8 @@ local function CreateChestCard(index)
         fontWeight = "bold",
         textAlign = "center",
         verticalAlign = "middle",
-        fontColor = { 236, 202, 105, 255 },
-        textShadow = { offsetX = 0, offsetY = 2, blur = 5, color = { 0, 0, 0, 170 } },
+        fontColor = COLORS.gold,
+        textShadow = { offsetX = 3, offsetY = 3, blur = 0, color = { 0, 0, 0, 185 } },
     }
     local iconPanel = UI.Panel {
         width = 88,
@@ -355,18 +411,19 @@ local function CreateChestCard(index)
         alignSelf = "center",
         justifyContent = "center",
         alignItems = "center",
-        borderRadius = 6,
-        borderWidth = 1,
-        borderColor = { 236, 202, 105, 175 },
+        borderRadius = 0,
+        borderWidth = { 2, 4, 5, 2 },
+        borderColor = { 31, 162, 255, 220 },
         backgroundGradient = {
-            type = "radial",
-            innerRadius = 0,
-            outerRadius = 72,
-            from = { 74, 69, 69, 255 },
-            to = { 28, 30, 35, 255 },
+            type = "linear",
+            direction = "to-bottom-right",
+            from = { 30, 81, 151, 255 },
+            to = { 9, 26, 61, 255 },
         },
-        shadowBlur = 12,
-        shadowColor = { 0, 0, 0, 150 },
+        shadowBlur = 0,
+        shadowOffsetX = 5,
+        shadowOffsetY = 5,
+        shadowColor = { 0, 0, 0, 115 },
         scale = 1.0,
         translateX = 0,
         translateY = 0,
@@ -406,19 +463,20 @@ local function CreateChestCard(index)
         bottom = 0,
         padding = { 12, 14, 14, 14 },
         gap = 11,
-        borderRadius = 7,
-        borderWidth = { 2, 2, 4, 2 },
-        borderColor = { 236, 202, 105, 210 },
+        borderRadius = 0,
+        borderWidth = { 2, 4, 6, 2 },
+        borderColor = { 31, 162, 255, 220 },
         overflow = "hidden",
         backgroundGradient = {
             type = "linear",
-            direction = "to-bottom",
-            from = { 56, 50, 53, 254 },
-            to = { 20, 23, 29, 254 },
+            direction = "to-bottom-right",
+            from = { 28, 66, 126, 254 },
+            to = { 7, 18, 43, 254 },
         },
-        shadowBlur = 18,
-        shadowOffsetY = 7,
-        shadowColor = { 0, 0, 0, 175 },
+        shadowBlur = 0,
+        shadowOffsetX = 8,
+        shadowOffsetY = 8,
+        shadowColor = { 0, 0, 0, 150 },
         rotate = CHEST_CARD_IDLE_ROTATIONS[optionIndex],
         transformOrigin = "bottom",
         transition = "rotate 0.20s easeOutCubic, borderColor 0.20s easeOut, shadowBlur 0.22s easeOut, shadowOffsetY 0.22s easeOut, shadowColor 0.22s easeOut",
@@ -520,10 +578,10 @@ local function CreateHud()
         flexGrow = 1,
         flexBasis = 0,
         showLabel = false,
-        borderRadius = 7,
-        borderWidth = 1,
-        borderColor = { 255, 180, 145, 120 },
-        backgroundColor = { 8, 10, 20, 220 },
+        borderRadius = 0,
+        borderWidth = 2,
+        borderColor = COLORS.border,
+        backgroundColor = { 4, 12, 30, 235 },
         fillGradient = {
             direction = "to-right",
             from = { 225, 72, 92, 255 },
@@ -545,7 +603,7 @@ local function CreateHud()
                 height = 20,
                 flexShrink = 0,
                 backgroundImage = "image/ui/heart.png",
-                imageTint = COLORS.coral,
+                backgroundFit = "contain",
                 pointerEvents = "none",
             },
             UI.Panel {
@@ -570,14 +628,16 @@ local function CreateHud()
         fontColor = COLORS.muted,
     }
     comboPanel = UI.Panel {
-        width = 170,
-        padding = { 7, 10, 7, 10 },
-        borderRadius = 16,
-        borderWidth = 1,
-        borderColor = { 190, 196, 218, 95 },
-        backgroundColor = { 20, 24, 41, 225 },
-        shadowBlur = 12,
-        shadowColor = { 0, 0, 0, 90 },
+        width = 178,
+        padding = { 8, 12, 10, 12 },
+        borderRadius = 0,
+        borderWidth = { 2, 4, 5, 2 },
+        borderColor = { 31, 162, 255, 185 },
+        backgroundGradient = {
+            type = "linear", direction = "to-bottom-right",
+            from = { 29, 78, 147, 242 }, to = { 8, 22, 52, 248 },
+        },
+        boxShadow = HUD_SHADOW,
         pointerEvents = "none",
         children = {
             UI.Panel {
@@ -616,13 +676,13 @@ local function CreateHud()
     }
     bossPanel = UI.Panel {
         visible = false, width = "52%", maxWidth = 500, minWidth = 240,
-        padding = { 9, 16, 11, 16 }, gap = 5, borderRadius = 15,
-        borderWidth = { 1, 1, 3, 1 }, borderColor = { 188, 145, 120, 135 },
+        padding = { 10, 18, 13, 18 }, gap = 5, borderRadius = 0,
+        borderWidth = { 2, 4, 6, 2 }, borderColor = { 204, 80, 255, 195 },
         backgroundGradient = {
-            type = "linear", direction = "to-bottom",
-            from = { 39, 24, 39, 238 }, to = { 16, 13, 27, 244 },
+            type = "linear", direction = "to-bottom-right",
+            from = { 55, 32, 96, 246 }, to = { 8, 18, 44, 250 },
         },
-        shadowBlur = 20, shadowOffsetY = 7, shadowColor = { 0, 0, 0, 140 },
+        boxShadow = HUD_SHADOW,
         pointerEvents = "none",
         children = { bossNameLabel, bossObjectiveLabel, bossProgressBar },
     }
@@ -657,16 +717,16 @@ local function CreateHud()
         width = "40%",
         minWidth = 150,
         maxWidth = 282,
-        padding = { 9, 12, 10, 12 },
+        padding = { 10, 13, 12, 13 },
         gap = 6,
-        borderRadius = 14,
-        borderWidth = 1,
-        borderColor = { 164, 139, 211, 95 },
+        borderRadius = 0,
+        borderWidth = { 2, 4, 5, 2 },
+        borderColor = { 204, 80, 255, 145 },
         backgroundGradient = {
             type = "linear", direction = "to-bottom-left",
-            from = { 29, 29, 51, 230 }, to = { 14, 17, 31, 242 },
+            from = { 46, 45, 111, 242 }, to = { 8, 20, 48, 248 },
         },
-        boxShadow = { { x = 0, y = 6, blur = 18, spread = 0, color = { 0, 0, 0, 115 } } },
+        boxShadow = HUD_SHADOW,
         pointerEvents = "none",
         children = {
             UI.Label { text = "临时回响", fontSize = 9, letterSpacing = 1, fontColor = { 112, 225, 175, 220 } },
@@ -686,13 +746,12 @@ local function CreateHud()
     messagePanel = UI.Panel {
         visible = false,
         maxWidth = 520,
-        padding = { 8, 16, 8, 16 },
-        borderRadius = 16,
-        borderWidth = 1,
-        borderColor = { 239, 190, 105, 95 },
-        backgroundColor = { 17, 18, 34, 218 },
-        shadowBlur = 14,
-        shadowColor = { 0, 0, 0, 115 },
+        padding = { 9, 18, 11, 18 },
+        borderRadius = 0,
+        borderWidth = { 2, 4, 5, 2 },
+        borderColor = { 255, 199, 58, 190 },
+        backgroundColor = { 8, 22, 52, 242 },
+        boxShadow = HUD_SHADOW,
         pointerEvents = "none",
         children = { messageLabel },
     }
@@ -707,11 +766,6 @@ local function CreateHud()
                 position = "absolute", top = 14, left = 16,
                 width = "100%", gap = 6, pointerEvents = "box-none",
                 children = { healthPanel, gaugePanel },
-            },
-            UI.Panel {
-                position = "absolute", top = 14, right = 16,
-                width = "100%", alignItems = "flex-end", gap = 8,
-                pointerEvents = "box-none", children = { comboPanel, insightPanel },
             },
             UI.Panel {
                 position = "absolute", top = 30, left = 0, right = 0,
@@ -735,7 +789,7 @@ local function CreateHud()
         alignItems = "center",
         backgroundGradient = {
             type = "radial", innerRadius = 60, outerRadius = 760,
-            from = { 45, 34, 53, 230 }, to = { 5, 7, 17, 246 },
+            from = { 24, 64, 126, 236 }, to = { 3, 10, 27, 250 },
         },
         backdropBlur = 10,
         pointerEvents = "auto",
@@ -795,11 +849,11 @@ local function CreateHud()
     }
 
     stateKickerLabel = UI.Label {
-        text = "绘本奇幻 · 弹反冒险",
+        text = "战斗档案 · 弹反行动",
         fontSize = 12,
         fontWeight = "bold",
         letterSpacing = 2,
-        fontColor = COLORS.gold,
+        fontColor = COLORS.cyan,
     }
     stateTitleLabel = UI.Label {
         text = "弹反之室",
@@ -824,28 +878,30 @@ local function CreateHud()
     }
     stateActionButton = UI.Button {
         text = "踏入房间",
+        variant = "primary",
         width = 220,
-        height = 52,
+        height = 54,
         fontSize = 16,
-        textColor = { 40, 25, 30, 255 },
+        textColor = COLORS.cream,
         backgroundGradient = {
             type = "linear", direction = "to-right",
-            from = { 255, 191, 102, 255 }, to = { 244, 116, 105, 255 },
+            from = { 31, 162, 255, 255 }, to = { 42, 105, 222, 255 },
         },
-        hoverBackgroundColor = { 255, 205, 125, 255 },
-        pressedBackgroundColor = { 226, 103, 91, 255 },
-        borderRadius = 15,
-        borderWidth = { 1, 1, 4, 1 },
-        borderColor = { 255, 222, 157, 220 },
-        shadowBlur = 22,
-        shadowOffsetY = 9,
-        shadowColor = { 232, 105, 91, 105 },
-        transition = "scale 0.16s easeOutBack, shadowBlur 0.16s easeOut, backgroundColor 0.16s easeOut",
+        hoverBackgroundColor = { 70, 183, 255, 255 },
+        pressedBackgroundColor = { 13, 126, 230, 255 },
+        borderRadius = 0,
+        borderWidth = { 2, 4, 6, 2 },
+        borderColor = COLORS.border,
+        shadowBlur = 0,
+        shadowOffsetX = 7,
+        shadowOffsetY = 7,
+        shadowColor = { 0, 0, 0, 110 },
+        transition = "scale 0.12s easeOutBack, translateY 0.12s easeOut, backgroundColor 0.12s easeOut",
         onPointerEnter = function(_, widget)
-            widget:SetStyle({ scale = 1.035, shadowBlur = 28 })
+            widget:SetStyle({ scale = 1.025, translateY = -2 })
         end,
         onPointerLeave = function(_, widget)
-            widget:SetStyle({ scale = 1.0, shadowBlur = 22 })
+            widget:SetStyle({ scale = 1.0, translateY = 0 })
         end,
         onClick = function()
             StartOrRestartRun()
@@ -880,7 +936,7 @@ local function CreateHud()
         top = 0, left = 0, right = 0, bottom = 0,
         backgroundGradient = {
             type = "linear", direction = "to-bottom-right",
-            from = { 25, 29, 52, 250 }, to = { 7, 8, 19, 252 },
+            from = { 17, 45, 92, 252 }, to = { 3, 10, 28, 254 },
         },
         pointerEvents = "auto",
         children = {
@@ -921,17 +977,17 @@ local function CreateHud()
                                         flexDirection = "row", flexWrap = "wrap",
                                         alignItems = "center", justifyContent = "center",
                                         columnGap = 24, rowGap = 10,
-                                        padding = { 28, 32, 28, 32 },
-                                        borderRadius = 28,
-                                        borderWidth = { 1, 1, 4, 1 },
-                                        borderColor = { 239, 190, 105, 115 },
+                                        padding = { 28, 32, 32, 32 },
+                                        borderRadius = 0,
+                                        borderWidth = { 2, 6, 8, 2 },
+                                        borderColor = { 31, 162, 255, 190 },
                                         backgroundGradient = {
                                             type = "linear", direction = "to-bottom-right",
-                                            from = { 39, 42, 65, 228 }, to = { 15, 17, 33, 244 },
+                                            from = { 30, 75, 142, 244 }, to = { 6, 18, 47, 250 },
                                         },
                                         boxShadow = {
-                                            { x = 0, y = 18, blur = 42, spread = 0, color = { 0, 0, 0, 150 } },
-                                            { x = 0, y = 1, blur = 2, spread = 0, color = { 255, 229, 180, 26 }, inset = true },
+                                            { x = 10, y = 10, blur = 0, spread = 0, color = { 0, 0, 0, 145 } },
+                                            { x = 0, y = 0, blur = 0, spread = 0, color = { 101, 232, 255, 36 }, inset = true },
                                         },
                                         children = {
                                             UI.Panel {
@@ -987,7 +1043,68 @@ local function RefreshChestPanel()
     if chestPanel == nil or game == nil then
         return
     end
-    chestPanel:SetVisible(false)
+
+    local shouldShow = game.state == "chest_select" and game.chestOptions ~= nil
+    if shouldShow then
+        if not chestPanelWasVisible then
+            for index, definition in ipairs(game.chestOptions) do
+                local color = definition.color
+                chestTitleLabels[index]:SetText(definition.name)
+                chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                chestDescriptionLabels[index]:SetText(definition.shortDescription)
+                chestIconLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
+                chestCards[index]:SetState({
+                    accentColor = color,
+                    borderColor = { color[1], color[2], color[3], 210 },
+                    iconBorderColor = { color[1], color[2], color[3], 190 },
+                })
+                SetChestCardRest(chestCards[index])
+            end
+
+            chestPanelWasVisible = true
+            chestPanelIsFadingOut = false
+            chestPanel:SetVisible(true)
+            chestPanel:Animate({
+                keyframes = {
+                    [0] = { opacity = 0 },
+                    [1] = { opacity = 1 },
+                },
+                duration = 0.28,
+                easing = "easeOutCubic",
+                fillMode = "both",
+            })
+            for index, card in ipairs(chestCards) do
+                StartChestCardEntrance(card, index)
+                StartChestCardIdle(card)
+            end
+            print("[UI] Enhancement cards fading in")
+        end
+        return
+    end
+
+    if chestPanelWasVisible and not chestPanelIsFadingOut then
+        chestPanelWasVisible = false
+        chestPanelIsFadingOut = true
+        chestPanel:Animate({
+            keyframes = {
+                [0] = { opacity = 1 },
+                [1] = { opacity = 0 },
+            },
+            duration = 0.24,
+            easing = "easeOutCubic",
+            fillMode = "both",
+            onComplete = function()
+                chestPanelIsFadingOut = false
+                if game == nil or game.state ~= "chest_select" then
+                    chestPanel:SetVisible(false)
+                end
+            end,
+        })
+        print("[UI] Enhancement cards fading out")
+    elseif not chestPanelIsFadingOut then
+        chestPanel:SetVisible(false)
+    end
 end
 
 local function RefreshStateOverlay()
@@ -1002,7 +1119,7 @@ local function RefreshStateOverlay()
     end
 
     if game.state == "menu" then
-        stateKickerLabel:SetText("绘本奇幻 · 弹反冒险")
+        stateKickerLabel:SetText("战斗档案 · 弹反行动")
         stateTitleLabel:SetText("弹反之室")
         stateSubtitleLabel:SetText("拨动琴弦般把握节奏，弹回每一枚诅咒，在幽暗房间中收集水晶能力与回响。")
         stateActionButton:SetText("踏入房间")
@@ -1092,7 +1209,7 @@ function Start()
     RefreshCanvasMetrics()
 
     UI.Init({
-        theme = "default-dark",
+        theme = EchoCombatTheme,
         scale = UI.Scale.DEFAULT,
     })
     CreateHud()
@@ -1102,10 +1219,11 @@ function Start()
         print("ERROR: Failed to create NanoVG context")
         return
     end
-    if nvgCreateFont(nvgContext, "sans", "Fonts/MiSans-Regular.ttf") == -1 then
+    if nvgCreateFont(nvgContext, "sans", "Fonts/NotoSansSC-Black.ttf") == -1 then
         print("WARNING: Could not load NanoVG font")
     end
     Renderer.LoadAssets(nvgContext)
+    CrystalRenderer.LoadAssets(nvgContext)
 
     game = Game.New()
     feedback = Feedback.New()
@@ -1122,6 +1240,7 @@ function Stop()
     AudioManager.Shutdown()
     UI.Shutdown()
     if nvgContext ~= nil then
+        CrystalRenderer.UnloadAssets(nvgContext)
         Renderer.UnloadAssets(nvgContext)
         nvgDelete(nvgContext)
         nvgContext = nil
@@ -1205,10 +1324,6 @@ function HandleMouseButtonDown(eventType, eventData)
     local screenX = eventData:GetInt("X") / devicePixelRatio
     local screenY = eventData:GetInt("Y") / devicePixelRatio
     if game.state == "chest_select" then
-        local choice = CrystalRenderer.GetChoiceAt(game, logicalWidth, logicalHeight, screenX, screenY)
-        if choice ~= nil then
-            ChooseChestOption(choice)
-        end
         return
     end
     if CrystalRenderer.IsPointerOverStatusIcon(game, logicalWidth, logicalHeight, screenX, screenY) then

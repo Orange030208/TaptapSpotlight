@@ -77,9 +77,11 @@ local function IsAttackHitting(boss, player)
         -- 270-degree fan; only the 90-degree wedge directly behind B is safe.
         return IsInsideArc(boss, player, BossConfig.attacks.quake.range, 270, false)
     elseif boss.attack == "feathers" then
-        local reverse = boss.featherPulse <= 4
-        return boss.featherPulse > 0 and boss.parriedPulse ~= boss.featherPulse
-            and IsInsideArc(boss, player, BossConfig.attacks.feathers.range, 180, reverse)
+        -- 飞龙在天只在落地瞬间判定，伤害中心锁定在起飞前记录的玩家位置。
+        local spec = BossConfig.attacks.feathers
+        if boss.feathersPhase ~= nil and boss.feathersPhase ~= "landing" then return false end
+        return Length(player.x - boss.landingX, player.y - boss.landingY)
+            <= spec.landingRadius + (player.radius or 0)
     end
     return false
 end
@@ -139,12 +141,11 @@ end
 function Boss.Initialize(enemy)
     enemy.bossName = BossConfig.name
     enemy.phase = 1
+    enemy.entrance = true
     enemy.attack = nil
     enemy.lastAttack = nil
     enemy.attackTimer = 0
     enemy.attackHitToken = nil
-    enemy.featherPulse = 0
-    enemy.parriedPulse = 0
     enemy.mechanism = nil
     enemy.mechanismProgress = 0
     enemy.mechanismTransition = 0
@@ -181,13 +182,21 @@ local function BeginAttack(boss, player, name)
     local spec = BossConfig.attacks[name]
     boss.attack = name
     boss.lastAttack = name
-    boss.state = "telegraph"
-    boss.stateTimer = spec.telegraph
     boss.attackTimer = 0
     boss.attackHitToken = nil
-    boss.featherPulse = 0
-    boss.parriedPulse = 0
-    if player.x < boss.x then boss.facing = "left" else boss.facing = "right" end
+    boss.feathersPhase = nil
+    boss.landingX, boss.landingY = nil, nil
+    if name == "feathers" then
+        boss.state = "airborne"
+        boss.feathersPhase = "takeoff"
+        boss.stateTimer = spec.takeoff
+        boss.landingX, boss.landingY = player.x, player.y
+        boss.vx, boss.vy = 0, 0
+    else
+        boss.state = "telegraph"
+        boss.stateTimer = spec.telegraph
+        if player.x < boss.x then boss.facing = "left" else boss.facing = "right" end
+    end
 end
 
 local function StartActiveAttack(boss, player)
@@ -196,8 +205,18 @@ local function StartActiveAttack(boss, player)
     boss.attackTimer = 0
     boss.attackHitToken = nil
     if boss.attack == "feathers" then
-        boss.featherPulse = 1
-        boss.stateTimer = spec.pulseCount * spec.pulseInterval
+        if boss.feathersPhase == "landing" then
+            boss.state = "active"
+            boss.stateTimer = spec.active
+            boss.x = Clamp(boss.landingX, RoomConfig.minX, RoomConfig.maxX)
+            boss.y = Clamp(boss.landingY, RoomConfig.minY, RoomConfig.maxY)
+        else
+            boss.state = "airborne"
+            boss.feathersPhase = "takeoff"
+            boss.stateTimer = spec.takeoff
+            boss.landingX, boss.landingY = player.x, player.y
+            boss.vx, boss.vy = 0, 0
+        end
     elseif boss.attack == "charge" then
         local side = math.random() < 0.5 and -1 or 1
         boss.x = Clamp(player.x + side * spec.sideOffset, RoomConfig.minX, RoomConfig.maxX)
@@ -253,10 +272,28 @@ local function UpdateIdleMovement(boss, player, dt)
 end
 
 function Boss.Update(boss, player, dt)
+    if boss.state == "defeat" then
+        boss.stateTimer = boss.stateTimer - dt
+        if boss.stateTimer <= 0 then
+            boss.dead = true
+        end
+        return
+    end
     if boss.dead or boss.purified then return end
     boss.phaseChanged = false
     boss.mechanismChanged = false
     boss.mechanismTransition = math.max(0, boss.mechanismTransition - dt)
+
+    if boss.entrance then
+        boss.stateTimer = boss.stateTimer - dt
+        boss.vx, boss.vy = 0, 0
+        if boss.stateTimer <= 0 then
+            boss.entrance = false
+            boss.state = "idle"
+            boss.stateTimer = BossConfig.attackIntervalMax
+        end
+        return
+    end
 
     if boss.state == "purifying" then
         boss.stateTimer = boss.stateTimer - dt
@@ -270,6 +307,10 @@ function Boss.Update(boss, player, dt)
 
     boss.stateTimer = boss.stateTimer - dt
     if boss.state == "phase_transition" then
+        if boss.entrance then
+            return
+        end
+        boss.entrance = false
         if boss.stateTimer <= 0 then
             boss.state = "idle"
             boss.stateTimer = BossConfig.attackIntervalMax
@@ -290,6 +331,22 @@ function Boss.Update(boss, player, dt)
         if boss.stateTimer <= 0 then StartActiveAttack(boss, player) end
         return
     end
+    if boss.state == "airborne" then
+        local spec = BossConfig.attacks.feathers
+        boss.vx, boss.vy = 0, 0
+        if boss.feathersPhase == "takeoff" and boss.stateTimer <= 0 then
+            boss.feathersPhase = "airborne"
+            boss.stateTimer = spec.airborne
+            boss.landingX, boss.landingY = player.x, player.y
+        elseif boss.feathersPhase == "airborne" and boss.stateTimer <= 0 then
+            boss.feathersPhase = "landing"
+            boss.state = "telegraph"
+            boss.stateTimer = spec.landingTelegraph
+            boss.landingX = Clamp(boss.landingX, RoomConfig.minX, RoomConfig.maxX)
+            boss.landingY = Clamp(boss.landingY, RoomConfig.minY, RoomConfig.maxY)
+        end
+        return
+    end
     if boss.state == "active" then
         local spec = BossConfig.attacks[boss.attack]
         boss.attackTimer = boss.attackTimer + dt
@@ -297,8 +354,6 @@ function Boss.Update(boss, player, dt)
             boss.vx, boss.vy = boss.dashX * spec.dashSpeed, boss.dashY * spec.dashSpeed
             boss.x = Clamp(boss.x + boss.vx * dt, RoomConfig.minX, RoomConfig.maxX)
             boss.y = Clamp(boss.y + boss.vy * dt, RoomConfig.minY, RoomConfig.maxY)
-        elseif boss.attack == "feathers" then
-            boss.featherPulse = math.min(spec.pulseCount, math.floor(boss.attackTimer / spec.pulseInterval) + 1)
         end
         if boss.stateTimer <= 0 then ResetAttack(boss) end
         return
@@ -314,7 +369,7 @@ function Boss.CollectPlayerHits(boss, player)
     local hits = {}
     if boss.dead or boss.state == "phase_transition" or boss.state == "purifying" then return hits end
     if IsAttackHitting(boss, player) then
-        local token = boss.attack == "feathers" and ("feather_" .. tostring(boss.featherPulse)) or boss.attack
+        local token = boss.attack
         if boss.attackHitToken ~= token then
             boss.attackHitToken = token
             local spec = BossConfig.attacks[boss.attack]
@@ -347,6 +402,11 @@ end
 local function CanParryCurrentAttack(boss, player)
     -- Boss [B] attack reaches player [P], but the guard must still point back
     -- toward the attacker: [B] <==== guard cone [P]. A guard facing away fails.
+    if boss.attack == "feathers" and boss.feathersPhase == "landing" then
+        local target = { x = boss.landingX, y = boss.landingY }
+        return IsAttackHitting(boss, player)
+            and IsInPlayerParry(player, target.x, target.y, 0)
+    end
     return IsAttackHitting(boss, player)
         and IsInPlayerParry(player, boss.x, boss.y, boss.radius)
 end
@@ -412,8 +472,7 @@ function Boss.TryParry(boss, player, damage)
             result.damage = applied
             if boss.hp <= thresholdHp + 0.0001 then EnterPhaseTwo(boss, player) else ResetAttack(boss, BossConfig.recoveryDuration + 0.3) end
         elseif boss.attack == "feathers" then
-            boss.parriedPulse = boss.featherPulse
-            boss.attackHitToken = "feather_" .. tostring(boss.featherPulse)
+            boss.attackHitToken = "feathers_parried"
         else
             ResetAttack(boss, BossConfig.recoveryDuration + 0.3)
         end

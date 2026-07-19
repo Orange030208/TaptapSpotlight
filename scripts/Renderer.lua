@@ -77,6 +77,7 @@ local playerSpineLastTime = nil
 
 function Renderer.LoadAssets(ctx)
     local playerLoaded = false
+    BossRenderer.LoadAssets(ctx)
     if ENABLE_SPINE_PLAYER then
         playerSpine = nvgSpineCreate(ctx)
     end
@@ -373,6 +374,7 @@ function Renderer.LoadAssets(ctx)
 end
 
 function Renderer.UnloadAssets(ctx)
+    BossRenderer.UnloadAssets(ctx)
     if playerSpine ~= nil then
         playerSpine:Unload()
         playerSpine:Dispose()
@@ -532,8 +534,9 @@ end
 local function DrawDoor(ctx, arena, direction, isOpen, time)
     local floorWidth = arena.right - arena.left
     local floorHeight = arena.bottom - arena.top
-    local doorColor = isOpen and { 92, 224, 155 } or { 215, 76, 92 }
-    local pulse = 185 + math.floor(35 * math.sin(time * 4.5))
+    local glowColor = isOpen and { 95, 235, 213 } or { 255, 92, 174 }
+    local coreColor = isOpen and { 218, 255, 244 } or { 255, 218, 235 }
+    local pulse = 0.76 + 0.24 * math.sin(time * (isOpen and 3.2 or 2.1))
     local x, y, w, h
 
     if direction == "north" then
@@ -558,29 +561,123 @@ local function DrawDoor(ctx, arena, direction, isOpen, time)
         y = (arena.top + arena.bottom - h) * 0.5
     end
 
+    local horizontal = direction == "north" or direction == "south"
+    local glowSpread = isOpen and 18 or 12
+    local frameInset = 4
+    local curtainInset = 8
+
+    -- 环境泛光：先铺一层柔和光晕，让门光自然映到墙面和地面。
+    local outerGlow = nvgBoxGradient(ctx,
+        x - glowSpread, y - glowSpread, w + glowSpread * 2, h + glowSpread * 2,
+        8, glowSpread,
+        nvgRGBA(glowColor[1], glowColor[2], glowColor[3], math.floor((isOpen and 96 or 82) * pulse)),
+        nvgRGBA(glowColor[1], glowColor[2], glowColor[3], 0))
     nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x, y, w, h, 4)
-    nvgFillColor(ctx, nvgRGBA(9, 10, 15, 255))
+    nvgRoundedRect(ctx, x - glowSpread, y - glowSpread,
+        w + glowSpread * 2, h + glowSpread * 2, 8)
+    nvgFillPaint(ctx, outerGlow)
     nvgFill(ctx)
-    nvgStrokeWidth(ctx, isOpen and 3 or 2)
-    StrokeColor(ctx, doorColor, isOpen and pulse or 235)
+
+    -- 深色实体门框。
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x, y, w, h, 3)
+    nvgFillColor(ctx, nvgRGBA(8, 12, 23, 252))
+    nvgFill(ctx)
+    nvgStrokeWidth(ctx, 4)
+    nvgStrokeColor(ctx, nvgRGBA(31, 35, 52, 255))
     nvgStroke(ctx)
+
+    -- 双层发光边缘，形成晶体门框的厚度。
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x + frameInset, y + frameInset,
+        math.max(1, w - frameInset * 2), math.max(1, h - frameInset * 2), 2)
+    nvgStrokeWidth(ctx, isOpen and 3.2 or 2.4)
+    StrokeColor(ctx, glowColor, math.floor((isOpen and 230 or 170) * pulse))
+    nvgStroke(ctx)
+
+    nvgBeginPath(ctx)
+    nvgRoundedRect(ctx, x + frameInset + 2, y + frameInset + 2,
+        math.max(1, w - (frameInset + 2) * 2), math.max(1, h - (frameInset + 2) * 2), 1)
+    nvgStrokeWidth(ctx, 1.2)
+    StrokeColor(ctx, coreColor, math.floor((isOpen and 235 or 155) * pulse))
+    nvgStroke(ctx)
+
+    -- 半透明能量光幕，开放时更明亮、更通透。
+    local curtainX = x + curtainInset
+    local curtainY = y + curtainInset
+    local curtainW = math.max(1, w - curtainInset * 2)
+    local curtainH = math.max(1, h - curtainInset * 2)
+    local curtainGradient
+    if horizontal then
+        curtainGradient = nvgLinearGradient(ctx, curtainX, curtainY,
+            curtainX, curtainY + curtainH,
+            nvgRGBA(coreColor[1], coreColor[2], coreColor[3], math.floor((isOpen and 205 or 95) * pulse)),
+            nvgRGBA(glowColor[1], glowColor[2], glowColor[3], isOpen and 52 or 30))
+    else
+        curtainGradient = nvgLinearGradient(ctx, curtainX, curtainY,
+            curtainX + curtainW, curtainY,
+            nvgRGBA(coreColor[1], coreColor[2], coreColor[3], math.floor((isOpen and 205 or 95) * pulse)),
+            nvgRGBA(glowColor[1], glowColor[2], glowColor[3], isOpen and 52 or 30))
+    end
+    nvgBeginPath(ctx)
+    nvgRect(ctx, curtainX, curtainY, curtainW, curtainH)
+    nvgFillPaint(ctx, curtainGradient)
+    nvgFill(ctx)
+
+    -- 缓慢流动的光丝，让门保持有生命的能量感。
+    local strandCount = 3
+    for index = 1, strandCount do
+        local phase = (time * (isOpen and 0.42 or 0.18) + index / strandCount) % 1
+        nvgBeginPath(ctx)
+        if horizontal then
+            local strandX = curtainX + curtainW * phase
+            nvgMoveTo(ctx, strandX, curtainY + 1)
+            nvgLineTo(ctx, strandX, curtainY + curtainH - 1)
+        else
+            local strandY = curtainY + curtainH * phase
+            nvgMoveTo(ctx, curtainX + 1, strandY)
+            nvgLineTo(ctx, curtainX + curtainW - 1, strandY)
+        end
+        nvgStrokeWidth(ctx, index == 2 and 1.8 or 1.0)
+        StrokeColor(ctx, coreColor, math.floor((isOpen and 135 or 65) * pulse))
+        nvgStroke(ctx)
+    end
+
+    -- 中央光核强化远距离识别；封闭门显示收束的封印裂纹。
+    local centerX = x + w * 0.5
+    local centerY = y + h * 0.5
+    local coreRadius = math.max(2.5, math.min(w, h) * (isOpen and 0.11 or 0.09))
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, coreRadius * 3.2)
+    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, 0, coreRadius * 3.2,
+        nvgRGBA(coreColor[1], coreColor[2], coreColor[3], math.floor((isOpen and 145 or 85) * pulse)),
+        nvgRGBA(glowColor[1], glowColor[2], glowColor[3], 0)))
+    nvgFill(ctx)
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, coreRadius)
+    nvgFillColor(ctx, nvgRGBA(coreColor[1], coreColor[2], coreColor[3],
+        math.floor((isOpen and 245 or 195) * pulse)))
+    nvgFill(ctx)
 
     if not isOpen then
         nvgBeginPath(ctx)
-        if direction == "north" or direction == "south" then
-            nvgMoveTo(ctx, x + w * 0.18, y + h * 0.34)
-            nvgLineTo(ctx, x + w * 0.82, y + h * 0.66)
-            nvgMoveTo(ctx, x + w * 0.82, y + h * 0.34)
-            nvgLineTo(ctx, x + w * 0.18, y + h * 0.66)
+        if horizontal then
+            nvgMoveTo(ctx, x + w * 0.24, centerY - h * 0.18)
+            nvgLineTo(ctx, centerX, centerY)
+            nvgLineTo(ctx, x + w * 0.76, centerY + h * 0.18)
+            nvgMoveTo(ctx, x + w * 0.76, centerY - h * 0.18)
+            nvgLineTo(ctx, centerX, centerY)
+            nvgLineTo(ctx, x + w * 0.24, centerY + h * 0.18)
         else
-            nvgMoveTo(ctx, x + w * 0.28, y + h * 0.15)
-            nvgLineTo(ctx, x + w * 0.72, y + h * 0.85)
-            nvgMoveTo(ctx, x + w * 0.72, y + h * 0.15)
-            nvgLineTo(ctx, x + w * 0.28, y + h * 0.85)
+            nvgMoveTo(ctx, centerX - w * 0.18, y + h * 0.24)
+            nvgLineTo(ctx, centerX, centerY)
+            nvgLineTo(ctx, centerX + w * 0.18, y + h * 0.76)
+            nvgMoveTo(ctx, centerX + w * 0.18, y + h * 0.24)
+            nvgLineTo(ctx, centerX, centerY)
+            nvgLineTo(ctx, centerX - w * 0.18, y + h * 0.76)
         end
-        nvgStrokeWidth(ctx, 4)
-        StrokeColor(ctx, { 225, 94, 97 }, 235)
+        nvgStrokeWidth(ctx, 2)
+        StrokeColor(ctx, coreColor, math.floor(180 * pulse))
         nvgStroke(ctx)
     end
 end
@@ -953,6 +1050,9 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
     local directionAngle = Atan2(directionY, directionX)
     local telegraphColor = enemy.kind == "blue_swarm" and { 70, 225, 255 } or { 255, 230, 120 }
     local behavior = spec.behavior or ""
+    if behavior == "ranged_single" or behavior == "ranged_fan" then
+        return
+    end
     local attackRange = attack.range or spec.attackRange or enemy.radius * 2
     if behavior == "melee_arc" or behavior == "tree_swing" then
         attackRange = attackRange + enemy.radius + PlayerConfig.radius
@@ -981,20 +1081,6 @@ local function DrawEnemyTelegraph(ctx, width, height, enemy, player)
         local dashWidthX, dashWidthY = GetWorldRadius(width, height, math.max(enemy.radius + 0.012, PlayerConfig.radius))
         DrawDashAttackRegion(ctx, x, y, dashRadiusX, dashRadiusY, dashWidthX, dashWidthY, directionAngle,
             telegraphColor, progress, pulse, scale)
-    elseif behavior == "ranged_fan" then
-        if spec.projectile ~= nil and spec.projectile.pattern == "radial_random" then
-            DrawCircleAttackRegion(ctx, x, y, radiusX, radiusY, { 202, 174, 235 }, progress, pulse, scale)
-        else
-            local spread = math.rad(spec.projectile and spec.projectile.spread or 30)
-            DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, directionAngle - spread * 0.5, spread,
-                { 202, 174, 235 }, progress, pulse, scale)
-        end
-    elseif behavior == "ranged_single" and player ~= nil then
-        local playerX, playerY = Renderer.WorldToScreen(width, height, player.x, player.y)
-        local playerAngle = Atan2(playerY - y, playerX - x)
-        local spread = math.rad(12)
-        DrawSectorAttackRegion(ctx, x, y, radiusX, radiusY, playerAngle - spread * 0.5, spread,
-            { 255, 220, 115 }, progress, pulse, scale)
     end
 end
 
@@ -1303,14 +1389,6 @@ local function DrawSpriteMushroom(ctx, x, y, enemy, time, scale)
     local drawY = -displayHeight + 2 * scale
     local scaleX = 1 + math.sin(time * 2.6 + enemy.id * 0.41) * 0.012
     local scaleY = 1 - math.sin(time * 2.6 + enemy.id * 0.41) * 0.012
-    local attack = EnemyConfig.mushroom.attack
-
-    if enemy.state == "telegraph" and attack.telegraph > 0 then
-        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
-        local squash = math.sin(progress * math.pi)
-        scaleX = scaleX + squash * 0.075
-        scaleY = scaleY - squash * 0.09
-    end
 
     local pivotY = drawY + displayHeight
     nvgSave(ctx)
@@ -1336,15 +1414,6 @@ local function DrawSpriteDandelion(ctx, x, y, enemy, time, scale)
     local drawY = -displayHeight + 2 * scale
     local shakeX, shakeY, rotation = 0, 0, 0
 
-    if enemy.state == "telegraph" then
-        local attack = EnemyConfig.dandelion.attack
-        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
-        local jitter = math.sin(time * 54 + enemy.id * 1.37) * progress
-        shakeX = jitter * 1.8 * scale
-        shakeY = math.cos(time * 47 + enemy.id * 0.61) * progress * 0.55 * scale
-        rotation = jitter * 0.055
-    end
-
     local pivotY = drawY + displayHeight
     nvgSave(ctx)
     nvgTranslate(ctx, x + shakeX, y + shakeY)
@@ -1368,15 +1437,6 @@ local function DrawSpritePurpleOrb(ctx, x, y, enemy, time, scale)
     local drawX = -displayWidth * 0.5
     local drawY = -displayHeight + 6 * scale
     local shakeX, shakeY, rotation = 0, 0, 0
-
-    if enemy.state == "telegraph" then
-        local attack = EnemyConfig.purple_orb.attack
-        local progress = 1 - Clamp(enemy.stateTimer / attack.telegraph, 0, 1)
-        local jitter = math.sin(time * 68 + enemy.id * 1.71) * progress
-        shakeX = jitter * 1.5 * scale
-        shakeY = math.cos(time * 59 + enemy.id * 0.83) * progress * 0.7 * scale
-        rotation = jitter * 0.045
-    end
 
     nvgSave(ctx)
     nvgTranslate(ctx, x + shakeX, y + shakeY)
@@ -2153,11 +2213,25 @@ local function DrawGuardStreak(ctx, width, height, feedback, game)
     end
 
     local fontSize = profile.textSize * (0.68 + 0.32 * popEase)
-    local headOffsetX = display.kind == "perfect" and 30 or 0
+    local iconSize = 46 * (0.78 + 0.22 * popEase)
+    local hasPerfectIcon = display.kind == "perfect"
+        and perfectStreakLightningImageHandle ~= nil and perfectStreakLightningImageHandle > 0
+    local headOffsetX = hasPerfectIcon and 35 or 0
     local textX = anchorX + headOffsetX
     local sway = math.sin((feedback.time or 0) * 8.5) * (display.kind == "perfect" and 2.5 or 1.2)
     local lift = math.sin(popProgress * math.pi) * 5
     local textY = anchorY - lift
+
+    if hasPerfectIcon then
+        local iconX = anchorX - 28 + sway
+        local iconY = textY - iconSize * 0.5
+        nvgBeginPath(ctx)
+        nvgRect(ctx, iconX - iconSize * 0.5, iconY - iconSize * 0.5, iconSize, iconSize)
+        nvgFillPaint(ctx, nvgImagePatternTinted(ctx,
+            iconX - iconSize * 0.5, iconY - iconSize * 0.5, iconSize, iconSize, 0,
+            perfectStreakLightningImageHandle, nvgRGBA(255, 255, 255, alpha)))
+        nvgFill(ctx)
+    end
 
     nvgFontFace(ctx, "sans")
     nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)

@@ -146,6 +146,9 @@ function Entities.NewEnemy(kind, spawn, id)
         splitGeneration = spawn.splitGeneration or 0,
         strafeDirection = math.random() < 0.5 and -1 or 1,
         strafeTimer = 0.55 + math.random() * 0.75,
+        knockbackVx = 0,
+        knockbackVy = 0,
+        knockbackTimer = 0,
         dead = false,
     }
     if spawn.hp ~= nil then
@@ -271,8 +274,13 @@ function Entities.BeginParry(player, targetX, targetY)
     return true, true
 end
 
-function Entities.RegisterParrySuccess(player)
-    player.parryCooldown = math.min(player.parryCooldown, PlayerConfig.successfulParryCooldown)
+function Entities.RegisterParrySuccess(player, perfect)
+    local refundRatio = perfect and PlayerConfig.perfectParryCooldownRefund
+        or PlayerConfig.normalParryCooldownRefund
+    local refund = PlayerConfig.parryCooldown * refundRatio
+    player.parryCooldown = math.max(0, player.parryCooldown - refund)
+    print(string.format("[Combat] Parry cooldown refund result=%s ratio=%.0f%% remaining=%.2fs",
+        perfect and "perfect" or "normal", refundRatio * 100, player.parryCooldown))
 end
 
 function Entities.IsParrying(player)
@@ -436,6 +444,26 @@ end
 
 function Entities.UpdateEnemy(enemy, player, dt, emitProjectile)
     if enemy.dead then
+        return
+    end
+
+    if enemy.knockbackTimer > 0 then
+        local duration = PlayerConfig.meleeKnockbackDuration
+        local remainingBefore = enemy.knockbackTimer
+        local step = math.min(dt, remainingBefore)
+        local remainingAfter = remainingBefore - step
+        local averageSpeedScale = (remainingBefore + remainingAfter) * 0.5 / duration
+        local previousX, previousY = enemy.x, enemy.y
+        enemy.x = Clamp(enemy.x + enemy.knockbackVx * averageSpeedScale * step, RoomConfig.minX, RoomConfig.maxX)
+        enemy.y = Clamp(enemy.y + enemy.knockbackVy * averageSpeedScale * step, RoomConfig.minY, RoomConfig.maxY)
+        enemy.knockbackTimer = remainingAfter
+        local endSpeedScale = remainingAfter / duration
+        enemy.vx, enemy.vy = enemy.knockbackVx * endSpeedScale, enemy.knockbackVy * endSpeedScale
+        if enemy.knockbackTimer <= 0 or (enemy.x == previousX and enemy.y == previousY) then
+            enemy.knockbackVx, enemy.knockbackVy = 0, 0
+            enemy.knockbackTimer = 0
+            enemy.vx, enemy.vy = 0, 0
+        end
         return
     end
 
@@ -653,8 +681,12 @@ local function ApplyEnemyParry(enemy, spec, damage, knockbackX, knockbackY)
         if directionX == 0 and directionY == 0 then
             directionX, directionY = 1, 0
         end
-        enemy.x = Clamp(enemy.x + directionX * PlayerConfig.meleeKnockback, RoomConfig.minX, RoomConfig.maxX)
-        enemy.y = Clamp(enemy.y + directionY * PlayerConfig.meleeKnockback, RoomConfig.minY, RoomConfig.maxY)
+        local duration = PlayerConfig.meleeKnockbackDuration
+        local speed = PlayerConfig.meleeKnockback * 2 / duration
+        enemy.knockbackVx = directionX * speed
+        enemy.knockbackVy = directionY * speed
+        enemy.knockbackTimer = duration
+        print(string.format("[Combat] Smooth knockback enemy=%s distance=%.3f duration=%.2f", tostring(enemy.id), PlayerConfig.meleeKnockback, duration))
     end
     if enemy.hp <= 0 then
         if spec.split ~= nil then

@@ -1,8 +1,25 @@
 local BossConfig = require "Data.BossConfig"
 local EnemyConfig = require "Data.EnemyConfig"
+local PlayerConfig = require "Data.PlayerConfig"
 local Boss = require "Boss"
 
 local BossRenderer = {}
+
+local BOSS_SPRITES = {
+    fallback = "image/boss_hui_an.png",
+    idle = "image/boss_idle_pose_20260718202028.png",
+    move = "image/boss_move_pose_20260718202033.png",
+    sweep = "image/boss_sweep_pose_20260718202056.png",
+    skewer = "image/boss_skewer_pose_20260718202030.png",
+    charge = "image/boss_charge_pose_20260718202031.png",
+    quake = "image/boss_quake_pose_20260718202028.png",
+    feathers = "image/boss_feathers_pose_20260718202025.png",
+    phase_transition = "image/boss_phase_transition_pose_20260718202057.png",
+    recovery = "image/boss_recovery_pose_20260718202029.png",
+    purifying = "image/boss_purifying_pose_20260718202133.png",
+    defeat = "image/boss_defeat_pose_20260718202132.png",
+}
+local bossImages = {}
 
 local function Clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
@@ -20,6 +37,214 @@ local function WorldPoint(worldToScreen, width, height, x, y)
     return worldToScreen(width, height, x, y)
 end
 
+function BossRenderer.LoadAssets(ctx)
+    BossRenderer.UnloadAssets(ctx)
+    local loadedCount = 0
+    for name, path in pairs(BOSS_SPRITES) do
+        local image = {
+            handle = nvgCreateImage(ctx, path, 0),
+            width = 1,
+            height = 1,
+            loaded = false,
+        }
+        if image.handle ~= nil and image.handle > 0 then
+            image.width, image.height = nvgImageSize(ctx, image.handle)
+            image.loaded = image.width > 0 and image.height > 0
+        end
+        if image.loaded then
+            loadedCount = loadedCount + 1
+            print("Loaded Boss pose [" .. name .. "]: " .. path)
+        else
+            if image.handle ~= nil and image.handle > 0 then
+                nvgDeleteImage(ctx, image.handle)
+            end
+            image.handle = 0
+            print("WARNING: Failed to load Boss pose [" .. name .. "]: " .. path)
+        end
+        bossImages[name] = image
+    end
+    local fallback = bossImages.fallback
+    bossSpriteLoaded = fallback ~= nil and fallback.loaded
+    if not bossSpriteLoaded then
+        print("WARNING: Boss fallback sprite unavailable; using vector fallback")
+    end
+    return loadedCount > 0
+end
+
+function BossRenderer.UnloadAssets(ctx)
+    for name, image in pairs(bossImages) do
+        if image.handle ~= nil and image.handle > 0 then
+            nvgDeleteImage(ctx, image.handle)
+        end
+        image.handle = 0
+        image.width, image.height = 1, 1
+        image.loaded = false
+        bossImages[name] = nil
+    end
+    bossSpriteLoaded = false
+end
+
+local function GetSpriteKey(boss)
+    if boss.state == "purifying" then return "purifying" end
+    if boss.state == "defeat" then return "defeat" end
+    if boss.dead then return "defeat" end
+    if boss.entrance then return "phase_transition" end
+    if boss.state == "airborne" then return "feathers" end
+    if boss.state == "recovery" then return "recovery" end
+    if boss.state == "telegraph" or boss.state == "active" then
+        return boss.attack or (boss.isMoving and "move" or "idle")
+    end
+    if boss.isMoving or math.abs(boss.vx or 0) + math.abs(boss.vy or 0) > 0.01 then
+        return "move"
+    end
+    return "idle"
+end
+
+local function GetBossImage(boss)
+    local key = GetSpriteKey(boss)
+    local image = bossImages[key]
+    if image ~= nil and image.loaded then return image end
+    local fallback = bossImages.fallback
+    if fallback ~= nil and fallback.loaded then return fallback end
+    return nil
+end
+
+local function GetSpriteMotion(boss, time)
+    local scaleX, scaleY = 1.0, 1.0
+    local offsetX, offsetY = 0.0, 0.0
+    local rotation = 0.0
+    local alpha = 1.0
+    local glow = 0.0
+    local phase = boss.phase == 2 and 1 or 0
+    local spriteKey = GetSpriteKey(boss)
+
+    if boss.state == "telegraph" then
+        local spec = BossConfig.attacks[boss.attack]
+        local telegraphDuration = boss.attack == "feathers" and spec.landingTelegraph or spec.telegraph
+        local progress = Clamp(1 - boss.stateTimer / math.max(0.001, telegraphDuration), 0, 1)
+        if boss.attack == "sweep" then
+            scaleX = 1 + progress * 0.08
+            scaleY = 1 - progress * 0.04
+            rotation = -progress * (boss.facing == "left" and -0.06 or 0.06)
+        elseif boss.attack == "skewer" then
+            scaleX = 1 + progress * 0.10
+            scaleY = 1 - progress * 0.05
+            rotation = progress * (boss.facing == "left" and -0.04 or 0.04)
+        elseif boss.attack == "charge" then
+            scaleX = 1 - progress * 0.10
+            scaleY = 1 + progress * 0.10
+            offsetX = (boss.facing == "left" and 1 or -1) * progress * 5
+        elseif boss.attack == "quake" then
+            scaleX = 1 + progress * 0.08
+            scaleY = 1 - progress * 0.08
+            offsetY = progress * 4
+        elseif boss.attack == "feathers" then
+            scaleX = 1 + progress * 0.06
+            scaleY = 1 + progress * 0.06
+            offsetY = -progress * 4
+            glow = progress
+        end
+    elseif boss.state == "active" then
+        if boss.attack == "charge" then
+            scaleX = 1.17
+            scaleY = 0.88
+            offsetX = boss.vx < 0 and -4 or 4
+        elseif boss.attack == "feathers" then
+            scaleX = 1.22
+            scaleY = 0.72
+            offsetY = -30
+            glow = 0.8
+        elseif boss.attack == "quake" then
+            scaleX = 1.08
+            scaleY = 0.92
+            offsetY = 3
+        end
+    elseif boss.state == "recovery" then
+        local recovery = Clamp(boss.stateTimer / math.max(0.001, BossConfig.recoveryDuration), 0, 1)
+        scaleX = 1 - recovery * 0.06
+        scaleY = 1 - recovery * 0.12
+        offsetY = recovery * 5
+        alpha = 0.72 + (1 - recovery) * 0.28
+    elseif boss.entrance or boss.state == "phase_transition" then
+        local duration = boss.entrance and 0.7 or BossConfig.phaseTransitionDuration
+        local progress = Clamp(1 - boss.stateTimer / duration, 0, 1)
+        scaleX = 0.72 + progress * 0.28
+        scaleY = 0.72 + progress * 0.28
+        offsetY = 20 - progress * 20
+        glow = 0.35 + progress * 0.65
+        alpha = 0.35 + progress * 0.65
+    elseif boss.state == "airborne" then
+        local featherPhase = boss.feathersPhase or "takeoff"
+        local lift = featherPhase == "takeoff" and 0.35 or 1.0
+        scaleX = 1.02 + lift * 0.08
+        scaleY = 0.94 + lift * 0.08
+        offsetY = -42 - lift * 24
+        rotation = math.sin(time * 5 + (boss.id or 0)) * 0.05
+        glow = 0.55 + lift * 0.25
+        alpha = 1
+    elseif boss.state == "purifying" then
+        local progress = Clamp(boss.purificationProgress or 0, 0, 1)
+        scaleX = 1 - progress * 0.32
+        scaleY = 1 - progress * 0.32
+        offsetY = -progress * 12
+        glow = progress
+        alpha = 1 - progress * 0.35
+    elseif spriteKey == "defeat" then
+        local progress = Clamp(1 - boss.stateTimer / 0.9, 0, 1)
+        scaleX = 1 - progress * 0.22
+        scaleY = 1 - progress * 0.30
+        offsetY = -progress * 16
+        rotation = progress * (boss.facing == "left" and -0.14 or 0.14)
+        glow = 0.35 * (1 - progress)
+        alpha = 1 - progress
+    end
+
+    local bob = math.sin(time * (boss.state == "active" and 7 or 4) + (boss.id or 0))
+    if spriteKey == "idle" then
+        offsetY = offsetY + bob * 2.5
+    elseif spriteKey == "move" then
+        offsetY = offsetY + math.sin(time * 10 + (boss.id or 0)) * 1.4
+    elseif boss.state ~= "defeat" then
+        offsetY = offsetY + bob * 1.2
+    end
+    if phase == 1 then glow = math.max(glow, 0.35 + 0.2 * math.sin(time * 5)) end
+    return scaleX, scaleY, offsetX, offsetY, rotation, alpha, glow
+end
+
+local function DrawBossSprite(ctx, x, y, boss, time, scale)
+    local scaleX, scaleY, offsetX, offsetY, rotation, alpha, glow = GetSpriteMotion(boss, time)
+    local image = GetBossImage(boss)
+    if image == nil then return false end
+    local displayHeight = 138 * scale
+    local displayWidth = displayHeight * image.width / image.height
+    local drawX = -displayWidth * 0.5
+    local drawY = -displayHeight
+    local flip = boss.facing == "left" and -1 or 1
+
+    if glow > 0.01 then
+        local radius = math.max(displayWidth, displayHeight) * (0.62 + glow * 0.18)
+        local glowColor = boss.state == "purifying" and nvgRGBA(218, 245, 220, math.floor(70 + glow * 110))
+            or nvgRGBA(132, 214, 255, math.floor(70 + glow * 100))
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x + offsetX, y - displayHeight * 0.52 + offsetY, radius)
+        nvgFillPaint(ctx, nvgRadialGradient(ctx, x + offsetX, y - displayHeight * 0.52 + offsetY,
+            radius * 0.16, radius, glowColor, nvgRGBA(38, 20, 70, 0)))
+        nvgFill(ctx)
+    end
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, x + offsetX, y + offsetY)
+    nvgRotate(ctx, rotation)
+    nvgScale(ctx, flip * scaleX, scaleY)
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
+    nvgFillPaint(ctx, nvgImagePatternTinted(ctx, drawX, drawY, displayWidth, displayHeight, 0,
+        image.handle, nvgRGBA(255, 255, 255, math.floor(alpha * 255))))
+    nvgFill(ctx)
+    nvgRestore(ctx)
+    return true
+end
+
 local function BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
     nvgBeginPath(ctx)
     nvgMoveTo(ctx, centerX, centerY)
@@ -31,13 +256,16 @@ local function BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAng
 end
 
 local function DrawSector(ctx, width, height, boss, range, arc, reverse, worldToScreen, alpha, debug, progress)
-    local facingAngle = boss.facing == "left" and math.pi or 0
-    if reverse then facingAngle = facingAngle + math.pi end
-    local half = math.rad(arc * 0.5)
+    local facingX = boss.facing == "left" and -1 or 1
+    if reverse then facingX = facingX * -1 end
     local centerX, centerY = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
-    local radiusX = range * (worldToScreen(width, height, boss.x + 1, boss.y) - centerX)
-    local radiusY = range * (worldToScreen(width, height, boss.x, boss.y + 1) - centerY)
-    local startAngle = facingAngle - half
+    local attackRange = range + PlayerConfig.radius
+    local edgeX = WorldPoint(worldToScreen, width, height, boss.x + facingX * attackRange, boss.y)
+    local radiusX = math.abs(edgeX - centerX)
+    local _, verticalY = WorldPoint(worldToScreen, width, height, boss.x, boss.y + attackRange)
+    local radiusY = math.abs(verticalY - centerY)
+    local half = math.rad(arc * 0.5)
+    local startAngle = facingX < 0 and math.pi - half or -half
     local arcRadians = math.rad(arc)
 
     BuildSectorPath(ctx, centerX, centerY, radiusX, radiusY, startAngle, arcRadians)
@@ -56,12 +284,21 @@ end
 
 local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug, progress)
     local spec = BossConfig.attacks.skewer
-    local left, top = WorldPoint(worldToScreen, width, height, boss.x - spec.length, boss.y - spec.halfWidth)
-    local right, bottom = WorldPoint(worldToScreen, width, height, boss.x + spec.length, boss.y + spec.halfWidth)
-    if left > right then left, right = right, left end
-    if top > bottom then top, bottom = bottom, top end
+    local facingX = boss.facing == "left" and -1 or 1
+    local centerX, centerY = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    local attackLength = spec.length + PlayerConfig.radius
+    local attackHalfWidth = spec.halfWidth + PlayerConfig.radius
+    local edgeX = WorldPoint(worldToScreen, width, height, boss.x + facingX * attackLength, boss.y)
+    local _, topY = WorldPoint(worldToScreen, width, height, boss.x, boss.y - attackHalfWidth)
+    local _, bottomY = WorldPoint(worldToScreen, width, height, boss.x, boss.y + attackHalfWidth)
+    local halfLength = math.abs(edgeX - centerX)
+    local halfWidth = math.abs(bottomY - topY) * 0.5
+    local left = centerX - halfLength
+    local top = centerY - halfWidth
+    local totalWidth = halfLength * 2
+    local totalHeight = halfWidth * 2
     nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, left, top, right - left, bottom - top, 3)
+    nvgRoundedRect(ctx, left, top, totalWidth, totalHeight, math.min(5, halfWidth))
     Fill(ctx, debug and { 255, 80, 95 } or { 225, 102, 148 }, alpha)
     nvgFill(ctx)
     nvgStrokeWidth(ctx, debug and 2 or 1.4)
@@ -69,15 +306,44 @@ local function DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug,
     nvgStroke(ctx)
 
     if progress > 0 then
-        local fillRight = left + (right - left) * progress
+        local fillWidth = totalWidth * progress
+        local fillLeft = facingX < 0 and left + totalWidth - fillWidth or left
         nvgBeginPath(ctx)
-        nvgRoundedRect(ctx, left, top, fillRight - left, bottom - top, 3)
+        nvgRoundedRect(ctx, fillLeft, top, fillWidth, totalHeight, math.min(5, halfWidth))
         Fill(ctx, { 225, 102, 148 }, math.min(150, alpha + 70))
         nvgFill(ctx)
     end
 end
 
 local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
+    if boss.attack == "feathers" then
+        local landing = boss.feathersPhase == "landing"
+        if not landing or (boss.state ~= "telegraph" and boss.state ~= "active") then
+            return
+        end
+        local spec = BossConfig.attacks.feathers
+        local x, y = WorldPoint(worldToScreen, width, height, boss.landingX, boss.landingY)
+        local edgeX = WorldPoint(worldToScreen, width, height, boss.landingX + spec.landingRadius, boss.landingY)
+        local _, edgeY = WorldPoint(worldToScreen, width, height, boss.landingX, boss.landingY + spec.landingRadius)
+        local radius = math.max(math.abs(edgeX - x), math.abs(edgeY - y))
+        local progress = boss.state == "telegraph"
+            and Clamp(1 - boss.stateTimer / math.max(0.001, spec.landingTelegraph), 0, 1) or 1
+        local alpha = boss.state == "telegraph" and (debug and 74 or 52) or (debug and 110 or 78)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius)
+        Fill(ctx, debug and { 255, 72, 88 } or { 255, 112, 74 }, alpha)
+        nvgFill(ctx)
+        nvgStrokeWidth(ctx, debug and 2.5 or 1.8)
+        Stroke(ctx, { 255, 224, 128 }, math.min(255, alpha + 100))
+        nvgStroke(ctx)
+        if progress > 0 then
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x, y, radius * progress)
+            Fill(ctx, { 255, 78, 72 }, math.min(165, alpha + 70))
+            nvgFill(ctx)
+        end
+        return
+    end
     if boss.state ~= "telegraph" and boss.state ~= "active" then return end
     local spec = BossConfig.attacks[boss.attack]
     local progress = boss.state == "telegraph" and Clamp(1 - boss.stateTimer / math.max(0.001, spec.telegraph), 0, 1) or 1
@@ -87,9 +353,15 @@ local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
     elseif boss.attack == "skewer" then
         DrawSkewer(ctx, width, height, boss, worldToScreen, alpha, debug, progress)
     elseif boss.attack == "charge" then
-        local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+        local x, y = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+        local hitRadius = BossConfig.attacks.charge.hitRadius + boss.radius
+        local edgeX = WorldPoint(worldToScreen, width, height, boss.x + hitRadius, boss.y)
+        local _, edgeY = WorldPoint(worldToScreen, width, height, boss.x, boss.y + hitRadius)
+        local radiusX = math.abs(edgeX - x)
+        local radiusY = math.abs(edgeY - y)
+        local radius = math.max(radiusX, radiusY)
         nvgBeginPath(ctx)
-        nvgCircle(ctx, x, y, 24 * scale)
+        nvgCircle(ctx, x, y, radius)
         Fill(ctx, { 255, 92, 126 }, alpha)
         nvgFill(ctx)
         nvgStrokeWidth(ctx, debug and 2 or 1.5)
@@ -97,15 +369,12 @@ local function DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
         nvgStroke(ctx)
         if progress > 0 then
             nvgBeginPath(ctx)
-            nvgCircle(ctx, x, y, 24 * scale * progress)
+            nvgCircle(ctx, x, y, radius * progress)
             Fill(ctx, { 255, 92, 126 }, math.min(150, alpha + 70))
             nvgFill(ctx)
         end
     elseif boss.attack == "quake" then
         DrawSector(ctx, width, height, boss, BossConfig.attacks.quake.range, 270, false, worldToScreen, alpha, debug, progress)
-    elseif boss.attack == "feathers" then
-        local reverse = boss.state == "telegraph" or boss.featherPulse <= 4
-        DrawSector(ctx, width, height, boss, BossConfig.attacks.feathers.range, 180, reverse, worldToScreen, alpha, debug, progress)
     end
 end
 
@@ -126,9 +395,66 @@ local function DrawThornRegion(ctx, width, height, thorn, worldToScreen, debug)
     nvgStroke(ctx)
 end
 
+local function DrawBossAttackEffect(ctx, width, height, boss, time, worldToScreen)
+    if boss == nil or boss.state ~= "active" or boss.attack == nil then return end
+    local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    local progress = Clamp(boss.attackTimer / math.max(0.001, BossConfig.attacks[boss.attack].active), 0, 1)
+    local pulse = 0.5 + 0.5 * math.sin(time * 24)
+    local facingX = boss.facing == "left" and -1 or 1
+    if boss.attack == "sweep" then
+        local length = 34 * scale
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x + facingX * 8 * scale, y - 32 * scale)
+        nvgBezierTo(ctx, x + facingX * 22 * scale, y - 18 * scale, x + facingX * length, y - 4 * scale, x + facingX * length, y + 18 * scale)
+        nvgStrokeWidth(ctx, (3 + pulse * 2) * scale)
+        Stroke(ctx, { 255, 174, 126 }, 170)
+        nvgStroke(ctx)
+    elseif boss.attack == "skewer" then
+        for _, direction in ipairs({ -1, 1 }) do
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, x + direction * 8 * scale, y)
+            nvgLineTo(ctx, x + direction * (26 + progress * 20) * scale, y + (direction * 5) * scale)
+            nvgStrokeWidth(ctx, 3 * scale)
+            Stroke(ctx, { 255, 132, 170 }, 180)
+            nvgStroke(ctx)
+        end
+    elseif boss.attack == "charge" then
+        local direction = boss.vx < 0 and -1 or 1
+        for index = 1, 3 do
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, x - direction * (index * 10 + 8) * scale, y + index * 2 * scale)
+            nvgLineTo(ctx, x - direction * (index * 22 + 18) * scale, y + index * 4 * scale)
+            nvgStrokeWidth(ctx, (4 - index) * scale)
+            Stroke(ctx, { 255, 134, 132 }, 95 - index * 16)
+            nvgStroke(ctx)
+        end
+    elseif boss.attack == "quake" then
+        local radius = (24 + progress * 48 + pulse * 4) * scale
+        nvgBeginPath(ctx)
+        nvgEllipse(ctx, x, y + 3 * scale, radius, radius * 0.34)
+        nvgStrokeWidth(ctx, 3 * scale)
+        Stroke(ctx, { 224, 126, 193 }, 160)
+        nvgStroke(ctx)
+    elseif boss.attack == "feathers" then
+        local pulseIndex = boss.featherPulse or 1
+        local reverse = pulseIndex <= 4 and -1 or 1
+        for index = 1, 4 do
+            local featherX = x + facingX * reverse * (12 + index * 9) * scale
+            local featherY = y - (12 - index * 5) * scale
+            nvgBeginPath(ctx)
+            nvgMoveTo(ctx, featherX, featherY)
+            nvgLineTo(ctx, featherX + facingX * reverse * 9 * scale, featherY - 3 * scale)
+            nvgStrokeWidth(ctx, 2.2 * scale)
+            Stroke(ctx, { 147, 226, 255 }, 120)
+            nvgStroke(ctx)
+        end
+    end
+end
+
 function BossRenderer.DrawGround(ctx, width, height, boss, player, time, worldToScreen, debug)
     if boss == nil then return end
     DrawAttackRegion(ctx, width, height, boss, worldToScreen, debug)
+    DrawBossAttackEffect(ctx, width, height, boss, time, worldToScreen)
     DrawThornRegion(ctx, width, height, boss.thorn, worldToScreen, debug)
 
     if boss.thorn ~= nil then
@@ -172,6 +498,10 @@ end
 
 function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    if bossSpriteLoaded and DrawBossSprite(ctx, x, y, boss, time, scale) then
+        return
+    end
+
     local purifiedScale = boss.state == "purifying" and (1 - 0.45 * boss.purificationProgress) or 1
     local size = 48 * scale * EnemyConfig.sizeMultiplier * purifiedScale
     local phaseTwo = boss.phase == 2
@@ -273,8 +603,53 @@ function BossRenderer.DrawBoss(ctx, width, height, boss, time, worldToScreen)
     nvgRestore(ctx)
 end
 
+local function DrawBossMechanismEffect(ctx, width, height, boss, player, time, worldToScreen)
+    if boss == nil or boss.phase ~= 2 then return end
+    local x, y, scale = WorldPoint(worldToScreen, width, height, boss.x, boss.y)
+    if boss.state == "phase_transition" then
+        local progress = Clamp(1 - boss.stateTimer / BossConfig.phaseTransitionDuration, 0, 1)
+        for index = 1, 3 do
+            local radius = (34 + progress * 70 + index * 14) * scale
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x, y - 50 * scale, radius)
+            nvgStrokeWidth(ctx, (2.4 - index * 0.4) * scale)
+            Stroke(ctx, { 88, 220, 214 }, math.floor((150 - index * 28) * (1 - progress)))
+            nvgStroke(ctx)
+        end
+    elseif boss.mechanism == "fog" then
+        local progress = Clamp(boss.mechanismProgress / math.max(1, BossConfig.mechanisms.fog.required), 0, 1)
+        for index = 1, 4 do
+            local radius = (28 + index * 13 + progress * 30) * scale
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x + math.sin(time * 1.4 + index) * 8 * scale, y - 48 * scale, radius)
+            nvgStrokeWidth(ctx, 2 * scale)
+            Stroke(ctx, { 74, 116, 148 }, 38)
+            nvgStroke(ctx)
+        end
+    elseif boss.mechanism == "thorns" and boss.thorn ~= nil then
+        local thornX, thornY = WorldPoint(worldToScreen, width, height, boss.thorn.x, boss.thorn.y)
+        local pulse = 0.7 + 0.3 * math.sin(time * 9)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x, y - 28 * scale)
+        nvgLineTo(ctx, thornX, thornY)
+        nvgStrokeWidth(ctx, 2 * scale)
+        Stroke(ctx, { 226, 74, 153 }, math.floor(90 * pulse))
+        nvgStroke(ctx)
+    elseif boss.mechanism == "metal" then
+        local progress = Clamp(boss.metalProgress / math.max(1, BossConfig.mechanisms.metal.required), 0, 1)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, x, y - 52 * scale)
+        nvgLineTo(ctx, x - 26 * scale - progress * 18 * scale, y - 70 * scale)
+        nvgStrokeWidth(ctx, 5 * scale)
+        Stroke(ctx, { 226, 90, 126 }, 180)
+        nvgStroke(ctx)
+    end
+end
+
 function BossRenderer.DrawMechanismTarget(ctx, width, height, boss, player, time, worldToScreen)
-    if boss == nil or player == nil or boss.phase ~= 2 or boss.mechanismTransition > 0 then return end
+    DrawBossMechanismEffect(ctx, width, height, boss, player, time, worldToScreen)
+    if boss == nil or player == nil or boss.phase ~= 2
+        or boss.state == "phase_transition" or boss.mechanismTransition > 0 then return end
     if boss.mechanism == "fog" then
         local targetX, targetY = Boss.GetMechanismTarget(boss, player)
         local x, y, scale = WorldPoint(worldToScreen, width, height, targetX, targetY)
@@ -292,11 +667,27 @@ function BossRenderer.DrawMechanismTarget(ctx, width, height, boss, player, time
         nvgStrokeWidth(ctx, 2 * scale)
         Stroke(ctx, { 218, 230, 225 }, 235)
         nvgStroke(ctx)
+    elseif boss.mechanism == "metal" then
+        local targetX, targetY = Boss.GetMechanismTarget(boss, player)
+        local x, y, scale = WorldPoint(worldToScreen, width, height, targetX, targetY)
+        local radius = (12 + math.sin(time * 7) * 2) * scale
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius * 1.8)
+        Fill(ctx, { 210, 72, 104 }, 38)
+        nvgFill(ctx)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius)
+        Fill(ctx, { 38, 42, 54 }, 235)
+        nvgFill(ctx)
+        nvgStrokeWidth(ctx, 2 * scale)
+        Stroke(ctx, { 238, 166, 96 }, 240)
+        nvgStroke(ctx)
     end
 end
 
 function BossRenderer.DrawFog(ctx, width, height, boss, player, worldToScreen)
-    if boss == nil or player == nil or boss.phase ~= 2 or boss.mechanism ~= "fog" then return end
+    if boss == nil or player == nil or boss.phase ~= 2
+        or boss.state == "phase_transition" or boss.mechanism ~= "fog" then return end
     local alphaSteps = { 230, 155, 80, 0 }
     local alpha = alphaSteps[Clamp(boss.mechanismProgress + 1, 1, 4)]
     if alpha <= 0 then return end

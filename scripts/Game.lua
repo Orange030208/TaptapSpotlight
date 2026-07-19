@@ -311,23 +311,41 @@ local function HandleEnemyDeaths(game)
     for index = #game.enemies, 1, -1 do
         local enemy = game.enemies[index]
         if enemy.dead then
-            local splitChildren = Entities.GetSplitChildren(enemy)
-            EmitEvent(game, enemy.kind == "boss" and "boss_defeat" or "enemy_defeat", {
-                x = enemy.x,
-                y = enemy.y,
-                kind = enemy.kind,
-            })
-            if #splitChildren == 0 then
-                SpawnChestForEnemy(game, enemy)
-            end
-            AddParticles(game, enemy.x, enemy.y,
-                enemy.kind == "boss" and { 255, 120, 70 } or { 255, 215, 90 },
-                enemy.kind == "boss" and 24 or 10
-            )
-            table.remove(game.enemies, index)
-            for _, spawn in ipairs(splitChildren) do
-                table.insert(game.enemies, Entities.NewEnemy(enemy.kind, spawn, game.nextEntityId))
-                game.nextEntityId = game.nextEntityId + 1
+            local isBoss = enemy.kind == "boss"
+            if isBoss and enemy.purified then
+                local splitChildren = Entities.GetSplitChildren(enemy)
+                EmitEvent(game, "boss_defeat", {
+                    x = enemy.x,
+                    y = enemy.y,
+                    kind = enemy.kind,
+                })
+                AddParticles(game, enemy.x, enemy.y, { 130, 255, 185 }, 30)
+                table.remove(game.enemies, index)
+            elseif isBoss and enemy.state ~= "defeat" then
+                enemy.state = "defeat"
+                enemy.dead = false
+                enemy.stateTimer = 0.9
+                enemy.attack = nil
+                enemy.vx, enemy.vy = 0, 0
+            else
+                local splitChildren = Entities.GetSplitChildren(enemy)
+                EmitEvent(game, enemy.kind == "boss" and "boss_defeat" or "enemy_defeat", {
+                    x = enemy.x,
+                    y = enemy.y,
+                    kind = enemy.kind,
+                })
+                if #splitChildren == 0 then
+                    SpawnChestForEnemy(game, enemy)
+                end
+                AddParticles(game, enemy.x, enemy.y,
+                    enemy.kind == "boss" and { 255, 120, 70 } or { 255, 215, 90 },
+                    enemy.kind == "boss" and 24 or 10
+                )
+                table.remove(game.enemies, index)
+                for _, spawn in ipairs(splitChildren) do
+                    table.insert(game.enemies, Entities.NewEnemy(enemy.kind, spawn, game.nextEntityId))
+                    game.nextEntityId = game.nextEntityId + 1
+                end
             end
         end
     end
@@ -880,7 +898,7 @@ local function ResolveParries(game)
         end
     end
     if parriedAnything then
-        Entities.RegisterParrySuccess(game.player)
+        Entities.RegisterParrySuccess(game.player, perfect)
         AddComboProgress(game, perfect, game.player.x, game.player.y, parriedMelee)
         local guardData = {
             kind = perfect and "perfect" or "normal",
@@ -915,6 +933,16 @@ local function ResolveEnemyContacts(game)
     for _, enemy in ipairs(game.enemies) do
         if enemy.kind == "boss" then
             for _, hit in ipairs(Boss.CollectPlayerHits(enemy, game.player)) do
+                EmitEvent(game, "boss_attack_hit", {
+                    x = game.player.x,
+                    y = game.player.y,
+                    attack = enemy.attack,
+                    sourceKind = hit.source,
+                    originX = enemy.x,
+                    originY = enemy.y,
+                    directionX = game.player.x - enemy.x,
+                    directionY = game.player.y - enemy.y,
+                })
                 local damaged, saved = TryDamagePlayer(game, hit.amount, hit.invulnerability)
                 if damaged then
                     ResetCombo(game)
@@ -1133,6 +1161,12 @@ function Game.Update(game, dt, moveX, moveY, realDt)
     if game.state == "victory" then
         -- Victory freezes combat, but reflected piercing projectiles should finish their flight.
         MoveProjectiles(game, dt)
+        for _, enemy in ipairs(game.enemies) do
+            if enemy.kind == "boss" and enemy.state == "defeat" then
+                Boss.Update(enemy, game.player, dt)
+            end
+        end
+        HandleEnemyDeaths(game)
         RemoveDeadProjectiles(game)
         return
     end

@@ -76,6 +76,38 @@ return {
         flashDuration = 0.10,
         hudPulseDuration = 0.32,
     },
+    bossAttack = {
+        sweep = {
+            hitStop = 0.035, shake = 7, shakeDuration = 0.11,
+            flashColor = { 255, 132, 110 }, flashAlpha = 30, flashDuration = 0.08,
+            impactColor = { 255, 146, 118 }, impactStart = 12, impactEnd = 58,
+            impactDuration = 0.18, impactStroke = 2.4,
+        },
+        skewer = {
+            hitStop = 0.045, shake = 8, shakeDuration = 0.12,
+            flashColor = { 255, 105, 148 }, flashAlpha = 34, flashDuration = 0.09,
+            impactColor = { 255, 132, 170 }, impactStart = 14, impactEnd = 70,
+            impactDuration = 0.20, impactStroke = 2.8,
+        },
+        charge = {
+            hitStop = 0.055, shake = 10, shakeDuration = 0.14,
+            flashColor = { 255, 126, 126 }, flashAlpha = 38, flashDuration = 0.10,
+            impactColor = { 255, 118, 120 }, impactStart = 18, impactEnd = 82,
+            impactDuration = 0.22, impactStroke = 3.0,
+        },
+        quake = {
+            hitStop = 0.06, shake = 12, shakeDuration = 0.18,
+            flashColor = { 205, 124, 177 }, flashAlpha = 42, flashDuration = 0.12,
+            impactColor = { 224, 126, 193 }, impactStart = 20, impactEnd = 100,
+            impactDuration = 0.28, impactStroke = 3.2,
+        },
+        feathers = {
+            hitStop = 0.025, shake = 4, shakeDuration = 0.08,
+            flashColor = { 154, 220, 255 }, flashAlpha = 24, flashDuration = 0.07,
+            impactColor = { 147, 226, 255 }, impactStart = 10, impactEnd = 54,
+            impactDuration = 0.15, impactStroke = 2.0,
+        },
+    },
     bossDefeat = {
         hitStop = 0.11,
         shake = 15,
