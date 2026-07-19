@@ -6,6 +6,11 @@ local GaugeConfig = require "Data.GaugeConfig"
 local PlayerConfig = require "Data.PlayerConfig"
 local Boss = require "Boss"
 
+for _, attack in pairs(BossConfig.attacks) do
+    assert(attack.damage == 0.75, "boss attack damage must stay reduced")
+end
+assert(BossConfig.mechanisms.thorns.damage == 0.35, "thorn damage must stay reduced")
+
 local function NewPlayer(x, y, facing)
     return {
         x = x, y = y, radius = PlayerConfig.radius, facing = facing or "right",

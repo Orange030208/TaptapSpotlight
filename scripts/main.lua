@@ -77,7 +77,7 @@ local creditsOverlay = nil
 local creditsPanel = nil
 local chestTitleLabels = {}
 local chestDescriptionLabels = {}
-local chestIconLabels = {}
+local chestIconImages = {}
 local chestCards = {}
 local chestAccentPanels = {}
 local chestIconPanels = {}
@@ -528,15 +528,11 @@ local function CreateChestCard(index)
         backgroundColor = COLORS.gold,
         pointerEvents = "none",
     }
-    local icon = UI.Label {
-        text = "✦",
-        width = "100%",
-        fontSize = 46,
-        fontWeight = "bold",
-        textAlign = "center",
-        verticalAlign = "middle",
-        fontColor = COLORS.gold,
-        textShadow = { offsetX = 3, offsetY = 3, blur = 0, color = { 0, 0, 0, 185 } },
+    local icon = UI.Panel {
+        width = 66,
+        height = 66,
+        backgroundFit = "contain",
+        pointerEvents = "none",
     }
     local iconPanel = UI.Panel {
         width = 88,
@@ -681,7 +677,7 @@ local function CreateChestCard(index)
 
     chestTitleLabels[index] = title
     chestDescriptionLabels[index] = description
-    chestIconLabels[index] = icon
+    chestIconImages[index] = icon
     chestCards[index] = card
     chestAccentPanels[index] = accent
     chestIconPanels[index] = iconPanel
@@ -915,11 +911,7 @@ local function CreateHud()
         bottom = 0,
         justifyContent = "center",
         alignItems = "center",
-        backgroundGradient = {
-            type = "radial", innerRadius = 60, outerRadius = 760,
-            from = { 24, 64, 126, 236 }, to = { 3, 10, 27, 250 },
-        },
-        backdropBlur = 10,
+        backgroundColor = { 0, 0, 0, 172 },
         pointerEvents = "auto",
         children = {
             UI.SafeAreaView {
@@ -1045,17 +1037,15 @@ local function CreateHud()
     )
 
     titleStartButtonFloatPanel = UI.Panel {
-        width = "100%",
-        maxWidth = 360,
-        aspectRatio = 2.35,
+        width = 520,
+        height = 220,
         overflow = "visible",
         pointerEvents = "box-none",
         children = { stateActionButton },
     }
     titleQuitButtonFloatPanel = UI.Panel {
-        width = "100%",
-        maxWidth = 360,
-        aspectRatio = 2.35,
+        width = 520,
+        height = 220,
         overflow = "visible",
         pointerEvents = "box-none",
         children = { quitButton },
@@ -1063,10 +1053,9 @@ local function CreateHud()
     stateContentPanel = UI.Panel {
         position = "absolute",
         left = "5.5%",
-        top = "46%",
-        bottom = "8%",
-        width = "30%",
-        maxWidth = 390,
+        top = "48%",
+        width = 520,
+        height = 444,
         justifyContent = "center",
         alignItems = "flex-start",
         gap = 4,
@@ -1141,7 +1130,11 @@ local function RefreshChestPanel()
                     chestTitleLabels[index]:SetText(definition.name)
                     chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
                     chestDescriptionLabels[index]:SetText(definition.shortDescription)
-                    chestIconLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                    chestIconImages[index]:SetStyle({
+                        backgroundImage = definition.iconPath,
+                        backgroundFit = "contain",
+                        imageTint = { 255, 255, 255, 255 },
+                    })
                     chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
                     card:SetState({
                         accentColor = color,

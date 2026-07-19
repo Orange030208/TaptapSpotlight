@@ -7,7 +7,7 @@ return {
             shortDescription = "完美招架后，0.5 秒内\n按方向键穿刺前冲。",
             color = { 104, 232, 255 },
             iconKind = "dash",
-            iconPath = "image/ui/crystals/feather_crystal.png",
+            iconPath = "image/ui/crystals/prism_dash.png",
             maxStacks = 1,
         },
         {
@@ -17,7 +17,7 @@ return {
             shortDescription = "完美反射会裂成\n三枚晶棱弹幕。",
             color = { 247, 171, 255 },
             iconKind = "split",
-            iconPath = "image/ui/crystals/ripple_crystal.png",
+            iconPath = "image/ui/crystals/mirror_split.png",
             maxStacks = 1,
         },
         {
@@ -27,7 +27,7 @@ return {
             shortDescription = "每两次完美招架\n落下连锁闪电。",
             color = { 255, 224, 104 },
             iconKind = "lightning",
-            iconPath = "image/ui/crystals/star_crystal.png",
+            iconPath = "image/ui/crystals/thunder_chime.png",
             maxStacks = 1,
         },
         {
@@ -37,7 +37,7 @@ return {
             shortDescription = "完美招架生成卫星，\n8 秒内抵挡一次攻击。",
             color = { 150, 135, 255 },
             iconKind = "orbit",
-            iconPath = "image/ui/crystals/star_crystal.png",
+            iconPath = "image/ui/crystals/orbit_shards.png",
             maxStacks = 1,
         },
         {
@@ -47,7 +47,7 @@ return {
             shortDescription = "进入超载时爆开\n晶体冲击波。",
             color = { 255, 117, 152 },
             iconKind = "nova",
-            iconPath = "image/ui/crystals/frost_crystal.png",
+            iconPath = "image/ui/crystals/nova_core.png",
             maxStacks = 1,
         },
         {
@@ -57,7 +57,7 @@ return {
             shortDescription = "首次致命伤时保命，\n清除全场弹幕。",
             color = { 111, 242, 192 },
             iconKind = "time",
-            iconPath = "image/ui/crystals/dew_crystal.png",
+            iconPath = "image/ui/crystals/time_heart.png",
             maxStacks = 1,
         },
         {
@@ -67,7 +67,7 @@ return {
             shortDescription = "完美招架留下锚点，\n两点连成切断敌弹的晶线。",
             color = { 104, 232, 255 },
             iconKind = "dash",
-            iconPath = "image/ui/crystals/feather_crystal.png",
+            iconPath = "image/ui/crystals/vine_crystal.png",
             maxStacks = 1,
         },
         {

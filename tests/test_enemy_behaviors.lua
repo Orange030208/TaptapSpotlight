@@ -83,7 +83,7 @@ for _, wave in ipairs(dandelionWaves) do
     assert(#wave.seeds == EnemyConfig.dandelion.projectile.count, "each wave must contain ten seeds")
     for _, projectile in ipairs(wave.seeds) do
         assert(projectile.style == "seed")
-        assert(projectile.damage == 1)
+        assert(projectile.damage == 0.75)
         local speed = math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy)
         assert(math.abs(speed - EnemyConfig.dandelion.projectile.speed) < 0.000001)
         assert(projectile.radius >= EnemyConfig.dandelion.projectile.minRadius)
@@ -109,7 +109,7 @@ for _ = 1, 180 do
     Entities.UpdateEnemy(mushroom, player, 0.01, function(projectile)
         table.insert(mushroomShotTimes, elapsed)
         assert(projectile.style == "spore")
-        assert(projectile.damage == 1)
+        assert(projectile.damage == 0.75)
     end)
     elapsed = elapsed + 0.01
 end
@@ -120,7 +120,8 @@ for index = 2, #mushroomShotTimes do
 end
 
 local moss = NewEnemy("toxic_moss", player.x, player.y, 5)
-assert(Entities.CollectEnemyHit(moss, player) ~= nil)
+local mossHit = assert(Entities.CollectEnemyHit(moss, player))
+assert(mossHit.amount == 0.25, "moss contact damage must be heavily reduced")
 assert(Entities.CollectEnemyHit(moss, player) == nil, "moss must only hit on entry")
 player.x = 0.9
 assert(Entities.CollectEnemyHit(moss, player) == nil)
@@ -175,7 +176,7 @@ for _ = 1, 700 do
 end
 assert(#orbShots >= 3, "purple orb must repeatedly fire single bolts")
 for _, projectile in ipairs(orbShots) do
-    assert(projectile.style == "bolt" and projectile.damage == 1)
+    assert(projectile.style == "bolt" and projectile.damage == 0.75)
     local speed = math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy)
     assert(math.abs(speed - 0.28) < 0.000001, "purple orb bolts must remain slow")
 end
