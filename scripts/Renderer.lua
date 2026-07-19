@@ -19,6 +19,7 @@ local TOXIC_MOSS_SPRITE_PATH = "image/toxic_moss.png"
 local SPAWN_ROOM_GUIDE_SPRITE_PATH = "image/spawn_room_wasd_floor_guide_20260718145203.png"
 local SPAWN_ROOM_PARRY_GUIDE_SPRITE_PATH = "image/spawn_room_left_click_parry_chalk_20260718151041.png"
 local PERFECT_STREAK_LIGHTNING_PATH = "image/ui/lightning.png"
+local FOREST_ROOM_MAP_PATH = "image/forest_room.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
@@ -69,6 +70,7 @@ local spawnRoomParryGuideImageHeight = 1
 local perfectStreakLightningImageHandle = 0
 local perfectStreakLightningImageWidth = 1
 local perfectStreakLightningImageHeight = 1
+local forestRoomMapImageHandle = 0
 ---@type SpineInstance|nil
 local playerSpine = nil
 ---@type string|nil
@@ -370,8 +372,14 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
+    forestRoomMapImageHandle = nvgCreateImage(ctx, FOREST_ROOM_MAP_PATH, 0)
+    if forestRoomMapImageHandle == nil or forestRoomMapImageHandle <= 0 then
+        forestRoomMapImageHandle = 0
+        print("WARNING: Failed to load forest room map: " .. FOREST_ROOM_MAP_PATH)
+    end
+
     return playerLoaded and sootLoaded and blueSwarmLoaded and shadowWraithLoaded and hardSlimeLoaded and treeWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and projectileSporeLoaded and projectileSeedLoaded and spawnRoomGuideLoaded
-        and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded
+        and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded and forestRoomMapImageHandle > 0
 end
 
 function Renderer.UnloadAssets(ctx)
@@ -461,6 +469,10 @@ function Renderer.UnloadAssets(ctx)
     end
     perfectStreakLightningImageHandle = 0
     perfectStreakLightningImageWidth, perfectStreakLightningImageHeight = 1, 1
+    if forestRoomMapImageHandle ~= nil and forestRoomMapImageHandle > 0 then
+        nvgDeleteImage(ctx, forestRoomMapImageHandle)
+    end
+    forestRoomMapImageHandle = 0
 end
 
 local function Lerp(a, b, t)
@@ -484,10 +496,10 @@ local function StrokeColor(ctx, color, alpha)
 end
 
 function Renderer.GetArena(width, height)
-    local left = width * 0.09
-    local right = width * 0.91
-    local top = height * 0.20
-    local bottom = height * 0.86
+    local left = 0
+    local right = width
+    local top = 0
+    local bottom = height
     local wallThickness = math.max(16, math.min(width, height) * 0.035)
     return {
         left = left,
@@ -542,23 +554,23 @@ local function DrawDoor(ctx, arena, direction, isOpen, time)
 
     if direction == "north" then
         w = floorWidth * 0.14
-        h = arena.top - arena.wallTop + 3
+        h = floorHeight * 0.20
         x = (arena.left + arena.right - w) * 0.5
-        y = arena.wallTop + 8
+        y = floorHeight * 0.04
     elseif direction == "south" then
         w = floorWidth * 0.14
-        h = arena.wallThickness + 8
+        h = floorHeight * 0.14
         x = (arena.left + arena.right - w) * 0.5
-        y = arena.bottom - 3
+        y = arena.bottom - h
     elseif direction == "west" then
-        w = arena.wallThickness + 8
+        w = floorWidth * 0.08
         h = floorHeight * 0.18
-        x = arena.left - arena.wallThickness - 3
+        x = arena.left
         y = (arena.top + arena.bottom - h) * 0.5
     else
-        w = arena.wallThickness + 8
+        w = floorWidth * 0.08
         h = floorHeight * 0.18
-        x = arena.right - 5
+        x = arena.right - w
         y = (arena.top + arena.bottom - h) * 0.5
     end
 
@@ -708,6 +720,20 @@ end
 
 local function DrawArena(ctx, width, height, game)
     local arena = Renderer.GetArena(width, height)
+    if game.room ~= nil and game.room.mapImage == FOREST_ROOM_MAP_PATH and forestRoomMapImageHandle > 0 then
+        nvgBeginPath(ctx)
+        nvgRect(ctx, arena.left, arena.top, arena.right - arena.left, arena.bottom - arena.top)
+        nvgFillPaint(ctx, nvgImagePattern(ctx, arena.left, arena.top,
+            arena.right - arena.left, arena.bottom - arena.top, 0, forestRoomMapImageHandle, 1.0))
+        nvgFill(ctx)
+
+        for _, direction in ipairs({ "north", "south", "west", "east" }) do
+            if game.room.connections[direction] ~= nil then
+                DrawDoor(ctx, arena, direction, game.roomCleared, game.time)
+            end
+        end
+        return
+    end
     local floorGradient = nvgLinearGradient(ctx, 0, arena.top, 0, arena.bottom,
         nvgRGBA(71, 64, 78, 255), nvgRGBA(43, 39, 50, 255))
 

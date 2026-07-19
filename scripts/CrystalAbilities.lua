@@ -260,8 +260,11 @@ local function UpdateDash(game, state, dt, moveX, moveY)
 
     local previousX, previousY = player.x, player.y
     local step = math.min(dt, dash.timer)
-    player.x = Clamp(player.x + dash.directionX * CrystalConfig.dash.speed * step, RoomConfig.minX, RoomConfig.maxX)
-    player.y = Clamp(player.y + dash.directionY * CrystalConfig.dash.speed * step, RoomConfig.minY, RoomConfig.maxY)
+    player.x, player.y = RoomConfig.ClampPlayerPosition(
+        player.x + dash.directionX * CrystalConfig.dash.speed * step,
+        player.y + dash.directionY * CrystalConfig.dash.speed * step,
+        player.radius
+    )
     player.isMoving = true
     if math.abs(dash.directionX) > 0.01 then
         player.facing = dash.directionX < 0 and "left" or "right"

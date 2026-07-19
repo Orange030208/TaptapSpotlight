@@ -11,6 +11,13 @@ local CrystalConfig = require "Data.CrystalConfig"
 local Entities = require "Entities"
 local Game = require "Game"
 
+local wallX, wallY = RoomConfig.ClampPlayerPosition(0.20, RoomConfig.minY, PlayerConfig.radius)
+assert(wallX == 0.20 and wallY >= RoomConfig.GetTopWallY(0.20) + PlayerConfig.radius,
+    "the marked forest tree line must block the player above its wall curve")
+local doorX, doorY = RoomConfig.ClampPlayerPosition(0.50, RoomConfig.minY, PlayerConfig.radius)
+assert(doorX == 0.50 and doorY == RoomConfig.minY,
+    "the marked north doorway must remain passable through the tree wall")
+
 for _, definition in ipairs(CrystalConfig.definitions) do
     assert(type(definition.iconKind) == "string" and definition.iconKind ~= "", "every crystal needs an icon kind")
 end
@@ -128,7 +135,7 @@ assert(HasEvent(events, "crystal_acquired"))
 local battle = Game.New()
 Game.StartOrRestart(battle)
 Game.ConsumeEvents(battle)
-assert(battle.currentRoomId == "threshold")
+assert(battle.currentRoomId == "room_1")
 assert(battle.state == "clear" and not battle.roomCleared, "the birth room must lock exits until its tutorial is complete")
 assert(#battle.enemies == 0 and battle.clearedRoomCount == 0, "the birth room must not spawn or count combat")
 assert(battle.spawnGuideAlpha == 1, "the birth room must expose its WASD floor guide")
@@ -145,32 +152,23 @@ assert(HasEvent(Game.ConsumeEvents(battle), "room_transition"), "the birth room 
 battle.transition = nil
 battle.doorCooldown = 0
 
-local reflectTutorial = Game.New()
-Game.StartOrRestart(reflectTutorial)
-Game.ConsumeEvents(reflectTutorial)
-Game.Update(reflectTutorial, 0.1, 1, 0)
-assert(Game.TryParry(reflectTutorial, reflectTutorial.player.x + 1, reflectTutorial.player.y, true))
-reflectTutorial.player.x, reflectTutorial.player.y = 0.5, RoomConfig.minY
-Game.Update(reflectTutorial, 0, 0, 0)
-assert(reflectTutorial.state == "room_transition")
-Game.Update(reflectTutorial, RoomConfig.transitionDuration * 0.5, 0, 0)
+local firstCombatRoom = Game.New()
+Game.StartOrRestart(firstCombatRoom)
+Game.ConsumeEvents(firstCombatRoom)
+Game.Update(firstCombatRoom, 0.1, 1, 0)
+assert(Game.TryParry(firstCombatRoom, firstCombatRoom.player.x + 1, firstCombatRoom.player.y, true))
+firstCombatRoom.player.x, firstCombatRoom.player.y = 0.5, RoomConfig.minY
+Game.Update(firstCombatRoom, 0, 0, 0)
+assert(firstCombatRoom.state == "room_transition")
+Game.Update(firstCombatRoom, RoomConfig.transitionDuration * 0.5, 0, 0)
 
-local reflectRoom = reflectTutorial.room
-local tutorialSpawn = reflectRoom.tutorialSpawn
-assert(reflectRoom.id == "crossfire" and reflectRoom.isReflectTutorial)
-assert(#reflectRoom.spawns == 0 and tutorialSpawn.randomized, "the reflection tutorial must not use fixed spawn points")
-assert(#reflectTutorial.enemies == tutorialSpawn.count and tutorialSpawn.count == 2)
-for index, enemy in ipairs(reflectTutorial.enemies) do
-    assert(enemy.kind == tutorialSpawn.kind and tutorialSpawn.kind == "soot")
-    assert(enemy.x >= tutorialSpawn.area.minX and enemy.x <= tutorialSpawn.area.maxX)
-    assert(enemy.y >= tutorialSpawn.area.minY and enemy.y <= tutorialSpawn.area.maxY)
-    local playerDistance = math.sqrt((enemy.x - reflectTutorial.player.x) ^ 2 + (enemy.y - reflectTutorial.player.y) ^ 2)
-    assert(playerDistance >= tutorialSpawn.minPlayerDistance)
-    for previous = 1, index - 1 do
-        local other = reflectTutorial.enemies[previous]
-        local separation = math.sqrt((enemy.x - other.x) ^ 2 + (enemy.y - other.y) ^ 2)
-        assert(separation >= tutorialSpawn.minSeparation)
-    end
+local room2 = firstCombatRoom.room
+assert(room2.id == "room_2" and room2.fixedSpawns ~= nil)
+assert(#room2.fixedSpawns == 2 and #firstCombatRoom.enemies == 2)
+for index, enemy in ipairs(firstCombatRoom.enemies) do
+    local spawn = room2.fixedSpawns[index]
+    assert(enemy.kind == "soot")
+    assert(enemy.x == spawn.x and enemy.y == spawn.y, "room 2 must use its fixed soot positions")
 end
 
 battle.state = "battle"

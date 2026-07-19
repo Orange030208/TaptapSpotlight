@@ -38,6 +38,7 @@ assert(imagePaths[13] == "image/projectile_seed.png")
 assert(imagePaths[14] == "image/spawn_room_wasd_floor_guide_20260718145203.png")
 assert(imagePaths[15] == "image/spawn_room_left_click_parry_chalk_20260718151041.png")
 assert(imagePaths[16] == "image/ui/lightning.png", "perfect streak lightning must load once with the renderer assets")
+assert(imagePaths[17] == "image/forest_room.png", "the forest room map must load once with the renderer assets")
 
 Renderer.UnloadAssets({})
 

@@ -212,8 +212,11 @@ function Entities.UpdatePlayer(player, dt, moveX, moveY, speedMultiplier)
         directionX, directionY = Normalize(moveX, moveY)
     end
     local speed = PlayerConfig.speed * speedMultiplier
-    player.x = Clamp(player.x + directionX * speed * dt, RoomConfig.minX, RoomConfig.maxX)
-    player.y = Clamp(player.y + directionY * speed * dt, RoomConfig.minY, RoomConfig.maxY)
+    player.x, player.y = RoomConfig.ClampPlayerPosition(
+        player.x + directionX * speed * dt,
+        player.y + directionY * speed * dt,
+        player.radius
+    )
     player.isMoving = math.abs(directionX) > 0.001 or math.abs(directionY) > 0.001
 
     if math.abs(directionX) > 0.05 then
