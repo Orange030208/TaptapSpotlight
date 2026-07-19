@@ -408,6 +408,17 @@ local function SpawnTutorialEnemies(game, tutorialSpawn)
     end
 end
 
+local function SpawnFixedEnemies(game, fixedSpawns)
+    assert(#fixedSpawns > 0, "Fixed enemy spawn list must not be empty")
+    for _, spawn in ipairs(fixedSpawns) do
+        assert(spawn.kind ~= nil, "Fixed enemy spawn is missing kind")
+        assert(spawn.x ~= nil and spawn.y ~= nil, "Fixed enemy spawn is missing position")
+        table.insert(game.enemies, Entities.NewEnemy(spawn.kind, spawn, game.nextEntityId))
+        game.nextEntityId = game.nextEntityId + 1
+    end
+    print("[Room] Spawned fixed enemy layout: " .. tostring(#fixedSpawns) .. " enemies")
+end
+
 local function EnterRoom(game, roomId, travelDirection)
     local room = RoomData.rooms[roomId]
     assert(room ~= nil, "Unknown room id: " .. tostring(roomId))
@@ -439,7 +450,9 @@ local function EnterRoom(game, roomId, travelDirection)
     local arrivalState = "clear"
     if not roomState.cleared and not room.isBirthRoom then
         arrivalState = "intro"
-        if room.tutorialSpawn ~= nil then
+        if room.fixedSpawns ~= nil then
+            SpawnFixedEnemies(game, room.fixedSpawns)
+        elseif room.tutorialSpawn ~= nil then
             SpawnTutorialEnemies(game, room.tutorialSpawn)
         else
             assert(#room.groups > 0, "Room has no enemy groups: " .. tostring(roomId))
