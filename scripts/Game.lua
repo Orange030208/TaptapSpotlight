@@ -81,6 +81,10 @@ local function CreateGauge()
     }
 end
 
+local function CreateRecovery()
+    return { remaining = 0 }
+end
+
 local function CreateCombo()
     return {
         count = 0,
@@ -231,43 +235,15 @@ local function AddComboProgress(game, perfect, x, y, canShockwave)
     EmitComboChanged(game)
 end
 
-local function GetActiveBuffMultiplier(game, field)
-    local multiplier = 1
-    for _, active in pairs(game.activeBuffs) do
-        if active.remaining > 0 then
-            multiplier = multiplier * (active.definition[field] or 1)
+local function UpdateGaugeRecovery(game, dt)
+    local recovery = game.recovery
+    if recovery.remaining > 0 then
+        if game.player.hp > 0 then
+            Entities.HealPlayer(game.player, GaugeConfig.recovery.healPerSecond * dt)
         end
+        recovery.remaining = math.max(0, recovery.remaining - dt)
     end
-    return multiplier
-end
-
-local function UpdateTemporaryBuffs(game, dt)
-    for id, active in pairs(game.activeBuffs) do
-        local definition = active.definition
-        if definition.healPerSecond ~= nil and game.player.hp > 0 then
-            Entities.HealPlayer(game.player, definition.healPerSecond * dt)
-        end
-
-        active.remaining = active.remaining - dt
-        if active.remaining <= 0 then
-            game.activeBuffs[id] = nil
-            SetMessage(game, definition.name .. " 已结束", 0.65)
-            EmitEvent(game, "buff_end", { id = id })
-        end
-    end
-
     game.gauge.pulse = math.max(0, game.gauge.pulse - dt)
-end
-
-local function GrantRandomBuff(game, x, y)
-    local definition = GaugeConfig.buffs[math.random(1, #GaugeConfig.buffs)]
-    game.activeBuffs[definition.id] = {
-        definition = definition,
-        remaining = definition.duration,
-    }
-    AddParticles(game, x, y, definition.color, 18)
-    EmitEvent(game, "buff_gain", { id = definition.id, duration = definition.duration })
-    return definition
 end
 
 local function AddGaugeProgress(game, amount, x, y)
@@ -277,9 +253,10 @@ local function AddGaugeProgress(game, amount, x, y)
     while gauge.value >= gauge.threshold do
         gauge.value = gauge.value - gauge.threshold
         gauge.pulse = 0.6
-        local buff = GrantRandomBuff(game, x, y)
-        SetMessage(game, GaugeConfig.label .. "充满 - 获得 " .. buff.name, 1.4)
-        EmitEvent(game, "gauge_full", { buffId = buff.id })
+        game.recovery.remaining = GaugeConfig.recovery.duration
+        AddParticles(game, x, y, GaugeConfig.recovery.color, 18)
+        SetMessage(game, GaugeConfig.label .. "充满 - 生命恢复中", 1.4)
+        EmitEvent(game, "gauge_full", { recoveryDuration = GaugeConfig.recovery.duration })
         rewarded = true
     end
     return rewarded
@@ -299,9 +276,13 @@ local function CreateChestOptions(player)
     local available = GetAvailableCrystals(player)
     local options = {}
     local count = math.min(3, #available)
+    local selected = {}
     for _ = 1, count do
         local index = math.random(1, #available)
-        table.insert(options, table.remove(available, index))
+        local definition = table.remove(available, index)
+        assert(not selected[definition.id], "Chest options must not contain duplicate crystals")
+        selected[definition.id] = true
+        table.insert(options, definition)
     end
     return options
 end
@@ -513,12 +494,13 @@ local function StartRun(game)
     game.chests = {}
     game.chestOptions = nil
     game.stateBeforeChest = nil
+    game.pendingChestRewards = {}
     game.particles = {}
     game.gauge = CreateGauge()
+    game.recovery = CreateRecovery()
     game.combo = CreateCombo()
     game.perfectStreak = CreatePerfectStreak()
     game.crystalState = CrystalAbilities.NewState()
-    game.activeBuffs = {}
     game.currentRoomId = nil
     game.roomStates = {}
     game.discoveredRooms = {}
@@ -555,20 +537,30 @@ local function UpdateParticles(game, dt)
     end
 end
 
-local function OpenChest(game, chest)
-    local options = CreateChestOptions(game.player)
-    if #options == 0 then
-        SetMessage(game, "所有水晶能力均已获得", 1.0)
+local function OpenNextChestReward(game, stateBeforeChest)
+    if game.chestOptions ~= nil then
+        return false
+    end
+    if #game.pendingChestRewards == 0 then
         return false
     end
 
-    game.stateBeforeChest = game.state
-    game.state = "chest_select"
-    game.chestOptions = options
-    SetMessage(game, "选择一枚水晶能力", 999)
-    AddParticles(game, chest.x, chest.y, { 255, 215, 100 }, 18)
-    EmitEvent(game, "chest_open")
-    return true
+    while #game.pendingChestRewards > 0 do
+        local chest = table.remove(game.pendingChestRewards, 1)
+        local options = CreateChestOptions(game.player)
+        if #options > 0 then
+            game.stateBeforeChest = stateBeforeChest or game.state
+            game.state = "chest_select"
+            game.chestOptions = options
+            SetMessage(game, "选择一枚水晶能力", 999)
+            AddParticles(game, chest.x, chest.y, { 255, 215, 100 }, 18)
+            EmitEvent(game, "chest_open", { pendingCount = #game.pendingChestRewards })
+            return true
+        end
+    end
+
+    SetMessage(game, "所有水晶能力均已获得", 1.0)
+    return false
 end
 
 local function UpdateChests(game, dt)
@@ -607,8 +599,7 @@ local function UpdateChests(game, dt)
                 chest.x = game.player.x
                 chest.y = game.player.y
                 table.remove(game.chests, index)
-                OpenChest(game, chest)
-                return true
+                table.insert(game.pendingChestRewards, chest)
             end
         end
 
@@ -616,7 +607,7 @@ local function UpdateChests(game, dt)
             table.remove(game.chests, index)
         end
     end
-    return false
+    return OpenNextChestReward(game)
 end
 
 -- Door trigger layout in normalized room space:
@@ -832,12 +823,12 @@ local function GetParryDamage(game, perfect)
     if perfect then
         damage = damage * GaugeConfig.perfectDamageMultiplier
     end
-    return damage * GetActiveBuffMultiplier(game, "parryDamageMultiplier")
+    return damage
 end
 
 local function GetGaugeGain(game, perfect)
     local gain = perfect and GaugeConfig.perfectGain or GaugeConfig.normalGain
-    return gain * GetActiveBuffMultiplier(game, "gaugeGainMultiplier")
+    return gain
 end
 
 local function AnnounceParryStart(game)
@@ -932,8 +923,7 @@ local function ResolveParries(game)
 
     for _, projectile in ipairs(game.projectiles) do
         local hitX, hitY = projectile.x, projectile.y
-        if Entities.TryParryProjectile(game.player, projectile,
-                GetActiveBuffMultiplier(game, "parryDamageMultiplier"), perfect) then
+        if Entities.TryParryProjectile(game.player, projectile, 1) then
             parriedAnything = true
             local eventData = {
                 x = hitX,
@@ -965,8 +955,10 @@ local function ResolveParries(game)
             y = game.player.y,
         }
         EmitEvent(game, "guard_combo_feedback", guardData)
+        CrystalAbilities.OnSuccessfulParry(game)
         if perfect then
             CrystalAbilities.OnPerfectParry(game)
+            AddGaugeProgress(game, CrystalAbilities.GetPerfectGaugeBonus(game), game.player.x, game.player.y)
         end
     end
 end
@@ -1055,7 +1047,7 @@ local function UpdateBattle(game, dt, moveX, moveY)
     if CrystalAbilities.IsDashing(game) then
         playerMoveX, playerMoveY = 0, 0
     end
-    if Entities.UpdatePlayer(game.player, dt, playerMoveX, playerMoveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier")) then
+    if Entities.UpdatePlayer(game.player, dt, playerMoveX, playerMoveY, 1) then
         AnnounceParryStart(game)
     end
     CrystalAbilities.UpdateCombat(game, dt, moveX, moveY)
@@ -1108,11 +1100,12 @@ function Game.New()
         chests = {},
         chestOptions = nil,
         stateBeforeChest = nil,
+        pendingChestRewards = {},
         particles = {},
         gauge = CreateGauge(),
+        recovery = CreateRecovery(),
         combo = CreateCombo(),
         perfectStreak = CreatePerfectStreak(),
-        activeBuffs = {},
         crystalState = CrystalAbilities.NewState(),
         spawnGuideAlpha = 0,
         spawnGuideDismissed = true,
@@ -1165,10 +1158,12 @@ function Game.SelectCrystal(game, index)
 
     AddParticles(game, game.player.x, game.player.y, definition.color, 18)
     SetMessage(game, "获得水晶能力：" .. definition.name, 1.4)
+    local stateBeforeChest = game.stateBeforeChest
     game.chestOptions = nil
-    game.state = game.stateBeforeChest
+    game.state = stateBeforeChest
     game.stateBeforeChest = nil
     EmitEvent(game, "crystal_acquired", { id = definition.id, choiceIndex = index })
+    OpenNextChestReward(game, stateBeforeChest)
     return true
 end
 
@@ -1188,7 +1183,7 @@ function Game.Update(game, dt, moveX, moveY, realDt)
     UpdateParticles(game, dt)
 
     if game.state == "room_transition" or game.state == "intro" or game.state == "battle" or game.state == "clear" then
-        UpdateTemporaryBuffs(game, dt)
+        UpdateGaugeRecovery(game, dt)
     end
 
     if game.state == "battle" then
@@ -1243,7 +1238,7 @@ function Game.Update(game, dt, moveX, moveY, realDt)
     game.runTime = game.runTime + dt
     UpdateBirthTutorial(game, dt, moveX, moveY)
     if game.state == "intro" then
-        Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
+        Entities.UpdatePlayer(game.player, dt, moveX, moveY, 1)
         CrystalAbilities.UpdatePassive(game, dt)
         game.stateTimer = game.stateTimer - dt
         if game.stateTimer <= 0 then
@@ -1260,7 +1255,7 @@ function Game.Update(game, dt, moveX, moveY, realDt)
     end
 
     if game.state == "clear" then
-        Entities.UpdatePlayer(game.player, dt, moveX, moveY, GetActiveBuffMultiplier(game, "moveSpeedMultiplier"))
+        Entities.UpdatePlayer(game.player, dt, moveX, moveY, 1)
         CrystalAbilities.UpdatePassive(game, dt)
         -- A room can be cleared by a piercing projectile; keep it moving until it expires.
         MoveProjectiles(game, dt)
@@ -1273,14 +1268,6 @@ function Game.Update(game, dt, moveX, moveY, realDt)
 end
 
 function Game.GetHud(game)
-    local buffLines = {}
-    for _, definition in ipairs(GaugeConfig.buffs) do
-        local active = game.activeBuffs[definition.id]
-        if active ~= nil and active.remaining > 0 then
-            table.insert(buffLines, definition.name .. " · " .. tostring(math.ceil(active.remaining)) .. "秒")
-        end
-    end
-
     local bossHud = nil
     for _, enemy in ipairs(game.enemies) do
         if enemy.kind == "boss" then
@@ -1303,7 +1290,6 @@ function Game.GetHud(game)
         room = game.room ~= nil and game.room.name or "尚未开始",
         roomProgress = "探索 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount),
         crystals = game.player.crystalOrder,
-        buffs = #buffLines > 0 and table.concat(buffLines, "\n") or "暂无临时增益",
         boss = bossHud,
         combo = {
             count = combo.count,

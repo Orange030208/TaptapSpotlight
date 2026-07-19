@@ -78,7 +78,7 @@ local expectedCues = {
     "run_start", "battle_start", "parry_start", "parry_success", "perfect_parry",
     "projectile_fire", "projectile_reflect", "projectile_hit", "player_hurt",
     "enemy_defeat", "boss_defeat", "chest_open", "crystal_acquired", "gauge_full",
-    "buff_gain", "buff_end", "room_clear", "room_transition", "game_over", "victory",
+    "room_clear", "room_transition", "game_over", "victory",
 }
 for _, name in ipairs(expectedCues) do
     local file = name == "crystal_acquired" and "upgrade_select.ogg" or name .. ".ogg"

@@ -770,7 +770,7 @@ function Entities.TryOrbitGuardEnemy(guard, enemy, player, damage)
     return true, appliedDamage
 end
 
-function Entities.TryParryProjectile(player, projectile, damageMultiplier, perfect)
+function Entities.TryParryProjectile(player, projectile, damageMultiplier)
     if not Entities.IsParrying(player) or projectile.dead or projectile.owner ~= "enemy" then
         return false
     end
@@ -788,11 +788,7 @@ function Entities.TryParryProjectile(player, projectile, damageMultiplier, perfe
     projectile.vy = normalizedY * speed
     projectile.owner = "player"
     projectile.reflected = true
-    local baseDamage = projectile.damage
-    if perfect then
-        baseDamage = math.max(baseDamage, ProjectileConfig.perfectReflectedDamage)
-    end
-    projectile.damage = baseDamage * damageMultiplier
+    projectile.damage = projectile.damage * damageMultiplier
     projectile.pierceRemaining = 0
     projectile.hitEnemies = {}
     projectile.lifetime = ProjectileConfig.lifetime

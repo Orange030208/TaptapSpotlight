@@ -30,8 +30,6 @@ local CUES = {
     crystal_acquired = { file = "upgrade_select.ogg", gain = 0.58, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.10 },
     crystal_dash_start = { file = "crystal_dash_start.ogg", gain = 0.54, pitchMin = 0.98, pitchMax = 1.03, cooldown = 0.10 },
     gauge_full = { file = "gauge_full.ogg", gain = 0.58, pitchMin = 0.99, pitchMax = 1.03, cooldown = 0.12 },
-    buff_gain = { file = "buff_gain.ogg", gain = 0.42, pitchMin = 0.99, pitchMax = 1.03, cooldown = 0.12 },
-    buff_end = { file = "buff_end.ogg", gain = 0.26, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.10 },
     room_clear = { file = "room_clear.ogg", gain = 0.56, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.20 },
     room_transition = { file = "room_transition.ogg", gain = 0.48, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.18 },
     game_over = { file = "game_over.ogg", gain = 0.64, pitchMin = 0.98, pitchMax = 1.02, cooldown = 0.30 },

@@ -107,6 +107,10 @@ end
 function CrystalAbilities.OnPerfectParry(game)
     local player = game.player
     local state = CrystalAbilities.GetState(game)
+    if HasCrystal(player, "vital_bloom") then
+        Entities.HealPlayer(player, CrystalConfig.vitalBloom.heal)
+        Emit(game, "crystal_vital_bloom", { x = player.x, y = player.y })
+    end
     if HasCrystal(player, "prism_dash") then
         state.dashWindow = CrystalConfig.dash.window
         Emit(game, "crystal_dash_ready", { x = player.x, y = player.y })
@@ -121,43 +125,83 @@ function CrystalAbilities.OnPerfectParry(game)
         Emit(game, "crystal_orbit_gain", { x = player.x, y = player.y })
     end
 
-    if not HasCrystal(player, "thunder_chime") then
-        return
-    end
+    if HasCrystal(player, "thunder_chime") then
+        state.perfectCount = state.perfectCount + 1
+        if state.perfectCount >= CrystalConfig.lightning.requiredPerfects then
+            state.perfectCount = 0
 
-    state.perfectCount = state.perfectCount + 1
-    if state.perfectCount < CrystalConfig.lightning.requiredPerfects then
-        return
-    end
-    state.perfectCount = 0
+            local candidates = {}
+            for _, enemy in ipairs(game.enemies) do
+                if not enemy.dead and enemy.kind ~= "boss" then
+                    local dx, dy = enemy.x - player.x, enemy.y - player.y
+                    local distance = Length(dx, dy)
+                    if distance <= CrystalConfig.lightning.range then
+                        table.insert(candidates, { enemy = enemy, distance = distance })
+                    end
+                end
+            end
+            table.sort(candidates, function(a, b) return a.distance < b.distance end)
 
-    local candidates = {}
-    for _, enemy in ipairs(game.enemies) do
-        if not enemy.dead and enemy.kind ~= "boss" then
-            local dx, dy = enemy.x - player.x, enemy.y - player.y
-            local distance = Length(dx, dy)
-            if distance <= CrystalConfig.lightning.range then
-                table.insert(candidates, { enemy = enemy, distance = distance })
+            local points = { { x = player.x, y = player.y } }
+            local targetCount = math.min(CrystalConfig.lightning.targetCount, #candidates)
+            for index = 1, targetCount do
+                local enemy = candidates[index].enemy
+                DamageEnemy(game, enemy, CrystalConfig.lightning.damage, "lightning")
+                table.insert(points, { x = enemy.x, y = enemy.y })
+            end
+            if #points > 1 then
+                AddLightningBurst(state, points)
+                Emit(game, "crystal_lightning", { x = player.x, y = player.y, targets = #points - 1 })
             end
         end
     end
-    table.sort(candidates, function(a, b) return a.distance < b.distance end)
 
-    local points = { { x = player.x, y = player.y } }
-    local targetCount = math.min(CrystalConfig.lightning.targetCount, #candidates)
-    for index = 1, targetCount do
-        local enemy = candidates[index].enemy
-        DamageEnemy(game, enemy, CrystalConfig.lightning.damage, "lightning")
-        table.insert(points, { x = enemy.x, y = enemy.y })
-    end
-    if #points > 1 then
-        AddLightningBurst(state, points)
-        Emit(game, "crystal_lightning", { x = player.x, y = player.y, targets = #points - 1 })
+    if HasCrystal(player, "echo_shard") then
+        local nearest = nil
+        local nearestDistance = CrystalConfig.echoShard.range
+        for _, enemy in ipairs(game.enemies) do
+            if not enemy.dead and enemy.kind ~= "boss" then
+                local distance = Length(enemy.x - player.x, enemy.y - player.y)
+                if distance <= nearestDistance then
+                    nearest, nearestDistance = enemy, distance
+                end
+            end
+        end
+        if nearest ~= nil then
+            DamageEnemy(game, nearest, CrystalConfig.echoShard.damage, "echo")
+            AddLightningBurst(state, { { x = player.x, y = player.y }, { x = nearest.x, y = nearest.y } })
+            Emit(game, "crystal_echo_shard", { x = nearest.x, y = nearest.y })
+        end
     end
 end
 
+function CrystalAbilities.OnSuccessfulParry(game)
+    if HasCrystal(game.player, "guardian_prism") then
+        game.player.invulnerabilityTimer = math.max(game.player.invulnerabilityTimer,
+            CrystalConfig.guardianPrism.invulnerability)
+        Emit(game, "crystal_guardian_prism", { x = game.player.x, y = game.player.y })
+    end
+end
+
+function CrystalAbilities.GetPerfectGaugeBonus(game)
+    if HasCrystal(game.player, "resonance_lens") then
+        return CrystalConfig.resonanceLens.gaugeGain
+    end
+    return 0
+end
+
 function CrystalAbilities.OnProjectileReflected(game, projectile, perfect)
-    if not perfect or not HasCrystal(game.player, "mirror_split") or projectile.crystalSplit then
+    if not perfect then
+        return
+    end
+
+    if HasCrystal(game.player, "piercing_ray") and not projectile.crystalPierce then
+        projectile.crystalPierce = true
+        projectile.pierceRemaining = projectile.pierceRemaining + 1
+        Emit(game, "crystal_piercing_ray", { x = projectile.x, y = projectile.y })
+    end
+
+    if not HasCrystal(game.player, "mirror_split") or projectile.crystalSplit then
         return
     end
 
@@ -191,25 +235,38 @@ function CrystalAbilities.OnProjectileReflected(game, projectile, perfect)
 end
 
 function CrystalAbilities.OnOverdrive(game)
-    if not HasCrystal(game.player, "nova_core") then
-        return
-    end
-
     local player = game.player
     local state = CrystalAbilities.GetState(game)
-    state.nova = {
-        x = player.x,
-        y = player.y,
-        timer = 0.46,
-        maxTimer = 0.46,
-    }
-    for _, enemy in ipairs(game.enemies) do
-        local dx, dy = enemy.x - player.x, enemy.y - player.y
-        if dx * dx + dy * dy <= CrystalConfig.nova.radius * CrystalConfig.nova.radius then
-            DamageEnemy(game, enemy, CrystalConfig.nova.damage, "nova")
+    if HasCrystal(player, "nova_core") then
+        state.nova = {
+            x = player.x,
+            y = player.y,
+            timer = 0.46,
+            maxTimer = 0.46,
+        }
+        for _, enemy in ipairs(game.enemies) do
+            local dx, dy = enemy.x - player.x, enemy.y - player.y
+            if dx * dx + dy * dy <= CrystalConfig.nova.radius * CrystalConfig.nova.radius then
+                DamageEnemy(game, enemy, CrystalConfig.nova.damage, "nova")
+            end
+        end
+        Emit(game, "crystal_nova", { x = player.x, y = player.y })
+    end
+
+    if HasCrystal(player, "overdrive_crown") then
+        local missing = CrystalConfig.orbit.maxShards - #state.orbitShards
+        local count = math.min(CrystalConfig.overdriveCrown.shardCount, missing)
+        for _ = 1, count do
+            table.insert(state.orbitShards, {
+                remaining = CrystalConfig.orbit.duration,
+                duration = CrystalConfig.orbit.duration,
+                radius = CrystalConfig.orbit.shardRadius,
+            })
+        end
+        if count > 0 then
+            Emit(game, "crystal_overdrive_crown", { x = player.x, y = player.y, count = count })
         end
     end
-    Emit(game, "crystal_nova", { x = player.x, y = player.y })
 end
 
 function CrystalAbilities.TryPreventLethalDamage(game, amount)

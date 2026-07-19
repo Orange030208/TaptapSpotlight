@@ -183,14 +183,15 @@ local hurt = Game.New()
 Game.StartOrRestart(hurt)
 Game.ConsumeEvents(hurt)
 hurt.state = "battle"
-hurt.player.hp = 1
+assert(ProjectileConfig.playerDamage == 0.5, "enemy projectile damage must be halved")
+hurt.player.hp = ProjectileConfig.playerDamage
 hurt.enemies = {}
 hurt.projectiles = { Entities.NewProjectile(hurt.player.x, hurt.player.y, 0, 0, "enemy", 1) }
 Game.Update(hurt, 0, 0, 0)
 events = Game.ConsumeEvents(hurt)
 assert(HasEvent(events, "player_hurt"))
 assert(HasEvent(events, "game_over"))
-assert(FindEvent(events, "player_hurt").data.amount == 1)
+assert(FindEvent(events, "player_hurt").data.amount == ProjectileConfig.playerDamage)
 
 local parry = Game.New()
 Game.StartOrRestart(parry)
@@ -252,12 +253,12 @@ Game.StartOrRestart(perfectReflect)
 Game.ConsumeEvents(perfectReflect)
 perfectReflect.state = "battle"
 perfectReflect.projectiles = {
-    Entities.NewProjectile(perfectReflect.player.x + 0.04, perfectReflect.player.y, -0.1, 0, "enemy", 1, "mushroom"),
+    Entities.NewProjectile(perfectReflect.player.x + 0.04, perfectReflect.player.y, -0.1, 0, "enemy", 0.7, "mushroom"),
 }
 assert(Game.TryParry(perfectReflect, perfectReflect.player.x + 1, perfectReflect.player.y))
 Game.Update(perfectReflect, 0, 0, 0)
-assert(perfectReflect.projectiles[1].damage == ProjectileConfig.perfectReflectedDamage,
-    "a perfect reflection must use the configured base damage")
+assert(perfectReflect.projectiles[1].damage == 0.7,
+    "a perfect reflection must preserve the original projectile damage")
 
 local reflectedShot = Game.New()
 Game.StartOrRestart(reflectedShot)
@@ -393,15 +394,21 @@ gauge.enemies[1].state = "dash"
 gauge.enemies[1].stateTimer = 0.5
 assert(Game.TryParry(gauge))
 Game.ConsumeEvents(gauge)
+gauge.player.hp = 1
 Game.Update(gauge, 0, 0, 0)
 events = Game.ConsumeEvents(gauge)
 assert(HasEvent(events, "gauge_full"))
-assert(HasEvent(events, "buff_gain"))
 local gaugeFull = FindEvent(events, "gauge_full")
-assert(type(gaugeFull.data.buffId) == "string")
+assert(gaugeFull.data.recoveryDuration == GaugeConfig.recovery.duration)
 assert(gaugeFull.data.kind == nil, "the unified gauge event must not expose the removed per-kind contract")
-Game.Update(gauge, 8.0, 0, 0)
-assert(HasEvent(Game.ConsumeEvents(gauge), "buff_end"))
+gauge.state = "clear"
+gauge.roomCleared = true
+gauge.enemies = {}
+gauge.chests = {}
+Game.Update(gauge, 1.0, 0, 0)
+assert(gauge.player.hp > 1, "a full gauge must restore health over time")
+Game.Update(gauge, GaugeConfig.recovery.duration, 0, 0)
+assert(gauge.recovery.remaining == 0, "gauge recovery must end after its configured duration")
 
 local chest = Game.New()
 Game.StartOrRestart(chest)
@@ -433,19 +440,34 @@ Game.Update(chest, ChestConfig.collectDuration + 0.01, 0, 0)
 assert(chest.state == "chest_select", "the choice screen must appear after collection reaches the player")
 assert(HasEvent(Game.ConsumeEvents(chest), "chest_open"))
 
-local regeneration = Game.New()
-Game.StartOrRestart(regeneration)
-regeneration.state = "clear"
-regeneration.roomCleared = true
-regeneration.enemies = {}
-regeneration.chests = {}
-regeneration.player.hp = 1
-local vitalityEcho = GaugeConfig.buffs[1]
-regeneration.activeBuffs = {
-    [vitalityEcho.id] = { definition = vitalityEcho, remaining = vitalityEcho.duration },
-}
-Game.Update(regeneration, 1.0, 0, 0)
-assert(regeneration.player.hp > 1, "生命回响应在持续时间内恢复生命")
+local queuedChests = Game.New()
+Game.StartOrRestart(queuedChests)
+Game.ConsumeEvents(queuedChests)
+queuedChests.state = "clear"
+queuedChests.roomCleared = true
+queuedChests.enemies = {}
+local function ReadyChest()
+    local ready = Entities.NewChest(queuedChests.player.x, queuedChests.player.y)
+    ready.state = "collecting"
+    ready.collectElapsed = ChestConfig.collectDuration
+    ready.collectStartX, ready.collectStartY = queuedChests.player.x, queuedChests.player.y
+    return ready
+end
+queuedChests.chests = { ReadyChest(), ReadyChest() }
+Game.Update(queuedChests, 0, 0, 0)
+assert(queuedChests.state == "chest_select" and #queuedChests.chests == 0,
+    "all simultaneously collected chests must be removed and queued")
+assert(#queuedChests.pendingChestRewards == 1, "the second chest reward must remain pending")
+local seenOptions = {}
+for _, definition in ipairs(queuedChests.chestOptions) do
+    assert(not seenOptions[definition.id], "a chest must not present duplicate crystal choices")
+    seenOptions[definition.id] = true
+end
+assert(Game.SelectCrystal(queuedChests, 1))
+assert(queuedChests.state == "chest_select" and #queuedChests.pendingChestRewards == 0,
+    "selecting the first reward must immediately present the queued reward")
+assert(Game.SelectCrystal(queuedChests, 1))
+assert(queuedChests.state == "clear", "all queued chest rewards must return to the pre-chest game state")
 
 local transition = Game.New()
 Game.StartOrRestart(transition)

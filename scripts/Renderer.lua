@@ -60,6 +60,7 @@ local toxicMossImageHeight = 1
 local projectileSprites = {
     spore = { path = "image/projectile_spore.png", handle = 0, width = 1, height = 1 },
     seed = { path = "image/projectile_seed.png", handle = 0, width = 1, height = 1 },
+    treasureBag = { path = "image/ui/treasure_bag.png", handle = 0, width = 1, height = 1 },
 }
 local spawnRoomGuideImageHandle = 0
 local spawnRoomGuideImageWidth = 1
@@ -372,6 +373,24 @@ function Renderer.LoadAssets(ctx)
         end
     end
 
+    local treasureBagLoaded = true
+    local treasureBag = projectileSprites.treasureBag
+    treasureBag.handle = nvgCreateImage(ctx, treasureBag.path, 0)
+    if treasureBag.handle == nil or treasureBag.handle <= 0 then
+        treasureBag.handle = 0
+        treasureBagLoaded = false
+        print("WARNING: Failed to load treasure bag sprite: " .. treasureBag.path)
+    else
+        treasureBag.width, treasureBag.height = nvgImageSize(ctx, treasureBag.handle)
+        if treasureBag.width <= 0 or treasureBag.height <= 0 then
+            nvgDeleteImage(ctx, treasureBag.handle)
+            treasureBag.handle = 0
+            treasureBag.width, treasureBag.height = 1, 1
+            treasureBagLoaded = false
+            print("WARNING: Treasure bag sprite has invalid dimensions")
+        end
+    end
+
     forestRoomMapImageHandle = nvgCreateImage(ctx, FOREST_ROOM_MAP_PATH, 0)
     if forestRoomMapImageHandle == nil or forestRoomMapImageHandle <= 0 then
         forestRoomMapImageHandle = 0
@@ -379,7 +398,7 @@ function Renderer.LoadAssets(ctx)
     end
 
     return playerLoaded and sootLoaded and blueSwarmLoaded and shadowWraithLoaded and hardSlimeLoaded and treeWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and projectileSporeLoaded and projectileSeedLoaded and spawnRoomGuideLoaded
-        and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded and forestRoomMapImageHandle > 0
+        and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded and treasureBagLoaded and forestRoomMapImageHandle > 0
 end
 
 function Renderer.UnloadAssets(ctx)
@@ -2012,22 +2031,35 @@ local function DrawChest(ctx, width, height, chest)
     nvgFillColor(ctx, nvgRGBA(255, 212, 95, glowAlpha))
     nvgFill(ctx)
 
-    nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x - size, y - size * 0.78, size * 2, size * 1.2, 3 * scale)
-    Color(ctx, { 230, 166, 58 }, 255)
-    nvgFill(ctx)
-    nvgStrokeWidth(ctx, 1.8 * scale)
-    StrokeColor(ctx, { 255, 238, 150 }, 255)
-    nvgStroke(ctx)
+    local treasureBag = projectileSprites.treasureBag
+    if treasureBag.handle ~= nil and treasureBag.handle > 0 and treasureBag.height > 0 then
+        local drawHeight = size * 3.2
+        local drawWidth = drawHeight * treasureBag.width / treasureBag.height
+        local drawX = x - drawWidth * 0.5
+        local drawY = y - drawHeight * 0.78
+        nvgBeginPath(ctx)
+        nvgRect(ctx, drawX, drawY, drawWidth, drawHeight)
+        nvgFillPaint(ctx, nvgImagePatternTinted(ctx, drawX, drawY, drawWidth, drawHeight, 0,
+            treasureBag.handle, nvgRGBA(255, 255, 255, 255)))
+        nvgFill(ctx)
+    else
+        nvgBeginPath(ctx)
+        nvgRoundedRect(ctx, x - size, y - size * 0.78, size * 2, size * 1.2, 3 * scale)
+        Color(ctx, { 230, 166, 58 }, 255)
+        nvgFill(ctx)
+        nvgStrokeWidth(ctx, 1.8 * scale)
+        StrokeColor(ctx, { 255, 238, 150 }, 255)
+        nvgStroke(ctx)
 
-    nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x - size, y - size * 1.1, size * 2, size * 0.48, 3 * scale)
-    Color(ctx, { 255, 205, 85 }, 255)
-    nvgFill(ctx)
-    nvgBeginPath(ctx)
-    nvgRect(ctx, x - 2 * scale, y - size * 1.08, 4 * scale, size * 1.45)
-    Color(ctx, { 95, 57, 35 }, 255)
-    nvgFill(ctx)
+        nvgBeginPath(ctx)
+        nvgRoundedRect(ctx, x - size, y - size * 1.1, size * 2, size * 0.48, 3 * scale)
+        Color(ctx, { 255, 205, 85 }, 255)
+        nvgFill(ctx)
+        nvgBeginPath(ctx)
+        nvgRect(ctx, x - 2 * scale, y - size * 1.08, 4 * scale, size * 1.45)
+        Color(ctx, { 95, 57, 35 }, 255)
+        nvgFill(ctx)
+    end
 end
 
 local function DrawParryCone(ctx, width, height, player)

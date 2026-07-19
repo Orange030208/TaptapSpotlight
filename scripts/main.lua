@@ -33,9 +33,6 @@ local comboPanel = nil
 local comboLabel = nil
 ---@type Widget|nil
 local overdriveLabel = nil
----@type Widget|nil
-local buffLabel = nil
----@type Widget|nil
 ---@type ProgressBar|nil
 local gaugeProgressBar = nil
 local bossPanel = nil
@@ -671,13 +668,6 @@ local function CreateHud()
             },
         },
     }
-    buffLabel = UI.Label {
-        text = "暂无回响",
-        width = "100%",
-        fontSize = 10,
-        whiteSpace = "normal",
-        fontColor = { 132, 244, 184, 240 },
-    }
     bossNameLabel = UI.Label {
         text = "晦暗低鸣", width = "100%", fontSize = 16, fontWeight = "bold",
         letterSpacing = 2, textAlign = "center", fontColor = COLORS.cream,
@@ -734,27 +724,6 @@ local function CreateHud()
         paddingLeft = 28,
         pointerEvents = "none",
         children = { gaugeProgressBar },
-    }
-
-    local insightPanel = UI.Panel {
-        width = "40%",
-        minWidth = 150,
-        maxWidth = 282,
-        padding = { 10, 13, 12, 13 },
-        gap = 6,
-        borderRadius = 0,
-        borderWidth = { 2, 4, 5, 2 },
-        borderColor = { 204, 80, 255, 145 },
-        backgroundGradient = {
-            type = "linear", direction = "to-bottom-left",
-            from = { 46, 45, 111, 242 }, to = { 8, 20, 48, 248 },
-        },
-        boxShadow = HUD_SHADOW,
-        pointerEvents = "none",
-        children = {
-            UI.Label { text = "临时回响", fontSize = 9, letterSpacing = 1, fontColor = { 112, 225, 175, 220 } },
-            buffLabel,
-        },
     }
 
     combatHud = UI.SafeAreaView {
@@ -990,19 +959,23 @@ local function RefreshChestPanel()
     local shouldShow = game.state == "chest_select" and game.chestOptions ~= nil
     if shouldShow then
         if not chestPanelWasVisible then
-            for index, definition in ipairs(game.chestOptions) do
-                local color = definition.color
-                chestTitleLabels[index]:SetText(definition.name)
-                chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
-                chestDescriptionLabels[index]:SetText(definition.shortDescription)
-                chestIconLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
-                chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
-                chestCards[index]:SetState({
-                    accentColor = color,
-                    borderColor = { color[1], color[2], color[3], 210 },
-                    iconBorderColor = { color[1], color[2], color[3], 190 },
-                })
-                SetChestCardRest(chestCards[index])
+            for index, card in ipairs(chestCards) do
+                local definition = game.chestOptions[index]
+                card:SetVisible(definition ~= nil)
+                if definition ~= nil then
+                    local color = definition.color
+                    chestTitleLabels[index]:SetText(definition.name)
+                    chestTitleLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                    chestDescriptionLabels[index]:SetText(definition.shortDescription)
+                    chestIconLabels[index]:SetFontColor({ color[1], color[2], color[3], 255 })
+                    chestAccentPanels[index]:SetStyle({ backgroundColor = { color[1], color[2], color[3], 255 } })
+                    card:SetState({
+                        accentColor = color,
+                        borderColor = { color[1], color[2], color[3], 210 },
+                        iconBorderColor = { color[1], color[2], color[3], 190 },
+                    })
+                    SetChestCardRest(card)
+                end
             end
 
             chestPanelWasVisible = true
@@ -1113,7 +1086,6 @@ local function UpdateHud()
         borderColor = { comboColor[1], comboColor[2], comboColor[3], combo.tier > 0 and 165 or 95 },
         backgroundColor = combo.overdriveRemaining > 0 and { 57, 24, 49, 235 } or { 20, 24, 41, 225 },
     })
-    buffLabel:SetText(hud.buffs == "暂无临时增益" and "暂无回响" or hud.buffs)
     gaugeProgressBar:SetValue(hud.gaugeRatio)
     local boss = hud.boss
     bossPanel:SetVisible(boss ~= nil)
