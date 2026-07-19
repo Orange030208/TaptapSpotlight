@@ -727,7 +727,7 @@ local function DrawArena(ctx, width, height, game)
             arena.right - arena.left, arena.bottom - arena.top, 0, forestRoomMapImageHandle, 1.0))
         nvgFill(ctx)
 
-        for _, direction in ipairs({ "north", "south", "west", "east" }) do
+        for _, direction in ipairs({ "north", "west", "east" }) do
             if game.room.connections[direction] ~= nil then
                 DrawDoor(ctx, arena, direction, game.roomCleared, game.time)
             end
