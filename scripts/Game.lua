@@ -1004,7 +1004,7 @@ local function ResolveEnemyContacts(game)
                     ResetCombo(game)
                     AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
                     SetMessage(game, saved and (savedKind == "rift" and "裂隙换位 - 残像爆裂" or "时隙之心 - 时间碎裂")
-                        or (hit.source == "thorns" and "遭到荆棘鞭打" or "受到伤害"), 0.8)
+                        or "受到伤害", 0.8)
                     EmitEvent(game, "player_hurt", {
                         x = game.player.x, y = game.player.y, amount = hit.amount, sourceKind = hit.source,
                     })

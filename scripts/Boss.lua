@@ -103,25 +103,6 @@ local function BeginMechanismTransition(boss, nextMechanism)
     boss.vx, boss.vy = 0, 0
 end
 
-local function PickThornPosition(boss, player)
-    local best, bestDistance = nil, -1
-    for _, position in ipairs(BossConfig.mechanisms.thorns.positions) do
-        local playerDistance = (position.x - player.x) ^ 2 + (position.y - player.y) ^ 2
-        local bossDistance = (position.x - boss.x) ^ 2 + (position.y - boss.y) ^ 2
-        local score = math.min(playerDistance, bossDistance)
-        if score > bestDistance then
-            best, bestDistance = position, score
-        end
-    end
-    boss.thorn = {
-        x = best.x, y = best.y, direction = math.random() < 0.5 and -1 or 1,
-        state = "waiting",
-        timer = math.max(0, BossConfig.mechanisms.thorns.interval
-            - BossConfig.mechanisms.thorns.telegraph - BossConfig.mechanisms.thorns.active),
-        hitCycle = -1, cycle = 0,
-    }
-end
-
 local function EnterPhaseTwo(boss, player)
     boss.phase = 2
     boss.state = "phase_transition"
@@ -133,7 +114,6 @@ local function EnterPhaseTwo(boss, player)
     boss.fogSide = -1
     boss.vx, boss.vy = 0, 0
     boss.phaseChanged = true
-    boss.thorn = nil
     boss.metalProgress = 0
     boss.playerAtTransition = { x = player.x, y = player.y }
 end
@@ -149,7 +129,6 @@ function Boss.Initialize(enemy)
     enemy.mechanism = nil
     enemy.mechanismProgress = 0
     enemy.mechanismTransition = 0
-    enemy.thorn = nil
     enemy.metalProgress = 0
     enemy.purificationProgress = 0
     enemy.phaseChanged = false
@@ -229,27 +208,6 @@ local function StartActiveAttack(boss, player)
     end
 end
 
-local function UpdateThorn(boss, dt)
-    if boss.mechanism ~= "thorns" or boss.thorn == nil or boss.mechanismTransition > 0 then return end
-    local thorn = boss.thorn
-    thorn.timer = thorn.timer - dt
-    if thorn.timer > 0 then return end
-    if thorn.state == "waiting" then
-        thorn.state = "telegraph"
-        thorn.direction = math.random() < 0.5 and -1 or 1
-        thorn.timer = BossConfig.mechanisms.thorns.telegraph
-        thorn.cycle = thorn.cycle + 1
-    elseif thorn.state == "telegraph" then
-        thorn.state = "active"
-        thorn.timer = BossConfig.mechanisms.thorns.active
-        thorn.hitCycle = -1
-    else
-        thorn.state = "waiting"
-        thorn.timer = math.max(0, BossConfig.mechanisms.thorns.interval
-            - BossConfig.mechanisms.thorns.telegraph - BossConfig.mechanisms.thorns.active)
-    end
-end
-
 local function UpdateIdleMovement(boss, player, dt)
     local spec = EnemyConfig.boss
     local toPlayerX, toPlayerY = Normalize(player.x - boss.x, player.y - boss.y)
@@ -318,8 +276,6 @@ function Boss.Update(boss, player, dt)
         return
     end
 
-    UpdateThorn(boss, dt)
-
     if boss.state == "idle" then
         UpdateIdleMovement(boss, player, dt)
         if boss.stateTimer <= 0 and boss.mechanismTransition <= 0 then
@@ -379,23 +335,6 @@ function Boss.CollectPlayerHits(boss, player)
             })
         end
     end
-
-    local thorn = boss.thorn
-    if boss.mechanism == "thorns" and thorn ~= nil and thorn.state == "active" and thorn.hitCycle ~= thorn.cycle then
-        -- Thorn root [T] lashes horizontally toward one random side:
-        -- left  <======= [T] =======> right
-        local spec = BossConfig.mechanisms.thorns
-        local dx, dy = player.x - thorn.x, player.y - thorn.y
-        local onChosenSide = dx * thorn.direction >= -(player.radius or 0)
-        if onChosenSide and math.abs(dx) <= spec.reach + player.radius
-            and math.abs(dy) <= spec.halfWidth + player.radius then
-            thorn.hitCycle = thorn.cycle
-            table.insert(hits, {
-                source = "thorns", token = "thorn_" .. tostring(thorn.cycle), amount = spec.damage,
-                invulnerability = PlayerConfig.invulnerabilityDuration,
-            })
-        end
-    end
     return hits
 end
 
@@ -426,28 +365,20 @@ function Boss.GetMechanismTarget(boss, player)
     if boss.mechanism == "fog" then
         local x, y = FogCore(boss, player)
         return x, y
-    elseif boss.mechanism == "thorns" and boss.thorn ~= nil then
-        return boss.thorn.x, boss.thorn.y
     elseif boss.mechanism == "metal" then
         return MetalPosition(boss)
     end
     return nil, nil
 end
 
-local function AdvanceMechanism(boss, player)
+local function AdvanceMechanism(boss)
     if boss.mechanism == "fog" then
         boss.fogSide = -boss.fogSide
         if boss.mechanismProgress >= BossConfig.mechanisms.fog.required then
             boss.mechanismProgress = 0
-            BeginMechanismTransition(boss, "thorns")
-            PickThornPosition(boss, player)
+            BeginMechanismTransition(boss, "metal")
             boss.mechanismChanged = true
         end
-    elseif boss.mechanism == "thorns" and boss.mechanismProgress >= BossConfig.mechanisms.thorns.required then
-        boss.mechanismProgress = 0
-        boss.thorn = nil
-        BeginMechanismTransition(boss, "metal")
-        boss.mechanismChanged = true
     elseif boss.mechanism == "metal" and boss.mechanismProgress >= BossConfig.mechanisms.metal.required then
         boss.metalProgress = boss.mechanismProgress
         boss.state = "purifying"
@@ -484,17 +415,7 @@ function Boss.TryParry(boss, player, damage)
     local targetX, targetY = Boss.GetMechanismTarget(boss, player)
     if targetX == nil or not IsInPlayerParry(player, targetX, targetY, 0.015) then return nil end
 
-    if boss.mechanism == "thorns" then
-        local thorn = boss.thorn
-        if thorn == nil or thorn.state ~= "active" then return nil end
-        local spec = BossConfig.mechanisms.thorns
-        local dx, dy = player.x - thorn.x, player.y - thorn.y
-        if dx * thorn.direction < -player.radius or math.abs(dx) > spec.reach + player.radius
-            or math.abs(dy) > spec.halfWidth + player.radius then return nil end
-        thorn.hitCycle = thorn.cycle
-        thorn.state = "waiting"
-        thorn.timer = math.max(0, spec.interval - spec.telegraph - spec.active)
-    elseif boss.mechanism == "metal" then
+    if boss.mechanism == "metal" then
         if boss.state ~= "idle" and boss.state ~= "recovery" then return nil end
         local facingX = FacingVector(boss)
         local playerBehind = (player.x - boss.x) * facingX < 0
@@ -510,7 +431,7 @@ function Boss.TryParry(boss, player, damage)
         kind = "mechanism", mechanism = boss.mechanism, progress = boss.mechanismProgress,
         grantsGauge = false, x = targetX, y = targetY,
     }
-    AdvanceMechanism(boss, player)
+    AdvanceMechanism(boss)
     result.completed = boss.mechanism ~= previousMechanism
     if player.parrySerial ~= nil then boss.lastParrySerial = player.parrySerial end
     return result
@@ -518,7 +439,7 @@ end
 
 function Boss.GetHud(boss)
     if boss == nil or boss.dead then return nil end
-    local labels = { fog = "驱散黑雾", thorns = "反弹荆棘", metal = "拔出黑铁", complete = "净化中" }
+    local labels = { fog = "驱散黑雾", metal = "拔出黑铁", complete = "净化中" }
     local required = 0
     if boss.mechanism ~= nil and BossConfig.mechanisms[boss.mechanism] ~= nil then
         required = BossConfig.mechanisms[boss.mechanism].required
