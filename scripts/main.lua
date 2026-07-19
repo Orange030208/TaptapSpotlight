@@ -62,6 +62,10 @@ local stateTitleLabel = nil
 local stateSubtitleLabel = nil
 ---@type Widget|nil
 local stateActionButton = nil
+---@type Widget|nil
+local creditsOverlay = nil
+---@type Widget|nil
+local creditsPanel = nil
 local chestTitleLabels = {}
 local chestDescriptionLabels = {}
 local chestIconLabels = {}
@@ -179,6 +183,30 @@ local function StartOrRestartRun()
     end
     Game.StartOrRestart(game)
     hudTimer = 1.0
+end
+
+local function ShowCredits()
+    if creditsOverlay == nil or creditsPanel == nil then
+        return
+    end
+
+    creditsOverlay:SetVisible(true)
+    creditsPanel:Animate({
+        keyframes = {
+            [0] = { opacity = 0, scale = 0.94, translateY = 28 },
+            [1] = { opacity = 1, scale = 1.0, translateY = 0 },
+        },
+        duration = 0.48,
+        easing = "easeOutCubic",
+        fillMode = "both",
+    })
+end
+
+local function HideCredits()
+    if creditsOverlay == nil then
+        return
+    end
+    creditsOverlay:SetVisible(false)
 end
 
 local function StartChestCardIdle(card)
@@ -849,14 +877,14 @@ local function CreateHud()
     }
 
     stateKickerLabel = UI.Label {
-        text = "战斗档案 · 弹反行动",
+        text = "弹反之室",
         fontSize = 12,
         fontWeight = "bold",
         letterSpacing = 2,
-        fontColor = COLORS.cyan,
+        fontColor = { 255, 255, 255, 255 },
     }
     stateTitleLabel = UI.Label {
-        text = "弹反之室",
+        text = "回响之森",
         width = "100%",
         fontSize = 52,
         fontWeight = "bold",
@@ -868,7 +896,7 @@ local function CreateHud()
         textShadow = { offsetX = 0, offsetY = 5, blur = 10, color = { 0, 0, 0, 170 } },
     }
     stateSubtitleLabel = UI.Label {
-        text = "拨动琴弦般把握节奏，弹回每一枚诅咒。",
+        text = "在幽暗房间中把握节奏，弹回每一枚袭来的诅咒。",
         width = "100%",
         maxWidth = 500,
         fontSize = 16,
@@ -877,7 +905,7 @@ local function CreateHud()
         fontColor = { 214, 219, 235, 245 },
     }
     stateActionButton = UI.Button {
-        text = "踏入房间",
+        text = "开始游戏",
         variant = "primary",
         width = 220,
         height = 54,
@@ -908,115 +936,40 @@ local function CreateHud()
         end,
     }
 
-    local portraitPanel = UI.Panel {
-        width = "38%",
-        minWidth = 238,
-        maxWidth = 390,
-        height = 390,
-        justifyContent = "center",
-        alignItems = "center",
-        backgroundGradient = {
-            type = "radial", innerRadius = 10, outerRadius = 190,
-            from = { 116, 220, 211, 58 }, to = { 17, 20, 37, 0 },
-        },
-        pointerEvents = "none",
-        children = {
-            UI.Panel {
-                width = "94%", height = "94%",
-                backgroundImage = "Characters/player.png",
-                backgroundFit = "contain",
-                pointerEvents = "none",
-            },
-        },
-    }
-
     stateOverlay = UI.Panel {
         visible = true,
         position = "absolute",
         top = 0, left = 0, right = 0, bottom = 0,
-        backgroundGradient = {
-            type = "linear", direction = "to-bottom-right",
-            from = { 17, 45, 92, 252 }, to = { 3, 10, 28, 254 },
-        },
+        backgroundImage = "image/forest_room.png",
+        backgroundFit = "cover",
+        backgroundColor = { 4, 10, 20, 188 },
         pointerEvents = "auto",
         children = {
-            UI.Panel {
-                position = "absolute", top = -140, right = -100,
-                width = 430, height = 430, borderRadius = 215,
-                backgroundGradient = {
-                    type = "radial", innerRadius = 0, outerRadius = 215,
-                    from = { 244, 123, 105, 52 }, to = { 244, 123, 105, 0 },
-                },
-                pointerEvents = "none",
-            },
-            UI.Panel {
-                position = "absolute", bottom = -170, left = -110,
-                width = 500, height = 500, borderRadius = 250,
-                backgroundGradient = {
-                    type = "radial", innerRadius = 0, outerRadius = 250,
-                    from = { 76, 205, 205, 42 }, to = { 76, 205, 205, 0 },
-                },
-                pointerEvents = "none",
-            },
             UI.SafeAreaView {
                 width = "100%", height = "100%",
                 children = {
-                    UI.ScrollView {
-                        width = "100%", height = "100%",
-                        scrollX = false, scrollY = true,
-                        showScrollbar = false,
+                    UI.Panel {
+                        position = "absolute", top = 24, left = 28,
+                        gap = 2, pointerEvents = "none",
+                        children = {
+                            stateKickerLabel,
+                            UI.Label { text = "ECHO CHAMBER", fontSize = 10, letterSpacing = 3, fontColor = { 210, 227, 243, 220 } },
+                        },
+                    },
+                    UI.Panel {
+                        width = "100%", height = "100%", justifyContent = "center", alignItems = "center",
+                        pointerEvents = "box-none",
                         children = {
                             UI.Panel {
-                                width = "100%", minHeight = "100%",
-                                justifyContent = "center", alignItems = "center",
-                                padding = { 26, 18, 28, 18 },
+                                width = "86%", maxWidth = 500, alignItems = "center", gap = 18,
+                                pointerEvents = "auto",
                                 children = {
-                                    UI.Panel {
-                                        width = "94%", maxWidth = 1020,
-                                        minHeight = 450,
-                                        flexDirection = "row", flexWrap = "wrap",
-                                        alignItems = "center", justifyContent = "center",
-                                        columnGap = 24, rowGap = 10,
-                                        padding = { 28, 32, 32, 32 },
-                                        borderRadius = 0,
-                                        borderWidth = { 2, 6, 8, 2 },
-                                        borderColor = { 31, 162, 255, 190 },
-                                        backgroundGradient = {
-                                            type = "linear", direction = "to-bottom-right",
-                                            from = { 30, 75, 142, 244 }, to = { 6, 18, 47, 250 },
-                                        },
-                                        boxShadow = {
-                                            { x = 10, y = 10, blur = 0, spread = 0, color = { 0, 0, 0, 145 } },
-                                            { x = 0, y = 0, blur = 0, spread = 0, color = { 101, 232, 255, 36 }, inset = true },
-                                        },
-                                        children = {
-                                            UI.Panel {
-                                                width = "55%", minWidth = 270,
-                                                flexGrow = 1,
-                                                gap = 16,
-                                                children = {
-                                                    stateKickerLabel,
-                                                    stateTitleLabel,
-                                                    UI.Divider { width = 86, thickness = 3, color = COLORS.coral, spacing = 1 },
-                                                    stateSubtitleLabel,
-                                                    UI.Panel {
-                                                        flexDirection = "row", flexWrap = "wrap", gap = 8,
-                                                        children = {
-                                                            UI.Chip { label = "精准弹反", variant = "soft", color = "warning", size = "sm" },
-                                                            UI.Chip { label = "反射弹幕", variant = "soft", color = "primary", size = "sm" },
-                                                            UI.Chip { label = "净化诅咒", variant = "soft", color = "success", size = "sm" },
-                                                        },
-                                                    },
-                                                    stateActionButton,
-                                                    UI.Label {
-                                                        text = "WASD 移动  ·  左键招架  ·  回车开始",
-                                                        fontSize = 11,
-                                                        fontColor = { 177, 184, 207, 205 },
-                                                    },
-                                                },
-                                            },
-                                            portraitPanel,
-                                        },
+                                    stateTitleLabel,
+                                    stateSubtitleLabel,
+                                    stateActionButton,
+                                    UI.Button {
+                                        text = "开发者名单", variant = "secondary", width = 220, height = 46,
+                                        onClick = function() ShowCredits() end,
                                     },
                                 },
                             },
@@ -1027,6 +980,26 @@ local function CreateHud()
         },
     }
 
+    creditsPanel = UI.Panel {
+        width = "82%", maxWidth = 430, padding = { 34, 34, 30, 34 }, gap = 16,
+        alignItems = "center", borderWidth = 2, borderColor = { 255, 255, 255, 126 },
+        backgroundColor = { 0, 0, 0, 238 },
+        children = {
+            UI.Label { text = "开发者名单", fontSize = 24, fontWeight = "bold", fontColor = COLORS.cream },
+            UI.Divider { width = 84, thickness = 2, color = { 255, 255, 255, 160 } },
+            UI.Label {
+                text = "策划：Sen\n程序：Orange\n美术：wooji", fontSize = 18, lineHeight = 1.9,
+                textAlign = "center", fontColor = { 237, 239, 245, 255 },
+            },
+            UI.Button { text = "关闭", variant = "secondary", width = 132, height = 42, onClick = function() HideCredits() end },
+        },
+    }
+    creditsOverlay = UI.Panel {
+        visible = false, position = "absolute", top = 0, left = 0, right = 0, bottom = 0,
+        justifyContent = "center", alignItems = "center", backgroundColor = { 0, 0, 0, 186 }, pointerEvents = "auto",
+        children = { creditsPanel },
+    }
+
     UI.SetRoot(UI.Panel {
         width = "100%",
         height = "100%",
@@ -1035,6 +1008,7 @@ local function CreateHud()
             combatHud,
             chestPanel,
             stateOverlay,
+            creditsOverlay,
         },
     })
 end
@@ -1112,27 +1086,25 @@ local function RefreshStateOverlay()
         return
     end
 
-    local visible = game.state == "menu" or game.state == "dead" or game.state == "victory"
+    local visible = game.state == "menu" or game.state == "dead"
     stateOverlay:SetVisible(visible)
     if not visible then
         return
     end
 
     if game.state == "menu" then
-        stateKickerLabel:SetText("战斗档案 · 弹反行动")
-        stateTitleLabel:SetText("弹反之室")
-        stateSubtitleLabel:SetText("拨动琴弦般把握节奏，弹回每一枚诅咒，在幽暗房间中收集水晶能力与回响。")
-        stateActionButton:SetText("踏入房间")
-    elseif game.state == "victory" then
-        stateKickerLabel:SetText("诅咒已净化 · 回响仍在延续")
-        stateTitleLabel:SetText("晦暗消散")
-        stateSubtitleLabel:SetText("最后一段低鸣已经安静。带着这次旅途的节奏，再奏响一轮新的挑战。")
-        stateActionButton:SetText("再次挑战")
+        stateKickerLabel:SetText("弹反之室")
+        stateTitleLabel:SetText("回响之森")
+        stateSubtitleLabel:SetText("在幽暗房间中把握节奏，弹回每一枚袭来的诅咒。")
+        stateActionButton:SetText("开始游戏")
     else
         stateKickerLabel:SetText("旅途暂歇 · 节奏尚未终止")
         stateTitleLabel:SetText("回响未尽")
         stateSubtitleLabel:SetText("这次失手只是一枚休止符。重新握紧节拍，把袭来的诅咒一一弹回。")
         stateActionButton:SetText("重新踏入")
+    end
+    if not visible then
+        HideCredits()
     end
 end
 
@@ -1358,5 +1330,19 @@ function HandleNanoVGRender(eventType, eventData)
     nvgBeginFrame(nvgContext, logicalWidth, logicalHeight, devicePixelRatio)
     Renderer.Draw(nvgContext, game, logicalWidth, logicalHeight, feedback)
     CrystalRenderer.Draw(nvgContext, game, logicalWidth, logicalHeight)
+    if game.state == "victory" then
+        local fade = math.max(0, math.min(1, (game.victoryElapsed or 0) / 2.4))
+        nvgBeginPath(nvgContext)
+        nvgRect(nvgContext, 0, 0, logicalWidth, logicalHeight)
+        nvgFillColor(nvgContext, nvgRGBA(0, 0, 0, math.floor(255 * fade)))
+        nvgFill(nvgContext)
+        if fade > 0.35 then
+            nvgFontFace(nvgContext, "sans")
+            nvgFontSize(nvgContext, math.max(26, math.min(46, logicalWidth * 0.052)))
+            nvgTextAlign(nvgContext, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(nvgContext, nvgRGBA(255, 255, 255, math.floor(255 * math.min(1, (fade - 0.35) / 0.45))))
+            nvgText(nvgContext, logicalWidth * 0.5, logicalHeight * 0.38, "感谢游玩")
+        end
+    end
     nvgEndFrame(nvgContext)
 end

@@ -529,6 +529,7 @@ local function StartRun(game)
     game.doorCooldown = 0
     game.nextEntityId = 1
     game.runTime = 0
+    game.victoryElapsed = 0
     game.message = ""
     game.messageTimer = 0
     game.spawnGuideAlpha = 0
@@ -1089,6 +1090,7 @@ function Game.New()
         stateTimer = 0,
         time = 0,
         runTime = 0,
+        victoryElapsed = 0,
         currentRoomId = nil,
         room = nil,
         roomStates = {},
@@ -1215,6 +1217,7 @@ function Game.Update(game, dt, moveX, moveY, realDt)
     end
 
     if game.state == "victory" then
+        game.victoryElapsed = game.victoryElapsed + realDt
         -- Victory freezes combat, but reflected piercing projectiles should finish their flight.
         MoveProjectiles(game, dt)
         for _, enemy in ipairs(game.enemies) do
@@ -1224,6 +1227,12 @@ function Game.Update(game, dt, moveX, moveY, realDt)
         end
         HandleEnemyDeaths(game)
         RemoveDeadProjectiles(game)
+        if game.victoryElapsed >= 5.2 then
+            game.state = "menu"
+            game.message = "按开始踏入房间"
+            game.messageTimer = 999
+            print("[Game] Victory sequence complete; returning to main menu")
+        end
         return
     end
 
