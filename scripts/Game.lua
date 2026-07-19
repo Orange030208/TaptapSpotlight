@@ -1132,6 +1132,19 @@ function Game.StartOrRestart(game)
     EmitEvent(game, "run_start")
 end
 
+function Game.ReturnToMenu(game)
+    if game.state ~= "dead" then
+        return false
+    end
+
+    game.state = "menu"
+    game.stateTimer = 0
+    game.message = "按开始踏入房间"
+    game.messageTimer = 999
+    print("[Game] Game over acknowledged; returning to main menu")
+    return true
+end
+
 function Game.TryParry(game, targetX, targetY, allowBirthTutorial)
     local isBirthTutorial = allowBirthTutorial and game.state == "clear" and game.room ~= nil
         and game.room.isBirthRoom and not game.roomCleared and game.birthTutorialMoved

@@ -48,6 +48,8 @@ local bossProgressBar = nil
 local chestPanel = nil
 ---@type Widget|nil
 local stateOverlay = nil
+---@type Widget|nil
+local gameOverOverlay = nil
 ---@type Label|nil
 local stateKickerLabel = nil
 ---@type Label|nil
@@ -192,6 +194,12 @@ local function StartOrRestartRun()
     end
     Game.StartOrRestart(game)
     hudTimer = 1.0
+end
+
+local function ReturnToMainMenu()
+    if game ~= nil and Game.ReturnToMenu(game) then
+        hudTimer = 1.0
+    end
 end
 
 local function ShowCredits()
@@ -1083,6 +1091,79 @@ local function CreateHud()
         },
     }
 
+    gameOverOverlay = UI.Panel {
+        visible = false,
+        position = "absolute",
+        top = 0, left = 0, right = 0, bottom = 0,
+        justifyContent = "center",
+        alignItems = "center",
+        backgroundColor = { 3, 8, 20, 220 },
+        backdropBlur = 8,
+        pointerEvents = "auto",
+        children = {
+            UI.SafeAreaView {
+                width = "100%",
+                height = "100%",
+                justifyContent = "center",
+                alignItems = "center",
+                padding = { 24, 20, 24, 20 },
+                children = {
+                    UI.Panel {
+                        width = "82%",
+                        maxWidth = 460,
+                        padding = { 30, 28, 28, 28 },
+                        gap = 16,
+                        alignItems = "center",
+                        borderRadius = 0,
+                        borderWidth = { 2, 4, 6, 2 },
+                        borderColor = { 255, 82, 92, 230 },
+                        backgroundGradient = {
+                            type = "linear",
+                            direction = "to-bottom-right",
+                            from = { 61, 24, 49, 252 },
+                            to = { 10, 17, 40, 252 },
+                        },
+                        boxShadow = HUD_SHADOW,
+                        children = {
+                            UI.Label {
+                                text = "GAME OVER",
+                                width = "100%",
+                                fontSize = 42,
+                                fontWeight = "bold",
+                                textAlign = "center",
+                                fontColor = { 255, 136, 145, 255 },
+                                textShadow = { offsetX = 0, offsetY = 3, blur = 5, color = { 0, 0, 0, 180 } },
+                            },
+                            UI.Label {
+                                text = "本次探索已结束",
+                                width = "100%",
+                                fontSize = 18,
+                                textAlign = "center",
+                                fontColor = COLORS.cream,
+                            },
+                            UI.Label {
+                                text = "整理心绪后，再次踏入回声森林。",
+                                width = "100%",
+                                fontSize = 14,
+                                textAlign = "center",
+                                whiteSpace = "normal",
+                                fontColor = COLORS.muted,
+                            },
+                            UI.Divider { width = "100%", thickness = 1, color = { 255, 255, 255, 58 } },
+                            UI.Button {
+                                text = "返回主界面",
+                                variant = "primary",
+                                width = 190,
+                                height = 52,
+                                onClick = function() ReturnToMainMenu() end,
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
     creditsPanel = UI.Panel {
         width = "82%", maxWidth = 430, padding = { 34, 34, 30, 34 }, gap = 16,
         alignItems = "center", borderWidth = 2, borderColor = { 255, 255, 255, 126 },
@@ -1110,6 +1191,7 @@ local function CreateHud()
         children = {
             combatHud,
             chestPanel,
+            gameOverOverlay,
             stateOverlay,
             creditsOverlay,
         },
@@ -1194,13 +1276,14 @@ local function RefreshChestPanel()
 end
 
 local function RefreshStateOverlay()
-    if game == nil or stateOverlay == nil then
+    if game == nil or stateOverlay == nil or gameOverOverlay == nil then
         return
     end
 
-    local visible = game.state == "menu" or game.state == "dead"
-    stateOverlay:SetVisible(visible)
-    if not visible then
+    local menuVisible = game.state == "menu"
+    stateOverlay:SetVisible(menuVisible)
+    gameOverOverlay:SetVisible(game.state == "dead")
+    if not menuVisible then
         stateOverlayWasVisible = false
         HideCredits()
         return
