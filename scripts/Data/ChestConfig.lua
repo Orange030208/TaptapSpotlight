@@ -7,7 +7,7 @@ return {
     bounceDuration = 0.34,
     firstBounceHeight = 0.026,
     secondBounceHeight = 0.012,
-    pickupDelay = 0.12,
-    pickupRadius = 0.10,
+    pickupDelay = 0.42,
+    pickupRadius = 0.30,
     collectDuration = 0.18,
 }
