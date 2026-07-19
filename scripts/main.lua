@@ -96,8 +96,8 @@ local HUD_SHADOW = {
 local EchoCombatTheme = UI.Theme.ExtendTheme(UI.Theme.defaultTheme, {
     fonts = {
         { family = "sans", weights = {
-            normal = "Fonts/NotoSansSC-Black.ttf",
-            bold = "Fonts/NotoSansSC-Black.ttf",
+            normal = "Fonts/XiaoLangTianQiong.ttf",
+            bold = "Fonts/XiaoLangTianQiong.ttf",
         } },
     },
     colors = {
@@ -1162,7 +1162,7 @@ function Start()
         print("ERROR: Failed to create NanoVG context")
         return
     end
-    if nvgCreateFont(nvgContext, "sans", "Fonts/NotoSansSC-Black.ttf") == -1 then
+    if nvgCreateFont(nvgContext, "sans", "Fonts/XiaoLangTianQiong.ttf") == -1 then
         print("WARNING: Could not load NanoVG font")
     end
     Renderer.LoadAssets(nvgContext)
