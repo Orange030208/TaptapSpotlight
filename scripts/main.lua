@@ -1,4 +1,4 @@
--- 弹反之室：原生 NanoVG 负责游戏画面，UI 组件负责响应式中文 HUD 与宝箱选择。
+-- Sekimio：原生 NanoVG 负责游戏画面，UI 组件负责响应式中文 HUD 与宝箱选择。
 
 local UI = require("urhox-libs/UI")
 local AudioManager = require "AudioManager"
@@ -48,14 +48,25 @@ local bossProgressBar = nil
 local chestPanel = nil
 ---@type Widget|nil
 local stateOverlay = nil
----@type Widget|nil
+---@type Label|nil
 local stateKickerLabel = nil
----@type Widget|nil
+---@type Label|nil
 local stateTitleLabel = nil
----@type Widget|nil
+---@type Label|nil
 local stateSubtitleLabel = nil
----@type Widget|nil
+---@type Button|nil
 local stateActionButton = nil
+---@type Widget|nil
+local stateContentPanel = nil
+---@type Widget|nil
+local titleLogoFloatPanel = nil
+---@type Widget|nil
+local titleMotePanel = nil
+---@type Widget|nil
+local titleSpiritPanel = nil
+---@type Widget|nil
+local titleButterflyPanel = nil
+local stateOverlayWasVisible = false
 ---@type Widget|nil
 local creditsOverlay = nil
 ---@type Widget|nil
@@ -201,6 +212,76 @@ local function HideCredits()
         return
     end
     creditsOverlay:SetVisible(false)
+end
+
+local function StartTitleIdleMotion()
+    if titleLogoFloatPanel ~= nil then
+        titleLogoFloatPanel:Animate({
+            keyframes = {
+                [0] = { translateY = 0, scale = 1.0 },
+                [0.5] = { translateY = -5, scale = 1.014 },
+                [1] = { translateY = 0, scale = 1.0 },
+            },
+            duration = 5.6,
+            easing = "easeInOut",
+            loop = true,
+            fillMode = "both",
+        })
+    end
+    if titleSpiritPanel ~= nil then
+        titleSpiritPanel:Animate({
+            keyframes = {
+                [0] = { translateY = 0, translateX = 0, scale = 1.0 },
+                [0.5] = { translateY = -13, translateX = -5, scale = 1.025 },
+                [1] = { translateY = 0, translateX = 0, scale = 1.0 },
+            },
+            duration = 6.4,
+            easing = "easeInOutCubic",
+            loop = true,
+            fillMode = "both",
+        })
+    end
+    if titleButterflyPanel ~= nil then
+        titleButterflyPanel:Animate({
+            keyframes = {
+                [0] = { translateX = 0, translateY = 0, opacity = 0.34 },
+                [0.5] = { translateX = -18, translateY = 11, opacity = 0.54 },
+                [1] = { translateX = 0, translateY = 0, opacity = 0.34 },
+            },
+            duration = 8.2,
+            easing = "easeInOut",
+            loop = true,
+            fillMode = "both",
+        })
+    end
+    if titleMotePanel ~= nil then
+        titleMotePanel:Animate({
+            keyframes = {
+                [0] = { translateY = 0, scale = 0.96, opacity = 0.34 },
+                [0.5] = { translateY = -20, scale = 1.05, opacity = 0.72 },
+                [1] = { translateY = 0, scale = 0.96, opacity = 0.34 },
+            },
+            duration = 4.8,
+            easing = "easeInOut",
+            loop = true,
+            fillMode = "both",
+        })
+    end
+end
+
+local function PlayStateOverlayEntrance()
+    if stateContentPanel == nil then
+        return
+    end
+    stateContentPanel:Animate({
+        keyframes = {
+            [0] = { opacity = 0, translateX = -24, translateY = 10 },
+            [1] = { opacity = 1, translateX = 0, translateY = 0 },
+        },
+        duration = 0.58,
+        easing = "easeOutCubic",
+        fillMode = "both",
+    })
 end
 
 local function StartChestCardIdle(card)
@@ -866,56 +947,52 @@ local function CreateHud()
     }
 
     stateKickerLabel = UI.Label {
-        text = "弹反之室",
-        fontSize = 12,
+        text = "CHAPTER 01  ·  THE ECHOING GROVE",
+        width = "100%",
+        fontSize = 11,
         fontWeight = "bold",
         letterSpacing = 2,
-        fontColor = { 255, 255, 255, 255 },
+        fontColor = { 156, 239, 241, 236 },
     }
     stateTitleLabel = UI.Label {
-        text = "回响之森",
+        text = "回声在深林中苏醒。",
         width = "100%",
-        fontSize = 52,
+        fontSize = 38,
         fontWeight = "bold",
-        lineHeight = 1.05,
+        lineHeight = 1.16,
         whiteSpace = "normal",
-        letterSpacing = 3,
         fontColor = COLORS.cream,
-        textStroke = { width = 1, color = { 81, 45, 55, 230 } },
-        textShadow = { offsetX = 0, offsetY = 5, blur = 10, color = { 0, 0, 0, 170 } },
+        textShadow = { offsetX = 0, offsetY = 4, blur = 9, color = { 0, 0, 0, 178 } },
     }
     stateSubtitleLabel = UI.Label {
-        text = "在幽暗房间中把握节奏，弹回每一枚袭来的诅咒。",
+        text = "循着微光，把迷失的回声归还给森林。",
         width = "100%",
-        maxWidth = 500,
+        maxWidth = 450,
         fontSize = 16,
-        lineHeight = 1.5,
+        lineHeight = 1.55,
         whiteSpace = "normal",
-        fontColor = { 214, 219, 235, 245 },
+        fontColor = { 204, 225, 237, 235 },
     }
     stateActionButton = UI.Button {
-        text = "开始游戏",
+        text = "踏入回响",
         variant = "primary",
-        width = 220,
-        height = 54,
+        width = 184,
+        height = 52,
         fontSize = 16,
-        textColor = COLORS.cream,
+        textColor = { 235, 255, 255, 255 },
         backgroundGradient = {
             type = "linear", direction = "to-right",
-            from = { 31, 162, 255, 255 }, to = { 42, 105, 222, 255 },
+            from = { 24, 160, 177, 255 }, to = { 37, 97, 199, 255 },
         },
-        hoverBackgroundColor = { 70, 183, 255, 255 },
-        pressedBackgroundColor = { 13, 126, 230, 255 },
-        borderRadius = 0,
-        borderWidth = { 2, 4, 6, 2 },
-        borderColor = COLORS.border,
-        shadowBlur = 0,
-        shadowOffsetX = 7,
-        shadowOffsetY = 7,
-        shadowColor = { 0, 0, 0, 110 },
-        transition = "scale 0.12s easeOutBack, translateY 0.12s easeOut, backgroundColor 0.12s easeOut",
+        hoverBackgroundColor = { 54, 194, 203, 255 },
+        pressedBackgroundColor = { 18, 114, 151, 255 },
+        borderRadius = 6,
+        borderWidth = 1,
+        borderColor = { 169, 252, 248, 178 },
+        boxShadow = { { x = 0, y = 7, blur = 16, spread = 0, color = { 7, 139, 170, 110 } } },
+        transition = "scale 0.14s easeOutBack, translateY 0.14s easeOut, backgroundColor 0.14s easeOut",
         onPointerEnter = function(_, widget)
-            widget:SetStyle({ scale = 1.025, translateY = -2 })
+            widget:SetStyle({ scale = 1.035, translateY = -2 })
         end,
         onPointerLeave = function(_, widget)
             widget:SetStyle({ scale = 1.0, translateY = 0 })
@@ -925,45 +1002,138 @@ local function CreateHud()
         end,
     }
 
+    titleLogoFloatPanel = UI.Panel {
+        width = "100%",
+        height = 188,
+        maxWidth = 510,
+        flexShrink = 1,
+        backgroundImage = "image/sekimio_logo_20260719044729.png",
+        backgroundFit = "cover",
+        pointerEvents = "none",
+    }
+    titleButterflyPanel = UI.Panel {
+        position = "absolute",
+        top = "11%",
+        right = "3%",
+        width = "39%",
+        height = "72%",
+        backgroundImage = "image/blue-wing-swarm-v3.png",
+        backgroundFit = "contain",
+        opacity = 0.34,
+        pointerEvents = "none",
+    }
+    titleSpiritPanel = UI.Panel {
+        position = "absolute",
+        top = "27%",
+        right = "11%",
+        width = "29%",
+        height = "46%",
+        backgroundImage = "image/coal-dust-monster-v2.png",
+        backgroundFit = "contain",
+        pointerEvents = "none",
+    }
+    titleMotePanel = UI.Panel {
+        position = "absolute",
+        top = "20%",
+        right = "26%",
+        width = "10%",
+        height = "18%",
+        backgroundImage = "image/purple_glow_orb.png",
+        backgroundFit = "contain",
+        opacity = 0.34,
+        pointerEvents = "none",
+    }
+    stateContentPanel = UI.Panel {
+        position = "absolute",
+        left = "8%",
+        top = "12%",
+        bottom = "11%",
+        width = "46%",
+        maxWidth = 540,
+        justifyContent = "center",
+        alignItems = "flex-start",
+        gap = 14,
+        pointerEvents = "auto",
+        children = {
+            titleLogoFloatPanel,
+            stateKickerLabel,
+            UI.Panel {
+                width = 74,
+                height = 2,
+                backgroundColor = { 126, 237, 235, 210 },
+                pointerEvents = "none",
+            },
+            stateTitleLabel,
+            stateSubtitleLabel,
+            UI.Panel {
+                flexDirection = "row",
+                flexWrap = "wrap",
+                alignItems = "center",
+                gap = 12,
+                paddingTop = 6,
+                children = {
+                    stateActionButton,
+                    UI.Button {
+                        text = "制作人员",
+                        variant = "secondary",
+                        width = 142,
+                        height = 46,
+                        borderRadius = 6,
+                        borderWidth = 1,
+                        borderColor = { 188, 225, 239, 132 },
+                        backgroundColor = { 6, 20, 38, 152 },
+                        hoverBackgroundColor = { 18, 53, 78, 228 },
+                        onClick = function() ShowCredits() end,
+                    },
+                },
+            },
+        },
+    }
+
     stateOverlay = UI.Panel {
         visible = true,
         position = "absolute",
         top = 0, left = 0, right = 0, bottom = 0,
         backgroundImage = "image/forest_room.png",
         backgroundFit = "cover",
-        backgroundColor = { 4, 10, 20, 188 },
         pointerEvents = "auto",
         children = {
+            UI.Panel {
+                position = "absolute", top = 0, left = 0, right = 0, bottom = 0,
+                backgroundGradient = {
+                    type = "linear", direction = "to-right",
+                    from = { 3, 10, 25, 238 }, to = { 6, 20, 42, 92 },
+                },
+                pointerEvents = "none",
+            },
+            titleButterflyPanel,
+            titleSpiritPanel,
+            titleMotePanel,
             UI.SafeAreaView {
                 width = "100%", height = "100%",
+                pointerEvents = "box-none",
                 children = {
                     UI.Panel {
-                        position = "absolute", top = 24, left = 28,
+                        position = "absolute", top = 24, left = 30,
                         gap = 2, pointerEvents = "none",
                         children = {
-                            stateKickerLabel,
-                            UI.Label { text = "ECHO CHAMBER", fontSize = 10, letterSpacing = 3, fontColor = { 210, 227, 243, 220 } },
+                            UI.Label { text = "SEKIMIO", fontSize = 12, fontWeight = "bold", letterSpacing = 4, fontColor = { 219, 255, 255, 242 } },
+                            UI.Label { text = "MOONLIT ECHOES", fontSize = 9, letterSpacing = 2, fontColor = { 164, 211, 229, 210 } },
                         },
                     },
-                    UI.Panel {
-                        width = "100%", height = "100%", justifyContent = "center", alignItems = "center",
-                        pointerEvents = "box-none",
-                        children = {
-                            UI.Panel {
-                                width = "86%", maxWidth = 500, alignItems = "center", gap = 18,
-                                pointerEvents = "auto",
-                                children = {
-                                    stateTitleLabel,
-                                    stateSubtitleLabel,
-                                    stateActionButton,
-                                    UI.Button {
-                                        text = "开发者名单", variant = "secondary", width = 220, height = 46,
-                                        onClick = function() ShowCredits() end,
-                                    },
-                                },
-                            },
-                        },
+                    UI.Label {
+                        text = "PRELUDE  ·  01",
+                        position = "absolute", top = 27, right = 30,
+                        fontSize = 10, fontWeight = "bold", letterSpacing = 2,
+                        fontColor = { 170, 233, 239, 222 }, pointerEvents = "none",
                     },
+                    UI.Label {
+                        text = "THE FOREST REMEMBERS",
+                        position = "absolute", bottom = 25, left = 30,
+                        fontSize = 9, letterSpacing = 2,
+                        fontColor = { 166, 211, 225, 196 }, pointerEvents = "none",
+                    },
+                    stateContentPanel,
                 },
             },
         },
@@ -1000,6 +1170,7 @@ local function CreateHud()
             creditsOverlay,
         },
     })
+    StartTitleIdleMotion()
 end
 
 local function RefreshChestPanel()
@@ -1075,29 +1246,36 @@ local function RefreshChestPanel()
 end
 
 local function RefreshStateOverlay()
-    if game == nil or stateOverlay == nil then
+    if game == nil or stateOverlay == nil
+        or stateKickerLabel == nil
+        or stateTitleLabel == nil
+        or stateSubtitleLabel == nil
+        or stateActionButton == nil then
         return
     end
 
     local visible = game.state == "menu" or game.state == "dead"
     stateOverlay:SetVisible(visible)
     if not visible then
+        stateOverlayWasVisible = false
+        HideCredits()
         return
     end
 
     if game.state == "menu" then
-        stateKickerLabel:SetText("弹反之室")
-        stateTitleLabel:SetText("回响之森")
-        stateSubtitleLabel:SetText("在幽暗房间中把握节奏，弹回每一枚袭来的诅咒。")
-        stateActionButton:SetText("开始游戏")
+        stateKickerLabel:SetText("CHAPTER 01  ·  THE ECHOING GROVE")
+        stateTitleLabel:SetText("回声在深林中苏醒。")
+        stateSubtitleLabel:SetText("循着微光，把迷失的回声归还给森林。")
+        stateActionButton:SetText("踏入回响")
     else
         stateKickerLabel:SetText("旅途暂歇 · 节奏尚未终止")
         stateTitleLabel:SetText("回响未尽")
         stateSubtitleLabel:SetText("这次失手只是一枚休止符。重新握紧节拍，把袭来的诅咒一一弹回。")
-        stateActionButton:SetText("重新踏入")
+        stateActionButton:SetText("再次前行")
     end
-    if not visible then
-        HideCredits()
+    if not stateOverlayWasVisible then
+        stateOverlayWasVisible = true
+        PlayStateOverlayEntrance()
     end
 end
 

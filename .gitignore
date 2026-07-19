@@ -38,3 +38,8 @@ tools/
 urhox-libs/
 AGENTS.md
 CLAUDE.md
+
+# Compressed player-frame source aliases; canonical runtime frames use idle_/move_frame_/block_.
+/assets/Characters/player_animations/idle/stand_[0-9][0-9].png
+/assets/Characters/player_animations/move/move_[0-9][0-9].png
+/assets/Characters/player_animations/block/猫咪序列帧_[0-9][0-9].png

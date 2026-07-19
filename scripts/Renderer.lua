@@ -25,8 +25,35 @@ local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
 -- 当前资源由 Spine 3.8.75 导出，但运行时要求 Spine 4.2。
--- 在用 Spine 4.2 重新导出骨骼前，始终使用静态角色回退以避免原生崩溃。
+-- 在用 Spine 4.2 重新导出骨骼前，使用序列帧角色，并保留静态图作为加载失败回退。
 local ENABLE_SPINE_PLAYER = false
+local playerFrames = {
+    definitions = {
+        idle = {
+            pathPrefix = "Characters/player_animations/idle/idle_",
+            frameCount = 30,
+            framesPerSecond = 12,
+        },
+        move = {
+            pathPrefix = "Characters/player_animations/move/move_frame_",
+            frameCount = 30,
+            framesPerSecond = 18,
+        },
+        block = {
+            pathPrefix = "Characters/player_animations/block/block_",
+            frameCount = 30,
+            framesPerSecond = 24,
+        },
+    },
+    order = { "idle", "move", "block" },
+    animations = {
+        idle = { handles = {}, width = 1, height = 1 },
+        move = { handles = {}, width = 1, height = 1 },
+        block = { handles = {}, width = 1, height = 1 },
+    },
+    state = nil,
+    startedAt = 0,
+}
 local playerImageHandle = 0
 local playerImageWidth = 1
 local playerImageHeight = 1
@@ -83,6 +110,60 @@ local playerSpineAnimation = nil
 ---@type number|nil
 local playerSpineLastTime = nil
 
+local function UnloadPlayerFrameAnimation(ctx, animationName)
+    local animation = playerFrames.animations[animationName]
+    if animation == nil then
+        return
+    end
+
+    for _, handle in ipairs(animation.handles) do
+        if handle ~= nil and handle > 0 then
+            nvgDeleteImage(ctx, handle)
+        end
+    end
+    animation.handles = {}
+    animation.width, animation.height = 1, 1
+end
+
+local function LoadPlayerFrameAnimation(ctx, animationName)
+    local definition = playerFrames.definitions[animationName]
+    local animation = playerFrames.animations[animationName]
+    if definition == nil or animation == nil then
+        return false
+    end
+
+    UnloadPlayerFrameAnimation(ctx, animationName)
+    for frameIndex = 0, definition.frameCount - 1 do
+        local path = string.format("%s%02d.png", definition.pathPrefix, frameIndex)
+        local handle = nvgCreateImage(ctx, path, 0)
+        if handle == nil or handle <= 0 then
+            print("WARNING: Failed to load player " .. animationName .. " frame: " .. path)
+            UnloadPlayerFrameAnimation(ctx, animationName)
+            return false
+        end
+
+        local width, height = nvgImageSize(ctx, handle)
+        if width <= 0 or height <= 0 then
+            print("WARNING: Player " .. animationName .. " frame has invalid dimensions: " .. path)
+            nvgDeleteImage(ctx, handle)
+            UnloadPlayerFrameAnimation(ctx, animationName)
+            return false
+        end
+        if frameIndex == 0 then
+            animation.width, animation.height = width, height
+        elseif width ~= animation.width or height ~= animation.height then
+            print("WARNING: Player " .. animationName .. " frame dimensions do not match: " .. path)
+            nvgDeleteImage(ctx, handle)
+            UnloadPlayerFrameAnimation(ctx, animationName)
+            return false
+        end
+        table.insert(animation.handles, handle)
+    end
+
+    print("Loaded player " .. animationName .. " animation with " .. tostring(#animation.handles) .. " frames")
+    return true
+end
+
 function Renderer.LoadAssets(ctx)
     local playerLoaded = false
     BossRenderer.LoadAssets(ctx)
@@ -103,19 +184,30 @@ function Renderer.LoadAssets(ctx)
             playerSpine = nil
         end
 
-        playerImageHandle = nvgCreateImage(ctx, "Characters/player.png", 0)
-        if playerImageHandle == nil or playerImageHandle <= 0 then
-            playerImageHandle = 0
-            print("WARNING: Failed to load Spine player and static fallback: Characters/player.png")
+        local animationsLoaded = true
+        for _, animationName in ipairs(playerFrames.order) do
+            animationsLoaded = LoadPlayerFrameAnimation(ctx, animationName) and animationsLoaded
+        end
+        if animationsLoaded then
+            playerLoaded = true
         else
-            playerImageWidth, playerImageHeight = nvgImageSize(ctx, playerImageHandle)
-            if playerImageWidth <= 0 or playerImageHeight <= 0 then
-                nvgDeleteImage(ctx, playerImageHandle)
+            for _, animationName in ipairs(playerFrames.order) do
+                UnloadPlayerFrameAnimation(ctx, animationName)
+            end
+            playerImageHandle = nvgCreateImage(ctx, "Characters/player.png", 0)
+            if playerImageHandle == nil or playerImageHandle <= 0 then
                 playerImageHandle = 0
-                playerImageWidth, playerImageHeight = 1, 1
-                print("WARNING: Player sprite fallback has invalid dimensions")
+                print("WARNING: Failed to load player animations and static fallback: Characters/player.png")
             else
-                playerLoaded = true
+                playerImageWidth, playerImageHeight = nvgImageSize(ctx, playerImageHandle)
+                if playerImageWidth <= 0 or playerImageHeight <= 0 then
+                    nvgDeleteImage(ctx, playerImageHandle)
+                    playerImageHandle = 0
+                    playerImageWidth, playerImageHeight = 1, 1
+                    print("WARNING: Player sprite fallback has invalid dimensions")
+                else
+                    playerLoaded = true
+                end
             end
         end
     end
@@ -431,6 +523,11 @@ function Renderer.UnloadAssets(ctx)
     end
     playerSpineAnimation = nil
     playerSpineLastTime = nil
+    for _, animationName in ipairs(playerFrames.order) do
+        UnloadPlayerFrameAnimation(ctx, animationName)
+    end
+    playerFrames.state = nil
+    playerFrames.startedAt = 0
 
     if playerImageHandle ~= nil and playerImageHandle > 0 then
         nvgDeleteImage(ctx, playerImageHandle)
@@ -785,15 +882,41 @@ local function DrawFallbackPlayer(ctx, width, height, player, time)
     nvgRestore(ctx)
 end
 
-local function DrawSpritePlayer(ctx, width, height, player, time)
+local function GetPlayerFrameAnimationName(player)
+    if player.parryTimer > 0 then
+        return "block"
+    end
+    if player.isMoving then
+        return "move"
+    end
+    return "idle"
+end
+
+local function GetPlayerFrame(player, time)
+    local animationName = GetPlayerFrameAnimationName(player)
+    local definition = playerFrames.definitions[animationName]
+    local animation = playerFrames.animations[animationName]
+    if definition == nil or animation == nil or #animation.handles == 0 then
+        return nil
+    end
+
+    if playerFrames.state ~= animationName or time < playerFrames.startedAt then
+        playerFrames.state = animationName
+        playerFrames.startedAt = time
+    end
+    local elapsed = math.max(0, time - playerFrames.startedAt)
+    local frameIndex = math.floor(elapsed * definition.framesPerSecond) % #animation.handles + 1
+    return animation.handles[frameIndex], animation.width, animation.height, animationName
+end
+
+local function DrawPlayerImage(ctx, width, height, player, time, imageHandle, imageWidth, imageHeight)
     local x, y, scale = Renderer.WorldToScreen(width, height, player.x, player.y)
     scale = scale * PlayerConfig.sizeMultiplier
     local displayHeight = 58 * scale
-    local displayWidth = displayHeight * playerImageWidth / playerImageHeight
+    local displayWidth = displayHeight * imageWidth / imageHeight
     local drawX = -displayWidth * 0.5
     local drawY = -displayHeight
     local flip = player.facing == "left" and -1 or 1
-    local bob = math.sin(time * 10) * 1.2 * scale
     local imageAlpha = 1.0
     if player.invulnerabilityTimer > 0 then
         imageAlpha = 0.42 + 0.38 * math.abs(math.sin(time * 24))
@@ -801,7 +924,7 @@ local function DrawSpritePlayer(ctx, width, height, player, time)
 
     DrawShadow(ctx, x, y, scale, 23, 135)
     nvgSave(ctx)
-    nvgTranslate(ctx, x, y + bob)
+    nvgTranslate(ctx, x, y)
     nvgScale(ctx, flip, 1)
 
     if player.parryTimer > 0 then
@@ -811,7 +934,7 @@ local function DrawSpritePlayer(ctx, width, height, player, time)
         nvgBeginPath(ctx)
         nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
         nvgFillPaint(ctx, nvgImagePatternTinted(
-            ctx, drawX, drawY, displayWidth, displayHeight, 0, playerImageHandle,
+            ctx, drawX, drawY, displayWidth, displayHeight, 0, imageHandle,
             nvgRGBA(110, 235, 255, 125)
         ))
         nvgFill(ctx)
@@ -820,9 +943,26 @@ local function DrawSpritePlayer(ctx, width, height, player, time)
 
     nvgBeginPath(ctx)
     nvgRect(ctx, drawX, drawY, displayWidth, displayHeight)
-    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, playerImageHandle, imageAlpha))
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, displayWidth, displayHeight, 0, imageHandle, imageAlpha))
     nvgFill(ctx)
     nvgRestore(ctx)
+end
+
+local function DrawFramePlayer(ctx, width, height, player, time)
+    local imageHandle, imageWidth, imageHeight = GetPlayerFrame(player, time)
+    if imageHandle == nil then
+        DrawFallbackPlayer(ctx, width, height, player, time)
+        return
+    end
+    DrawPlayerImage(ctx, width, height, player, time, imageHandle, imageWidth, imageHeight)
+end
+
+local function DrawSpritePlayer(ctx, width, height, player, time)
+    if playerImageHandle == nil or playerImageHandle <= 0 then
+        DrawFallbackPlayer(ctx, width, height, player, time)
+        return
+    end
+    DrawPlayerImage(ctx, width, height, player, time, playerImageHandle, playerImageWidth, playerImageHeight)
 end
 
 local function UpdatePlayerSpineAnimation(player, time)
@@ -901,6 +1041,8 @@ end
 local function DrawPlayer(ctx, width, height, player, time)
     if playerSpine ~= nil and playerSpine:IsLoaded() then
         DrawSpinePlayer(ctx, width, height, player, time)
+    elseif #playerFrames.animations.idle.handles > 0 then
+        DrawFramePlayer(ctx, width, height, player, time)
     elseif playerImageHandle ~= nil and playerImageHandle > 0 then
         DrawSpritePlayer(ctx, width, height, player, time)
     else
@@ -2335,12 +2477,13 @@ local function DrawMinimap(ctx, width, height, game)
         minY, maxY = math.min(minY, room.mapY), math.max(maxY, room.mapY)
     end
 
-    local cell = Clamp(math.min(width, height) * 0.021, 10, 15)
+    local cell = Clamp(math.min(width, height) * 0.026, 13, 19)
     local gap = 4
     local step = cell + gap
     local mapWidth = (maxX - minX) * step + cell
-    local originX = width * 0.5 - mapWidth * 0.5
-    local originY = math.max(10, height * 0.018)
+    local margin = 16
+    local originX = width - mapWidth - margin
+    local originY = margin
 
     for _, room in pairs(game.map.rooms) do
         if IsRoomMapped(game, room.id) then
