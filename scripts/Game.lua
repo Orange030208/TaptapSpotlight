@@ -13,6 +13,14 @@ local Boss = require "Boss"
 
 local Game = {}
 
+local function Clamp(value, minValue, maxValue)
+    return math.max(minValue, math.min(maxValue, value))
+end
+
+local function Lerp(a, b, t)
+    return a + (b - a) * t
+end
+
 local function EmitEvent(game, name, data)
     table.insert(game.events, { name = name, data = data })
 end
@@ -566,10 +574,45 @@ local function UpdateChests(game, dt)
     for index = #game.chests, 1, -1 do
         local chest = game.chests[index]
         chest.bobTime = chest.bobTime + dt * 4
-        if chest.openImmediately or Entities.PlayerCanPickupChest(game.player, chest) then
+        if chest.state == "dropping" then
+            chest.dropElapsed = chest.dropElapsed + dt
+            local flightProgress = Clamp(chest.dropElapsed / ChestConfig.dropDuration, 0, 1)
+            local easedProgress = 1 - (1 - flightProgress) ^ 3
+            chest.x = Lerp(chest.dropStartX, chest.dropTargetX, easedProgress)
+            chest.y = Lerp(chest.dropStartY, chest.dropTargetY, easedProgress)
+            if not chest.landed and flightProgress >= 1 then
+                chest.landed = true
+                AddParticles(game, chest.x, chest.y, { 255, 215, 100 }, 12)
+            end
+            if chest.dropElapsed >= ChestConfig.dropDuration + ChestConfig.bounceDuration then
+                chest.state = "idle"
+                chest.idleElapsed = 0
+            end
+        elseif chest.state == "idle" then
+            chest.idleElapsed = chest.idleElapsed + dt
+            if chest.idleElapsed >= ChestConfig.pickupDelay and Entities.PlayerCanPickupChest(game.player, chest) then
+                chest.state = "collecting"
+                chest.collectElapsed = 0
+                chest.collectStartX = chest.x
+                chest.collectStartY = chest.y
+            end
+        elseif chest.state == "collecting" then
+            chest.collectElapsed = chest.collectElapsed + dt
+            local collectProgress = Clamp(chest.collectElapsed / ChestConfig.collectDuration, 0, 1)
+            local easedProgress = 1 - (1 - collectProgress) ^ 4
+            chest.x = Lerp(chest.collectStartX, game.player.x, easedProgress)
+            chest.y = Lerp(chest.collectStartY, game.player.y, easedProgress)
+            if collectProgress >= 1 then
+                chest.x = game.player.x
+                chest.y = game.player.y
+                table.remove(game.chests, index)
+                OpenChest(game, chest)
+                return true
+            end
+        end
+
+        if chest.dead then
             table.remove(game.chests, index)
-            OpenChest(game, chest)
-            return true
         end
     end
     return false

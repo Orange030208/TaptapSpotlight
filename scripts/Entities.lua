@@ -181,12 +181,27 @@ function Entities.NewProjectile(x, y, vx, vy, owner, damage, sourceKind, style, 
 end
 
 function Entities.NewChest(x, y)
+    local angle = math.random() * math.pi * 2
+    local distance = ChestConfig.dropDistanceMin
+        + math.random() * (ChestConfig.dropDistanceMax - ChestConfig.dropDistanceMin)
+    local targetX = Clamp(x + math.cos(angle) * distance, RoomConfig.minX, RoomConfig.maxX)
+    local targetY = Clamp(y + math.sin(angle) * distance, RoomConfig.minY, RoomConfig.maxY)
     return {
         x = x,
         y = y,
         radius = 0.026,
         bobTime = math.random() * math.pi * 2,
-        openImmediately = true,
+        state = "dropping",
+        dropStartX = x,
+        dropStartY = y,
+        dropTargetX = targetX,
+        dropTargetY = targetY,
+        dropElapsed = 0,
+        landed = false,
+        idleElapsed = 0,
+        collectElapsed = 0,
+        collectStartX = nil,
+        collectStartY = nil,
         dead = false,
     }
 end

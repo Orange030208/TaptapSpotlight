@@ -1,5 +1,6 @@
 local PlayerConfig = require "Data.PlayerConfig"
 local EnemyConfig = require "Data.EnemyConfig"
+local ChestConfig = require "Data.ChestConfig"
 local Feedback = require "Feedback"
 local FeedbackConfig = require "Data.FeedbackConfig"
 local BossRenderer = require "BossRenderer"
@@ -777,7 +778,12 @@ local function DrawSpawnMarkers(ctx, width, height, game)
         return
     end
 
-    for _, spawn in ipairs(game.room.spawns) do
+    local spawns = game.room.fixedSpawns or game.room.spawns
+    if spawns == nil then
+        return
+    end
+
+    for _, spawn in ipairs(spawns) do
         local x, y, scale = Renderer.WorldToScreen(width, height, spawn.x, spawn.y)
         nvgBeginPath(ctx)
         nvgCircle(ctx, x, y, 20 * scale)
@@ -1936,13 +1942,68 @@ end
 
 local function DrawChest(ctx, width, height, chest)
     local x, y, scale = Renderer.WorldToScreen(width, height, chest.x, chest.y)
-    y = y + math.sin(chest.bobTime) * 4 * scale
-    local size = 14 * scale
-    DrawShadow(ctx, x, y, scale, 14, 120)
+    local visualLift = 0
+    local sizeMultiplier = 1
+    local glowAlpha = 45
+    local shadowAlpha = 120
+
+    if chest.state == "dropping" then
+        local flightProgress = Clamp((chest.dropElapsed or 0) / ChestConfig.dropDuration, 0, 1)
+        if flightProgress < 1 then
+            visualLift = math.sin(flightProgress * math.pi) * ChestConfig.dropArcHeight * 190 * scale
+            sizeMultiplier = 0.78 + flightProgress * 0.22
+            shadowAlpha = math.floor(35 + flightProgress * 80)
+        else
+            local bounceProgress = Clamp(
+                ((chest.dropElapsed or 0) - ChestConfig.dropDuration) / ChestConfig.bounceDuration, 0, 1)
+            if bounceProgress < 0.62 then
+                visualLift = math.sin(bounceProgress / 0.62 * math.pi) * ChestConfig.firstBounceHeight * 190 * scale
+            else
+                visualLift = math.sin((bounceProgress - 0.62) / 0.38 * math.pi)
+                    * ChestConfig.secondBounceHeight * 190 * scale
+            end
+            glowAlpha = math.floor(55 + (1 - bounceProgress) * 65)
+        end
+    elseif chest.state == "idle" then
+        local pulse = 0.78 + 0.22 * math.sin(chest.bobTime * 0.9)
+        y = y + math.sin(chest.bobTime) * 4 * scale
+        glowAlpha = math.floor(70 * pulse)
+    elseif chest.state == "collecting" then
+        local collectProgress = Clamp((chest.collectElapsed or 0) / ChestConfig.collectDuration, 0, 1)
+        sizeMultiplier = 1 - collectProgress * 0.28
+        glowAlpha = math.floor(125 * (1 - collectProgress))
+        shadowAlpha = math.floor(100 * (1 - collectProgress))
+
+        local trailX = chest.collectStartX or chest.x
+        local trailY = chest.collectStartY or chest.y
+        local trailScreenX, trailScreenY = Renderer.WorldToScreen(width, height, trailX, trailY)
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, trailScreenX, trailScreenY)
+        nvgLineTo(ctx, x, y)
+        nvgStrokeWidth(ctx, 3 * scale)
+        nvgStrokeColor(ctx, nvgRGBA(255, 222, 118, math.floor(140 * (1 - collectProgress))))
+        nvgStroke(ctx)
+    end
+
+    y = y - visualLift
+    local size = 14 * scale * sizeMultiplier
+    DrawShadow(ctx, x, y + visualLift, scale * sizeMultiplier, 14, shadowAlpha)
+
+    if chest.landed then
+        local landingProgress = Clamp(((chest.dropElapsed or 0) - ChestConfig.dropDuration) / 0.22, 0, 1)
+        if landingProgress < 1 then
+            local ringRadius = (12 + landingProgress * 28) * scale
+            nvgBeginPath(ctx)
+            nvgEllipse(ctx, x, y + size * 0.4, ringRadius, ringRadius * 0.38)
+            nvgStrokeWidth(ctx, 1.6 * scale)
+            nvgStrokeColor(ctx, nvgRGBA(255, 222, 112, math.floor(190 * (1 - landingProgress))))
+            nvgStroke(ctx)
+        end
+    end
 
     nvgBeginPath(ctx)
-    nvgCircle(ctx, x, y - size * 0.3, size * 1.5)
-    nvgFillColor(ctx, nvgRGBA(255, 212, 95, 45))
+    nvgCircle(ctx, x, y - size * 0.3, size * (chest.state == "idle" and 1.8 or 1.5))
+    nvgFillColor(ctx, nvgRGBA(255, 212, 95, glowAlpha))
     nvgFill(ctx)
 
     nvgBeginPath(ctx)

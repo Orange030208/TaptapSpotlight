@@ -3,6 +3,7 @@ package.path = "./scripts/?.lua;./scripts/?/init.lua;" .. package.path
 local GaugeConfig = require "Data.GaugeConfig"
 local ComboConfig = require "Data.ComboConfig"
 local BossConfig = require "Data.BossConfig"
+local ChestConfig = require "Data.ChestConfig"
 local PlayerConfig = require "Data.PlayerConfig"
 local ProjectileConfig = require "Data.ProjectileConfig"
 local RoomConfig = require "Data.RoomConfig"
@@ -411,7 +412,27 @@ chest.state = "clear"
 chest.roomCleared = true
 chest.enemies = {}
 chest.chests = { Entities.NewChest(chest.player.x, chest.player.y) }
+
 Game.Update(chest, 0, 0, 0)
+assert(chest.chests[1].state == "dropping", "a new chest must begin in its drop animation")
+assert(not HasEvent(Game.ConsumeEvents(chest), "chest_open"), "a falling chest must not open immediately")
+
+Game.Update(chest, ChestConfig.dropDuration + ChestConfig.bounceDuration + 0.01, 0, 0)
+assert(chest.chests[1].state == "idle", "the chest must become collectible after landing and bouncing")
+assert(not HasEvent(Game.ConsumeEvents(chest), "chest_open"), "a landed chest must wait for the player")
+
+chest.player.x, chest.player.y = 0.95, 0.95
+Game.Update(chest, ChestConfig.pickupDelay + 0.01, 0, 0)
+assert(chest.chests[1].state == "idle", "a landed chest must remain while the player is outside pickup range")
+assert(not HasEvent(Game.ConsumeEvents(chest), "chest_open"), "a distant player must not open the chest")
+
+chest.player.x, chest.player.y = chest.chests[1].x, chest.chests[1].y
+Game.Update(chest, 0, 0, 0)
+assert(chest.chests[1].state == "collecting", "entering pickup range must start collection before opening")
+assert(not HasEvent(Game.ConsumeEvents(chest), "chest_open"), "collection must finish before the chest opens")
+
+Game.Update(chest, ChestConfig.collectDuration + 0.01, 0, 0)
+assert(chest.state == "chest_select", "the choice screen must appear after collection reaches the player")
 assert(HasEvent(Game.ConsumeEvents(chest), "chest_open"))
 
 local regeneration = Game.New()
