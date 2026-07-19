@@ -999,9 +999,12 @@ local function CreateHud()
         return UI.Button {
             text = "",
             position = "absolute",
-            top = 0, left = 0, right = 0, bottom = 0,
+            top = 0,
+            left = 0,
+            width = 520,
+            height = 220,
             backgroundImage = imagePath,
-            backgroundFit = "cover",
+            backgroundFit = "contain",
             borderWidth = 0,
             borderRadius = 0,
             boxShadow = false,
@@ -1026,12 +1029,12 @@ local function CreateHud()
     end
 
     stateActionButton = CreateImageMenuButton(
-        "image/sekimio_start_button.png",
+        "image/sekimio_start_button_trimmed.png",
         -1.2,
         function() StartOrRestartRun() end
     )
     local quitButton = CreateImageMenuButton(
-        "image/sekimio_quit_button.png",
+        "image/sekimio_quit_button_trimmed.png",
         1.0,
         function() engine:Exit() end
     )
