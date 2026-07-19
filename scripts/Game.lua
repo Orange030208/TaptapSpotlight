@@ -318,6 +318,9 @@ local function HandleEnemyDeaths(game)
                 enemy.vx, enemy.vy = 0, 0
             else
                 local splitChildren = Entities.GetSplitChildren(enemy)
+                if not isBoss then
+                    CrystalAbilities.OnEnemyDefeated(game, enemy)
+                end
                 EmitEvent(game, enemy.kind == "boss" and "boss_defeat" or "enemy_defeat", {
                     x = enemy.x,
                     y = enemy.y,
@@ -738,15 +741,19 @@ local function UpdateBirthTutorial(game, dt, moveX, moveY)
 end
 
 local function TryDamagePlayer(game, amount, invulnerabilityDuration)
+    if CrystalAbilities.TrySwapDamage(game) then
+        ResetPerfectStreak(game)
+        return true, true, "rift"
+    end
     if CrystalAbilities.TryPreventLethalDamage(game, amount) then
         ResetPerfectStreak(game)
-        return true, true
+        return true, true, "time"
     end
     local damaged = Entities.DamagePlayer(game.player, amount, invulnerabilityDuration)
     if damaged then
         ResetPerfectStreak(game)
     end
-    return damaged, false
+    return damaged, false, nil
 end
 
 local function EmitDamageDealt(game, x, y, damage, popupKind, killed)
@@ -766,11 +773,11 @@ local function ResolveProjectileContacts(game)
     for _, projectile in ipairs(game.projectiles) do
         if Entities.ProjectileHitsPlayer(projectile, game.player) then
             projectile.dead = true
-            local damaged, saved = TryDamagePlayer(game, ProjectileConfig.playerDamage)
+            local damaged, saved, savedKind = TryDamagePlayer(game, ProjectileConfig.playerDamage)
             if damaged then
                 ResetCombo(game)
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                SetMessage(game, saved and "时隙之心 - 时间碎裂" or "受到伤害", 0.8)
+                SetMessage(game, saved and (savedKind == "rift" and "裂隙换位 - 残像爆裂" or "时隙之心 - 时间碎裂") or "受到伤害", 0.8)
                 EmitEvent(game, "player_hurt", {
                     x = game.player.x,
                     y = game.player.y,
@@ -802,6 +809,7 @@ local function ResolveProjectileContacts(game)
                     })
                     if enemy.hp <= 0 then
                         enemy.splitHp = remainingHp
+                        enemy.mirrorGateEligible = projectile.reflected == true
                         enemy.dead = true
                     end
                     if not projectile.crystalGuard then
@@ -955,10 +963,9 @@ local function ResolveParries(game)
             y = game.player.y,
         }
         EmitEvent(game, "guard_combo_feedback", guardData)
-        CrystalAbilities.OnSuccessfulParry(game)
+        CrystalAbilities.OnParryResult(game, perfect)
         if perfect then
             CrystalAbilities.OnPerfectParry(game)
-            AddGaugeProgress(game, CrystalAbilities.GetPerfectGaugeBonus(game), game.player.x, game.player.y)
         end
     end
 end
@@ -992,11 +999,11 @@ local function ResolveEnemyContacts(game)
                     directionX = game.player.x - enemy.x,
                     directionY = game.player.y - enemy.y,
                 })
-                local damaged, saved = TryDamagePlayer(game, hit.amount, hit.invulnerability)
+                local damaged, saved, savedKind = TryDamagePlayer(game, hit.amount, hit.invulnerability)
                 if damaged then
                     ResetCombo(game)
                     AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                    SetMessage(game, saved and "时隙之心 - 时间碎裂"
+                    SetMessage(game, saved and (savedKind == "rift" and "裂隙换位 - 残像爆裂" or "时隙之心 - 时间碎裂")
                         or (hit.source == "thorns" and "遭到荆棘鞭打" or "受到伤害"), 0.8)
                     EmitEvent(game, "player_hurt", {
                         x = game.player.x, y = game.player.y, amount = hit.amount, sourceKind = hit.source,
@@ -1005,14 +1012,14 @@ local function ResolveEnemyContacts(game)
             end
         else
             local hit = Entities.CollectEnemyHit(enemy, game.player)
-            local damaged, saved = false, false
+            local damaged, saved, savedKind = false, false, nil
             if hit ~= nil then
-                damaged, saved = TryDamagePlayer(game, hit.amount)
+                damaged, saved, savedKind = TryDamagePlayer(game, hit.amount)
             end
             if damaged then
                 ResetCombo(game)
                 AddParticles(game, game.player.x, game.player.y, { 255, 90, 90 }, 12)
-                SetMessage(game, saved and "时隙之心 - 时间碎裂" or "受到伤害", 0.8)
+                SetMessage(game, saved and (savedKind == "rift" and "裂隙换位 - 残像爆裂" or "时隙之心 - 时间碎裂") or "受到伤害", 0.8)
                 EmitEvent(game, "player_hurt", {
                     x = game.player.x,
                     y = game.player.y,
@@ -1278,6 +1285,11 @@ function Game.GetHud(game)
 
     local healthRatio = math.max(0, math.min(1, game.player.hp / PlayerConfig.maxHp))
     local gaugeRatio = math.max(0, math.min(1, game.gauge.value / game.gauge.threshold))
+    local parryCooldownRatio = 1
+    if PlayerConfig.parryCooldown > 0 then
+        parryCooldownRatio = math.max(0, math.min(1,
+            1 - game.player.parryCooldown / PlayerConfig.parryCooldown))
+    end
     local hudVisible = game.state ~= "menu" and game.state ~= "dead" and game.state ~= "victory"
         and game.state ~= "chest_select"
     local combo = game.combo or CreateCombo()
@@ -1287,6 +1299,7 @@ function Game.GetHud(game)
         hudVisible = hudVisible,
         healthRatio = healthRatio,
         gaugeRatio = gaugeRatio,
+        parryCooldownRatio = parryCooldownRatio,
         room = game.room ~= nil and game.room.name or "尚未开始",
         roomProgress = "探索 " .. tostring(game.clearedRoomCount) .. "/" .. tostring(game.roomCount),
         crystals = game.player.crystalOrder,

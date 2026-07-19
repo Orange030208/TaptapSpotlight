@@ -455,6 +455,71 @@ local function DrawWorldEffects(ctx, game, width, height)
             nvgStroke(ctx)
         end
     end
+    if state.mirrorGate ~= nil then
+        local gate = state.mirrorGate
+        local x, y, scale = Renderer.WorldToScreen(width, height, gate.x, gate.y)
+        local life = math.max(0, gate.timer / gate.maxTimer)
+        local pulse = 0.86 + math.sin(elapsed * 8) * 0.14
+        for index = 0, 2 do
+            local radius = (12 + index * 6) * scale * pulse
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, x, y, radius)
+            nvgStrokeWidth(ctx, (3 - index * 0.55) * scale)
+            StrokeColor(ctx, { 247, 171, 255 }, math.floor((185 - index * 35) * life))
+            nvgStroke(ctx)
+        end
+        DrawDiamond(ctx, x, y, 8 * scale, { 255, 229, 255 }, math.floor(255 * life))
+    end
+    if state.riftAnchor ~= nil then
+        local anchor = state.riftAnchor
+        local x, y, scale = Renderer.WorldToScreen(width, height, anchor.x, anchor.y)
+        local pulse = 0.8 + math.sin(elapsed * 6) * 0.2
+        DrawDiamond(ctx, x, y, 11 * scale * pulse, { 255, 117, 152 }, 245)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, 23 * scale * pulse)
+        nvgStrokeWidth(ctx, 2 * scale)
+        StrokeColor(ctx, { 255, 117, 152 }, 155)
+        nvgStroke(ctx)
+    end
+    if state.riftNova ~= nil then
+        local nova = state.riftNova
+        local x, y, scale = Renderer.WorldToScreen(width, height, nova.x, nova.y)
+        local progress = 1 - nova.timer / nova.maxTimer
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, (16 + progress * 88) * scale)
+        nvgStrokeWidth(ctx, (5 - progress * 3) * scale)
+        StrokeColor(ctx, { 255, 117, 152 }, math.floor(255 * (1 - progress)))
+        nvgStroke(ctx)
+    end
+    local anchors = state.latticeAnchors or {}
+    if #anchors >= 2 then
+        local first, second = anchors[1], anchors[2]
+        local firstX, firstY, scale = Renderer.WorldToScreen(width, height, first.x, first.y)
+        local secondX, secondY = Renderer.WorldToScreen(width, height, second.x, second.y)
+        local life = math.min(first.remaining / first.duration, second.remaining / second.duration)
+        local pulse = 0.75 + math.sin(elapsed * 8) * 0.25
+        local alpha = math.floor(235 * math.max(0, life))
+        nvgBeginPath(ctx)
+        nvgMoveTo(ctx, firstX, firstY)
+        nvgLineTo(ctx, secondX, secondY)
+        nvgStrokeWidth(ctx, 10 * scale * pulse)
+        StrokeColor(ctx, { 76, 210, 255 }, math.floor(alpha * 0.24))
+        nvgStroke(ctx)
+        nvgStrokeWidth(ctx, 2.6 * scale)
+        StrokeColor(ctx, { 195, 249, 255 }, alpha)
+        nvgStroke(ctx)
+    end
+    for _, anchor in ipairs(anchors) do
+        local x, y, scale = Renderer.WorldToScreen(width, height, anchor.x, anchor.y)
+        local life = math.max(0, anchor.remaining / anchor.duration)
+        local radius = (8 + math.sin(elapsed * 7 + anchor.x * 13) * 1.5) * scale
+        DrawDiamond(ctx, x, y, radius, { 104, 232, 255 }, math.floor(245 * life))
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, x, y, radius * 1.85)
+        nvgStrokeWidth(ctx, 1.6 * scale)
+        StrokeColor(ctx, { 104, 232, 255 }, math.floor(130 * life))
+        nvgStroke(ctx)
+    end
     for _, shard in ipairs(state.orbitShards or {}) do
         if shard.x ~= nil then
             local x, y, scale = Renderer.WorldToScreen(width, height, shard.x, shard.y)

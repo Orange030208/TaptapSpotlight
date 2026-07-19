@@ -35,6 +35,8 @@ local comboLabel = nil
 local overdriveLabel = nil
 ---@type ProgressBar|nil
 local gaugeProgressBar = nil
+---@type Widget|nil
+local parryCooldownFill = nil
 local bossPanel = nil
 ---@type Widget|nil
 local bossNameLabel = nil
@@ -726,6 +728,51 @@ local function CreateHud()
         children = { gaugeProgressBar },
     }
 
+    parryCooldownFill = UI.Panel {
+        position = "absolute",
+        left = 0,
+        right = 0,
+        bottom = 0,
+        height = "100%",
+        backgroundGradient = {
+            type = "linear",
+            direction = "to-top",
+            from = { 35, 136, 205, 255 },
+            to = { 105, 236, 255, 255 },
+        },
+        transition = "height 0.12s easeOut",
+        pointerEvents = "none",
+    }
+    local parryFillArea = UI.Panel {
+        position = "absolute",
+        left = 19,
+        right = 19,
+        top = 18,
+        bottom = 18,
+        overflow = "hidden",
+        pointerEvents = "none",
+        children = { parryCooldownFill },
+    }
+    local parryShieldPanel = UI.Panel {
+        width = 72,
+        height = 72,
+        position = "relative",
+        pointerEvents = "none",
+        children = {
+            parryFillArea,
+            UI.Panel {
+                position = "absolute",
+                top = 0,
+                left = 0,
+                right = 0,
+                bottom = 0,
+                backgroundImage = "image/parry_shield_frame_20260719043859.png",
+                backgroundFit = "contain",
+                pointerEvents = "none",
+            },
+        },
+    }
+
     combatHud = UI.SafeAreaView {
         visible = false,
         width = "100%",
@@ -740,6 +787,10 @@ local function CreateHud()
             UI.Panel {
                 position = "absolute", top = 30, left = 0, right = 0,
                 alignItems = "center", pointerEvents = "none", children = { bossPanel },
+            },
+            UI.Panel {
+                position = "absolute", left = 16, bottom = 16,
+                pointerEvents = "none", children = { parryShieldPanel },
             },
         },
     }
@@ -1087,6 +1138,9 @@ local function UpdateHud()
         backgroundColor = combo.overdriveRemaining > 0 and { 57, 24, 49, 235 } or { 20, 24, 41, 225 },
     })
     gaugeProgressBar:SetValue(hud.gaugeRatio)
+    parryCooldownFill:SetStyle({
+        height = string.format("%.1f%%", hud.parryCooldownRatio * 100),
+    })
     local boss = hud.boss
     bossPanel:SetVisible(boss ~= nil)
     if boss ~= nil then

@@ -91,6 +91,12 @@ function CrystalAbilities.NewState()
         perfectCount = 0,
         orbitShards = {},
         lightningBursts = {},
+        latticeAnchors = {},
+        latticeSerial = 0,
+        mirrorGate = nil,
+        riftPerfectCount = 0,
+        riftAnchor = nil,
+        riftNova = nil,
         nova = nil,
         timeBreak = nil,
         timeHeartUsed = false,
@@ -107,9 +113,18 @@ end
 function CrystalAbilities.OnPerfectParry(game)
     local player = game.player
     local state = CrystalAbilities.GetState(game)
-    if HasCrystal(player, "vital_bloom") then
-        Entities.HealPlayer(player, CrystalConfig.vitalBloom.heal)
-        Emit(game, "crystal_vital_bloom", { x = player.x, y = player.y })
+    if HasCrystal(player, "crystal_lattice") then
+        state.latticeSerial = state.latticeSerial + 1
+        table.insert(state.latticeAnchors, {
+            x = player.x,
+            y = player.y,
+            remaining = CrystalConfig.lattice.duration,
+            duration = CrystalConfig.lattice.duration,
+        })
+        while #state.latticeAnchors > CrystalConfig.lattice.maxAnchors do
+            table.remove(state.latticeAnchors, 1)
+        end
+        Emit(game, "crystal_lattice_anchor", { x = player.x, y = player.y })
     end
     if HasCrystal(player, "prism_dash") then
         state.dashWindow = CrystalConfig.dash.window
@@ -156,49 +171,72 @@ function CrystalAbilities.OnPerfectParry(game)
         end
     end
 
-    if HasCrystal(player, "echo_shard") then
-        local nearest = nil
-        local nearestDistance = CrystalConfig.echoShard.range
-        for _, enemy in ipairs(game.enemies) do
-            if not enemy.dead and enemy.kind ~= "boss" then
-                local distance = Length(enemy.x - player.x, enemy.y - player.y)
-                if distance <= nearestDistance then
-                    nearest, nearestDistance = enemy, distance
-                end
-            end
-        end
-        if nearest ~= nil then
-            DamageEnemy(game, nearest, CrystalConfig.echoShard.damage, "echo")
-            AddLightningBurst(state, { { x = player.x, y = player.y }, { x = nearest.x, y = nearest.y } })
-            Emit(game, "crystal_echo_shard", { x = nearest.x, y = nearest.y })
-        end
+end
+
+function CrystalAbilities.OnParryResult(game, perfect)
+    local player = game.player
+    local state = CrystalAbilities.GetState(game)
+    if not HasCrystal(player, "rift_shift") then
+        return
+    end
+    if not perfect then
+        state.riftPerfectCount = 0
+        return
+    end
+
+    state.riftPerfectCount = state.riftPerfectCount + 1
+    if state.riftPerfectCount >= CrystalConfig.riftShift.requiredPerfects then
+        state.riftPerfectCount = 0
+        state.riftAnchor = { x = player.x, y = player.y }
+        Emit(game, "crystal_rift_anchor", { x = player.x, y = player.y })
     end
 end
 
-function CrystalAbilities.OnSuccessfulParry(game)
-    if HasCrystal(game.player, "guardian_prism") then
-        game.player.invulnerabilityTimer = math.max(game.player.invulnerabilityTimer,
-            CrystalConfig.guardianPrism.invulnerability)
-        Emit(game, "crystal_guardian_prism", { x = game.player.x, y = game.player.y })
+function CrystalAbilities.OnEnemyDefeated(game, enemy)
+    if enemy == nil or not enemy.mirrorGateEligible or not HasCrystal(game.player, "mirror_gate") then
+        return
     end
+    local state = CrystalAbilities.GetState(game)
+    state.mirrorGate = {
+        x = enemy.x,
+        y = enemy.y,
+        timer = CrystalConfig.mirrorGate.duration,
+        maxTimer = CrystalConfig.mirrorGate.duration,
+    }
+    Emit(game, "crystal_mirror_gate", { x = enemy.x, y = enemy.y })
 end
 
-function CrystalAbilities.GetPerfectGaugeBonus(game)
-    if HasCrystal(game.player, "resonance_lens") then
-        return CrystalConfig.resonanceLens.gaugeGain
+function CrystalAbilities.TrySwapDamage(game)
+    local player = game.player
+    local state = CrystalAbilities.GetState(game)
+    local anchor = state.riftAnchor
+    if not HasCrystal(player, "rift_shift") or anchor == nil then
+        return false
     end
-    return 0
+
+    local originX, originY = player.x, player.y
+    player.x, player.y = anchor.x, anchor.y
+    player.invulnerabilityTimer = math.max(player.invulnerabilityTimer, CrystalConfig.riftShift.invulnerability)
+    state.riftAnchor = nil
+    state.riftNova = {
+        x = originX,
+        y = originY,
+        timer = 0.48,
+        maxTimer = 0.48,
+    }
+    for _, enemy in ipairs(game.enemies) do
+        if not enemy.dead and enemy.kind ~= "boss"
+            and DistanceSquared(enemy, { x = originX, y = originY }) <= CrystalConfig.riftShift.novaRadius ^ 2 then
+            DamageEnemy(game, enemy, CrystalConfig.riftShift.novaDamage, "rift")
+        end
+    end
+    Emit(game, "crystal_rift_swap", { x = originX, y = originY, anchorX = anchor.x, anchorY = anchor.y })
+    return true
 end
 
 function CrystalAbilities.OnProjectileReflected(game, projectile, perfect)
     if not perfect then
         return
-    end
-
-    if HasCrystal(game.player, "piercing_ray") and not projectile.crystalPierce then
-        projectile.crystalPierce = true
-        projectile.pierceRemaining = projectile.pierceRemaining + 1
-        Emit(game, "crystal_piercing_ray", { x = projectile.x, y = projectile.y })
     end
 
     if not HasCrystal(game.player, "mirror_split") or projectile.crystalSplit then
@@ -253,20 +291,6 @@ function CrystalAbilities.OnOverdrive(game)
         Emit(game, "crystal_nova", { x = player.x, y = player.y })
     end
 
-    if HasCrystal(player, "overdrive_crown") then
-        local missing = CrystalConfig.orbit.maxShards - #state.orbitShards
-        local count = math.min(CrystalConfig.overdriveCrown.shardCount, missing)
-        for _ = 1, count do
-            table.insert(state.orbitShards, {
-                remaining = CrystalConfig.orbit.duration,
-                duration = CrystalConfig.orbit.duration,
-                radius = CrystalConfig.orbit.shardRadius,
-            })
-        end
-        if count > 0 then
-            Emit(game, "crystal_overdrive_crown", { x = player.x, y = player.y, count = count })
-        end
-    end
 end
 
 function CrystalAbilities.TryPreventLethalDamage(game, amount)
@@ -369,6 +393,72 @@ local function UpdateOrbitShards(game, state, dt)
     end
 end
 
+local function UpdateLattice(game, state, dt)
+    for index = #state.latticeAnchors, 1, -1 do
+        local anchor = state.latticeAnchors[index]
+        anchor.remaining = math.max(0, anchor.remaining - dt)
+        if anchor.remaining <= 0 then
+            table.remove(state.latticeAnchors, index)
+            state.latticeSerial = state.latticeSerial + 1
+            Emit(game, "crystal_lattice_expire", { x = anchor.x, y = anchor.y })
+        end
+    end
+
+    if #state.latticeAnchors < 2 then
+        return
+    end
+
+    local first, second = state.latticeAnchors[1], state.latticeAnchors[2]
+    local lineRadius = CrystalConfig.lattice.lineRadius
+    for _, projectile in ipairs(game.projectiles) do
+        if projectile.owner == "enemy" and not projectile.dead
+            and DistanceSquaredToSegment(projectile.x, projectile.y, first.x, first.y, second.x, second.y)
+                <= (lineRadius + projectile.radius) ^ 2 then
+            projectile.dead = true
+            Emit(game, "crystal_lattice_cut", { x = projectile.x, y = projectile.y, kind = "projectile" })
+        end
+    end
+
+    for _, enemy in ipairs(game.enemies) do
+        if not enemy.dead and enemy.kind ~= "boss" and enemy.latticeHitSerial ~= state.latticeSerial
+            and DistanceSquaredToSegment(enemy.x, enemy.y, first.x, first.y, second.x, second.y)
+                <= (lineRadius + enemy.radius) ^ 2 then
+            enemy.latticeHitSerial = state.latticeSerial
+            DamageEnemy(game, enemy, CrystalConfig.lattice.enemyDamage, "lattice")
+            Emit(game, "crystal_lattice_cut", { x = enemy.x, y = enemy.y, kind = "enemy" })
+        end
+    end
+end
+
+local function UpdateMirrorGate(game, state, dt)
+    local gate = state.mirrorGate
+    if gate == nil then
+        return
+    end
+    gate.timer = math.max(0, gate.timer - dt)
+    if gate.timer <= 0 then
+        state.mirrorGate = nil
+        Emit(game, "crystal_mirror_gate_expire", { x = gate.x, y = gate.y })
+        return
+    end
+
+    for _, projectile in ipairs(game.projectiles) do
+        if projectile.owner == "enemy" and not projectile.dead
+            and DistanceSquared(projectile, gate) <= (projectile.radius + CrystalConfig.mirrorGate.radius) ^ 2 then
+            projectile.vx = -projectile.vx * CrystalConfig.mirrorGate.speedMultiplier
+            projectile.vy = -projectile.vy * CrystalConfig.mirrorGate.speedMultiplier
+            projectile.owner = "player"
+            projectile.sourceKind = "mirror_gate"
+            projectile.reflected = true
+            projectile.damage = CrystalConfig.mirrorGate.damage
+            projectile.pierceRemaining = 0
+            projectile.hitEnemies = {}
+            projectile.lifetime = math.min(projectile.lifetime, 1.8)
+            Emit(game, "crystal_mirror_gate_reflect", { x = projectile.x, y = projectile.y })
+        end
+    end
+end
+
 local function UpdateTransientEffects(state, dt)
     if state.dashTrail ~= nil then
         state.dashTrail.timer = math.max(0, state.dashTrail.timer - dt)
@@ -387,6 +477,10 @@ local function UpdateTransientEffects(state, dt)
         state.timeBreak.timer = math.max(0, state.timeBreak.timer - dt)
         if state.timeBreak.timer <= 0 then state.timeBreak = nil end
     end
+    if state.riftNova ~= nil then
+        state.riftNova.timer = math.max(0, state.riftNova.timer - dt)
+        if state.riftNova.timer <= 0 then state.riftNova = nil end
+    end
 end
 
 function CrystalAbilities.UpdateCombat(game, dt, moveX, moveY)
@@ -397,6 +491,8 @@ end
 function CrystalAbilities.UpdatePassive(game, dt)
     local state = CrystalAbilities.GetState(game)
     UpdateOrbitShards(game, state, dt)
+    UpdateLattice(game, state, dt)
+    UpdateMirrorGate(game, state, dt)
     UpdateTransientEffects(state, dt)
 end
 

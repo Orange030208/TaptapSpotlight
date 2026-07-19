@@ -20,6 +20,7 @@ local SPAWN_ROOM_GUIDE_SPRITE_PATH = "image/spawn_room_wasd_floor_guide_20260718
 local SPAWN_ROOM_PARRY_GUIDE_SPRITE_PATH = "image/spawn_room_left_click_parry_chalk_20260718151041.png"
 local PERFECT_STREAK_LIGHTNING_PATH = "image/ui/lightning.png"
 local FOREST_ROOM_MAP_PATH = "image/forest_room.png"
+local FOREST_HANDS_FOREGROUND_PATH = "image/forest_hands_foreground.png"
 local PLAYER_SPINE_PATH = "Characters/bard_cat/bard_cat.json"
 local PLAYER_IDLE_ANIMATION = "move/STAND"
 local PLAYER_MOVE_ANIMATION = "move/MOVE"
@@ -72,6 +73,9 @@ local perfectStreakLightningImageHandle = 0
 local perfectStreakLightningImageWidth = 1
 local perfectStreakLightningImageHeight = 1
 local forestRoomMapImageHandle = 0
+local forestHandsForegroundImageHandle = 0
+local forestHandsForegroundImageWidth = 1
+local forestHandsForegroundImageHeight = 1
 ---@type SpineInstance|nil
 local playerSpine = nil
 ---@type string|nil
@@ -397,8 +401,25 @@ function Renderer.LoadAssets(ctx)
         print("WARNING: Failed to load forest room map: " .. FOREST_ROOM_MAP_PATH)
     end
 
+    local forestHandsForegroundLoaded = true
+    forestHandsForegroundImageHandle = nvgCreateImage(ctx, FOREST_HANDS_FOREGROUND_PATH, 0)
+    if forestHandsForegroundImageHandle == nil or forestHandsForegroundImageHandle <= 0 then
+        forestHandsForegroundImageHandle = 0
+        forestHandsForegroundLoaded = false
+        print("WARNING: Failed to load forest hands foreground: " .. FOREST_HANDS_FOREGROUND_PATH)
+    else
+        forestHandsForegroundImageWidth, forestHandsForegroundImageHeight = nvgImageSize(ctx, forestHandsForegroundImageHandle)
+        if forestHandsForegroundImageWidth <= 0 or forestHandsForegroundImageHeight <= 0 then
+            nvgDeleteImage(ctx, forestHandsForegroundImageHandle)
+            forestHandsForegroundImageHandle = 0
+            forestHandsForegroundImageWidth, forestHandsForegroundImageHeight = 1, 1
+            forestHandsForegroundLoaded = false
+            print("WARNING: Forest hands foreground has invalid dimensions")
+        end
+    end
+
     return playerLoaded and sootLoaded and blueSwarmLoaded and shadowWraithLoaded and hardSlimeLoaded and treeWraithLoaded and stoneLoaded and mushroomLoaded and dandelionLoaded and purpleOrbLoaded and toxicMossLoaded and projectileSporeLoaded and projectileSeedLoaded and spawnRoomGuideLoaded
-        and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded and treasureBagLoaded and forestRoomMapImageHandle > 0
+        and spawnRoomParryGuideLoaded and perfectStreakLightningLoaded and treasureBagLoaded and forestRoomMapImageHandle > 0 and forestHandsForegroundLoaded
 end
 
 function Renderer.UnloadAssets(ctx)
@@ -492,6 +513,11 @@ function Renderer.UnloadAssets(ctx)
         nvgDeleteImage(ctx, forestRoomMapImageHandle)
     end
     forestRoomMapImageHandle = 0
+    if forestHandsForegroundImageHandle ~= nil and forestHandsForegroundImageHandle > 0 then
+        nvgDeleteImage(ctx, forestHandsForegroundImageHandle)
+    end
+    forestHandsForegroundImageHandle = 0
+    forestHandsForegroundImageWidth, forestHandsForegroundImageHeight = 1, 1
 end
 
 local function Lerp(a, b, t)
@@ -566,9 +592,9 @@ end
 local function DrawDoor(ctx, arena, direction, isOpen, time)
     local floorWidth = arena.right - arena.left
     local floorHeight = arena.bottom - arena.top
-    local glowColor = isOpen and { 95, 235, 213 } or { 255, 92, 174 }
-    local coreColor = isOpen and { 218, 255, 244 } or { 255, 218, 235 }
-    local pulse = 0.76 + 0.24 * math.sin(time * (isOpen and 3.2 or 2.1))
+    local lightColor = isOpen and { 156, 214, 192 } or { 133, 155, 160 }
+    local centerColor = isOpen and { 226, 240, 214 } or { 190, 198, 188 }
+    local pulse = 0.78 + 0.10 * math.sin(time * 1.25)
     local x, y, w, h
 
     if direction == "north" then
@@ -594,124 +620,25 @@ local function DrawDoor(ctx, arena, direction, isOpen, time)
     end
 
     local horizontal = direction == "north" or direction == "south"
-    local glowSpread = isOpen and 18 or 12
-    local frameInset = 4
-    local curtainInset = 8
-
-    -- 环境泛光：先铺一层柔和光晕，让门光自然映到墙面和地面。
-    local outerGlow = nvgBoxGradient(ctx,
-        x - glowSpread, y - glowSpread, w + glowSpread * 2, h + glowSpread * 2,
-        8, glowSpread,
-        nvgRGBA(glowColor[1], glowColor[2], glowColor[3], math.floor((isOpen and 96 or 82) * pulse)),
-        nvgRGBA(glowColor[1], glowColor[2], glowColor[3], 0))
-    nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x - glowSpread, y - glowSpread,
-        w + glowSpread * 2, h + glowSpread * 2, 8)
-    nvgFillPaint(ctx, outerGlow)
-    nvgFill(ctx)
-
-    -- 深色实体门框。
-    nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x, y, w, h, 3)
-    nvgFillColor(ctx, nvgRGBA(8, 12, 23, 252))
-    nvgFill(ctx)
-    nvgStrokeWidth(ctx, 4)
-    nvgStrokeColor(ctx, nvgRGBA(31, 35, 52, 255))
-    nvgStroke(ctx)
-
-    -- 双层发光边缘，形成晶体门框的厚度。
-    nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x + frameInset, y + frameInset,
-        math.max(1, w - frameInset * 2), math.max(1, h - frameInset * 2), 2)
-    nvgStrokeWidth(ctx, isOpen and 3.2 or 2.4)
-    StrokeColor(ctx, glowColor, math.floor((isOpen and 230 or 170) * pulse))
-    nvgStroke(ctx)
-
-    nvgBeginPath(ctx)
-    nvgRoundedRect(ctx, x + frameInset + 2, y + frameInset + 2,
-        math.max(1, w - (frameInset + 2) * 2), math.max(1, h - (frameInset + 2) * 2), 1)
-    nvgStrokeWidth(ctx, 1.2)
-    StrokeColor(ctx, coreColor, math.floor((isOpen and 235 or 155) * pulse))
-    nvgStroke(ctx)
-
-    -- 半透明能量光幕，开放时更明亮、更通透。
-    local curtainX = x + curtainInset
-    local curtainY = y + curtainInset
-    local curtainW = math.max(1, w - curtainInset * 2)
-    local curtainH = math.max(1, h - curtainInset * 2)
-    local curtainGradient
-    if horizontal then
-        curtainGradient = nvgLinearGradient(ctx, curtainX, curtainY,
-            curtainX, curtainY + curtainH,
-            nvgRGBA(coreColor[1], coreColor[2], coreColor[3], math.floor((isOpen and 205 or 95) * pulse)),
-            nvgRGBA(glowColor[1], glowColor[2], glowColor[3], isOpen and 52 or 30))
-    else
-        curtainGradient = nvgLinearGradient(ctx, curtainX, curtainY,
-            curtainX + curtainW, curtainY,
-            nvgRGBA(coreColor[1], coreColor[2], coreColor[3], math.floor((isOpen and 205 or 95) * pulse)),
-            nvgRGBA(glowColor[1], glowColor[2], glowColor[3], isOpen and 52 or 30))
-    end
-    nvgBeginPath(ctx)
-    nvgRect(ctx, curtainX, curtainY, curtainW, curtainH)
-    nvgFillPaint(ctx, curtainGradient)
-    nvgFill(ctx)
-
-    -- 缓慢流动的光丝，让门保持有生命的能量感。
-    local strandCount = 3
-    for index = 1, strandCount do
-        local phase = (time * (isOpen and 0.42 or 0.18) + index / strandCount) % 1
-        nvgBeginPath(ctx)
-        if horizontal then
-            local strandX = curtainX + curtainW * phase
-            nvgMoveTo(ctx, strandX, curtainY + 1)
-            nvgLineTo(ctx, strandX, curtainY + curtainH - 1)
-        else
-            local strandY = curtainY + curtainH * phase
-            nvgMoveTo(ctx, curtainX + 1, strandY)
-            nvgLineTo(ctx, curtainX + curtainW - 1, strandY)
-        end
-        nvgStrokeWidth(ctx, index == 2 and 1.8 or 1.0)
-        StrokeColor(ctx, coreColor, math.floor((isOpen and 135 or 65) * pulse))
-        nvgStroke(ctx)
-    end
-
-    -- 中央光核强化远距离识别；封闭门显示收束的封印裂纹。
     local centerX = x + w * 0.5
     local centerY = y + h * 0.5
-    local coreRadius = math.max(2.5, math.min(w, h) * (isOpen and 0.11 or 0.09))
+    local lightRadius = math.min(w, h) * (horizontal and 0.62 or 0.72)
+    local alpha = math.floor((isOpen and 64 or 28) * pulse)
+
+    -- Room exits read as reflected ambient light, not as a separate object.
     nvgBeginPath(ctx)
-    nvgCircle(ctx, centerX, centerY, coreRadius * 3.2)
-    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, 0, coreRadius * 3.2,
-        nvgRGBA(coreColor[1], coreColor[2], coreColor[3], math.floor((isOpen and 145 or 85) * pulse)),
-        nvgRGBA(glowColor[1], glowColor[2], glowColor[3], 0)))
-    nvgFill(ctx)
-    nvgBeginPath(ctx)
-    nvgCircle(ctx, centerX, centerY, coreRadius)
-    nvgFillColor(ctx, nvgRGBA(coreColor[1], coreColor[2], coreColor[3],
-        math.floor((isOpen and 245 or 195) * pulse)))
+    nvgCircle(ctx, centerX, centerY, lightRadius)
+    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, 0, lightRadius,
+        nvgRGBA(lightColor[1], lightColor[2], lightColor[3], alpha),
+        nvgRGBA(lightColor[1], lightColor[2], lightColor[3], 0)))
     nvgFill(ctx)
 
-    if not isOpen then
-        nvgBeginPath(ctx)
-        if horizontal then
-            nvgMoveTo(ctx, x + w * 0.24, centerY - h * 0.18)
-            nvgLineTo(ctx, centerX, centerY)
-            nvgLineTo(ctx, x + w * 0.76, centerY + h * 0.18)
-            nvgMoveTo(ctx, x + w * 0.76, centerY - h * 0.18)
-            nvgLineTo(ctx, centerX, centerY)
-            nvgLineTo(ctx, x + w * 0.24, centerY + h * 0.18)
-        else
-            nvgMoveTo(ctx, centerX - w * 0.18, y + h * 0.24)
-            nvgLineTo(ctx, centerX, centerY)
-            nvgLineTo(ctx, centerX + w * 0.18, y + h * 0.76)
-            nvgMoveTo(ctx, centerX + w * 0.18, y + h * 0.24)
-            nvgLineTo(ctx, centerX, centerY)
-            nvgLineTo(ctx, centerX - w * 0.18, y + h * 0.76)
-        end
-        nvgStrokeWidth(ctx, 2)
-        StrokeColor(ctx, coreColor, math.floor(180 * pulse))
-        nvgStroke(ctx)
-    end
+    nvgBeginPath(ctx)
+    nvgCircle(ctx, centerX, centerY, lightRadius * 0.42)
+    nvgFillPaint(ctx, nvgRadialGradient(ctx, centerX, centerY, 0, lightRadius * 0.42,
+        nvgRGBA(centerColor[1], centerColor[2], centerColor[3], math.floor(alpha * 0.42)),
+        nvgRGBA(centerColor[1], centerColor[2], centerColor[3], 0)))
+    nvgFill(ctx)
 end
 
 local function DrawSpawnRoomWallLights(ctx, width, height, game, arena)
@@ -2490,6 +2417,23 @@ local function GetTransitionOffset(game, width, height)
     return incomingX * (1 - incomingProgress), incomingY * (1 - incomingProgress)
 end
 
+local function DrawForestHandsForeground(ctx, width, height)
+    if forestHandsForegroundImageHandle <= 0 then
+        return
+    end
+
+    local scale = math.max(width / forestHandsForegroundImageWidth, height / forestHandsForegroundImageHeight)
+    local drawWidth = forestHandsForegroundImageWidth * scale
+    local drawHeight = forestHandsForegroundImageHeight * scale
+    local drawX = (width - drawWidth) * 0.5
+    local drawY = (height - drawHeight) * 0.5 - height * 0.08
+    nvgBeginPath(ctx)
+    nvgRect(ctx, drawX, drawY, drawWidth, drawHeight)
+    nvgFillPaint(ctx, nvgImagePattern(ctx, drawX, drawY, drawWidth, drawHeight,
+        0, forestHandsForegroundImageHandle, 1.0))
+    nvgFill(ctx)
+end
+
 function Renderer.Draw(ctx, game, width, height, feedback)
     DrawBackground(ctx, width, height, game.time)
     local offsetX, offsetY = GetTransitionOffset(game, width, height)
@@ -2538,6 +2482,12 @@ function Renderer.Draw(ctx, game, width, height, feedback)
     nvgRestore(ctx)
 
     BossRenderer.DrawFog(ctx, width, height, boss, game.player, Renderer.WorldToScreen)
+
+    nvgSave(ctx)
+    nvgTranslate(ctx, shakeX, shakeY)
+    nvgTranslate(ctx, offsetX, offsetY)
+    DrawForestHandsForeground(ctx, width, height)
+    nvgRestore(ctx)
 
     DrawFeedbackFlash(ctx, width, height, feedback)
     DrawGuardStreak(ctx, width, height, feedback, game)

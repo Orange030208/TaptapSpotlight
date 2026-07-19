@@ -8,6 +8,7 @@ local PlayerConfig = require "Data.PlayerConfig"
 local ProjectileConfig = require "Data.ProjectileConfig"
 local RoomConfig = require "Data.RoomConfig"
 local CrystalConfig = require "Data.CrystalConfig"
+local CrystalAbilities = require "CrystalAbilities"
 local Entities = require "Entities"
 local Game = require "Game"
 
@@ -52,12 +53,15 @@ local runHud = Game.GetHud(game)
 assert(runHud.hudVisible == true, "the combat HUD must be visible during a run")
 assert(runHud.healthRatio == 1, "a fresh run must expose a full health ratio")
 assert(runHud.gaugeRatio == 0, "a fresh run must expose an empty gauge ratio")
+assert(runHud.parryCooldownRatio == 1, "a ready parry must expose a full cooldown fill")
 local events = Game.ConsumeEvents(game)
 assert(HasEvent(events, "run_start"))
 assert(#Game.ConsumeEvents(game) == 0, "consuming events must clear the queue")
 
 game.state = "battle"
 assert(Game.TryParry(game))
+local parryHud = Game.GetHud(game)
+assert(parryHud.parryCooldownRatio == 0, "starting a parry must empty the cooldown fill")
 events = Game.ConsumeEvents(game)
 assert(HasEvent(events, "parry_start"))
 local parryStart = FindEvent(events, "parry_start")
@@ -468,6 +472,50 @@ assert(queuedChests.state == "chest_select" and #queuedChests.pendingChestReward
     "selecting the first reward must immediately present the queued reward")
 assert(Game.SelectCrystal(queuedChests, 1))
 assert(queuedChests.state == "clear", "all queued chest rewards must return to the pre-chest game state")
+
+local lattice = Game.New()
+lattice.player.crystals.crystal_lattice = 1
+lattice.player.x, lattice.player.y = 0.28, 0.45
+CrystalAbilities.OnPerfectParry(lattice)
+lattice.player.x, lattice.player.y = 0.72, 0.45
+CrystalAbilities.OnPerfectParry(lattice)
+assert(#lattice.crystalState.latticeAnchors == 2, "two perfect parries must create a lattice")
+local latticeEnemy = Entities.NewEnemy("soot", { x = 0.50, y = 0.45 }, 9001)
+latticeEnemy.hp = CrystalConfig.lattice.enemyDamage
+local latticeShot = Entities.NewProjectile(0.50, 0.45, 0, 0, "enemy", 1)
+lattice.enemies = { latticeEnemy }
+lattice.projectiles = { latticeShot }
+CrystalAbilities.UpdatePassive(lattice, 0)
+assert(latticeEnemy.dead, "a lattice must damage an enemy intersecting its crystal line")
+assert(latticeShot.dead, "a lattice must cut an enemy projectile intersecting its crystal line")
+CrystalAbilities.UpdatePassive(lattice, CrystalConfig.lattice.duration + 0.01)
+assert(#lattice.crystalState.latticeAnchors == 0, "lattice anchors must expire after their duration")
+
+local mirrorGate = Game.New()
+mirrorGate.player.crystals.mirror_gate = 1
+CrystalAbilities.OnEnemyDefeated(mirrorGate, { x = 0.5, y = 0.5, mirrorGateEligible = true })
+assert(mirrorGate.crystalState.mirrorGate ~= nil, "a reflected kill must create a mirror gate")
+local gateShot = Entities.NewProjectile(0.5, 0.5, 0.2, -0.1, "enemy", 1)
+mirrorGate.projectiles = { gateShot }
+CrystalAbilities.UpdatePassive(mirrorGate, 0)
+assert(gateShot.owner == "player" and gateShot.vx < 0 and gateShot.vy > 0,
+    "an enemy projectile crossing a mirror gate must be reflected")
+
+local rift = Game.New()
+rift.player.crystals.rift_shift = 1
+rift.player.x, rift.player.y = 0.24, 0.40
+CrystalAbilities.OnParryResult(rift, true)
+rift.player.x, rift.player.y = 0.34, 0.40
+CrystalAbilities.OnParryResult(rift, true)
+assert(rift.crystalState.riftAnchor ~= nil, "two consecutive perfect parries must create a rift anchor")
+rift.player.x, rift.player.y = 0.66, 0.40
+local riftEnemy = Entities.NewEnemy("soot", { x = 0.66, y = 0.40 }, 9002)
+riftEnemy.hp = CrystalConfig.riftShift.novaDamage
+rift.enemies = { riftEnemy }
+local hpBeforeSwap = rift.player.hp
+assert(CrystalAbilities.TrySwapDamage(rift), "an armed rift must consume the next incoming hit")
+assert(rift.player.hp == hpBeforeSwap and rift.player.x == 0.34 and riftEnemy.dead,
+    "rift swap must preserve health, return to the anchor, and detonate at the hit position")
 
 local transition = Game.New()
 Game.StartOrRestart(transition)
